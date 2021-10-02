@@ -52,6 +52,11 @@ func (p Payee) Parsed() (string, error) {
 	x = strings.ReplaceAll(x, "Visa", "")
 	x = strings.ReplaceAll(x, "køb", "")
 	x = strings.ReplaceAll(x, "DKK", "")
+	x = strings.ReplaceAll(x, "Check", "")
+	x = strings.ReplaceAll(x, "Check", "")
+	x = strings.ReplaceAll(x, "Dankort", "")
+	x = strings.ReplaceAll(x, "Nota", "")
+	x = strings.ReplaceAll(x, "nota", "")
 	return strings.TrimSpace(x), nil
 }
 
