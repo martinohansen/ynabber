@@ -23,6 +23,11 @@ func BulkWriter(t []ynabber.Transaction) error {
 		return fmt.Errorf("environment variable YNAB_TOKEN not found")
 	}
 
+	if len(t) == 0 {
+		log.Println("No transactions to write")
+		return nil
+	}
+
 	type Ytransaction struct {
 		AccountID string `json:"account_id"`
 		Date      string `json:"date"`

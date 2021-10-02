@@ -95,7 +95,8 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 			account, err := accountParser(accountName, accountMap)
 			if err != nil {
 				if errors.Is(err, ErrNotFound) {
-					continue
+					log.Printf("No matching account found for: %s", accountName)
+					break
 				}
 				return nil, err
 			}
