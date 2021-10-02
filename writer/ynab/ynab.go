@@ -67,7 +67,7 @@ func BulkWriter(t []ynabber.Transaction) error {
 		y.Transactions = append(y.Transactions, x)
 	}
 
-	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions/bulk", budgetID)
+	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", budgetID)
 
 	payload, err := json.Marshal(y)
 	if err != nil {
