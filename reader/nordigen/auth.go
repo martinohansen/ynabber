@@ -4,10 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"os/exec"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -82,13 +79,8 @@ func GetAuthorization(cli nordigen.Client, bankId string, endUserId string) (nor
 	if err != nil {
 		return nordigen.Requisition{}, err
 	}
-	go openBrowser(rr.Initiate)
 
-	ch := make(chan bool, 1)
-
-	go catchRedirect(redirectPort, ch)
-
-	<-ch
+	log.Printf("Initiate requisition by going to: %s", rr.Initiate)
 
 	for r.Status == "CR" {
 		r, err = cli.GetRequisition(r.Id)
@@ -102,38 +94,3 @@ func GetAuthorization(cli nordigen.Client, bankId string, endUserId string) (nor
 
 	return r, nil
 }
-
-func openBrowser(url string) {
-	var err error
-
-	switch runtime.GOOS {
-	case "linux":
-		err = exec.Command("xdg-open", url).Start()
-	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case "darwin":
-		err = exec.Command("open", url).Start()
-	default:
-		err = fmt.Errorf("unsupported platform")
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func catchRedirect(port string, ch chan bool) {
-	handler := func(chan bool) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ch <- true
-			w.Write([]byte("You can close this window now"))
-		})
-	}
-	http.Handle("/", handler(ch))
-
-	err := http.ListenAndServe(port, nil)
-
-	if err != nil {
-		panic(err)
-	}
-}
-
