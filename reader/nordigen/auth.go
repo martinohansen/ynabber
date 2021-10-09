@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/frieser/nordigen-go-lib"
+	"github.com/martinohansen/ynabber"
 )
 
 const redirectPort = ":3000"
 
 func requisitionFileLocation(endUserId string) string {
-	return fmt.Sprintf("%s.json", endUserId)
+	return fmt.Sprintf("%s/%s.json", ynabber.DataDir(), endUserId)
 }
 
 // AuthorizationWrapper tries to get requisition from disk, if it fails it will
