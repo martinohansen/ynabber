@@ -1,6 +1,8 @@
 package ynabber
 
 import (
+	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -73,4 +75,13 @@ func MilliunitsFromString(amount string, separator string) (Milliunits, error) {
 		return 0, err
 	}
 	return Milliunits(x), nil
+}
+
+func DataDir () string {
+	dataDir := "."
+	dataDirLookup, found := os.LookupEnv("YNABBER_DATADIR")
+	if found {
+		dataDir = path.Clean(dataDirLookup)
+	}
+	return dataDir
 }

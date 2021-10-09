@@ -63,7 +63,8 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 		return nil, err
 	}
 
-	accountMap, err := readAccountMap(accountMapFile)
+	accountMapPath := fmt.Sprintf("%s/%s", ynabber.DataDir(), accountMapFile)
+	accountMap, err := readAccountMap(accountMapPath)
 	if err != nil {
 		return nil, err
 	}
