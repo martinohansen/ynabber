@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: ynabber
+  name: ynabber
+spec:
+  jobTemplate:
+    metadata:
+      labels:
+        app: ynabber
+      name: ynabber
+    spec:
+      template:
+        metadata:
+          labels:
+            app: ynabber
+        spec:
+          containers:
+          - envFrom:
+            - configMapRef:
+                name: ynabber-env
+            image: ghcr.io/martinohansen/ynabber:latest
+            name: ynabber
+            resources:
+              limits:
+                cpu: 250m
+                memory: 64Mi
+              requests:
+                cpu: 125m
+                memory: 32Mi
+            volumeMounts:
+            - mountPath: /data
+              name: ynabber-data
+          volumes:
+          - name: ynabber-data
+            persistentVolumeClaim:
+              claimName: ynabber-data
+  schedule: '*/15 * * * *'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ynabber-data
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 128Mi
+---
+apiVersion: v1
+data:
+  YNAB_BUDGETID: ""
+  YNAB_TOKEN: ""
+  YNABBER_DATADIR: /data
+kind: ConfigMap
+metadata:
+  name: ynabber-env
