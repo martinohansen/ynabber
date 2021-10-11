@@ -18,13 +18,13 @@ type AccountMap map[string]string
 
 var ErrNotFound = errors.New("not found")
 
-func readAccountMap(file string) (AccountMap, error) {
-	accountMapFile, err := os.ReadFile(file)
-	if err != nil {
-		return nil, err
+func readAccountMap() (AccountMap, error) {
+	accountMapFile, found := os.LookupEnv("NORDIGEN_ACCOUNTMAP")
+	if !found {
+		return nil, fmt.Errorf("environment variable NORDIGEN_ACCOUNTMAP not found")
 	}
 	var accountMap AccountMap
-	err = json.Unmarshal(accountMapFile, &accountMap)
+	err := json.Unmarshal([]byte(accountMapFile), &accountMap)
 	if err != nil {
 		return nil, err
 	}
@@ -52,10 +52,6 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 	if !found {
 		return nil, fmt.Errorf("environment variable NORDIGEN_BANKID not found")
 	}
-	accountMapFile, found := os.LookupEnv("NORDIGEN_ACCOUNTMAP")
-	if !found {
-		accountMapFile = "nordigen-accountmap.json"
-	}
 
 	c := nordigen.NewClient(token)
 	r, err := AuthorizationWrapper(c, bankId, "ynabber")
@@ -63,8 +59,7 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 		return nil, err
 	}
 
-	accountMapPath := fmt.Sprintf("%s/%s", ynabber.DataDir(), accountMapFile)
-	accountMap, err := readAccountMap(accountMapPath)
+	accountMap, err := readAccountMap()
 	if err != nil {
 		return nil, err
 	}
