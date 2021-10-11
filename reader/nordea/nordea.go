@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/martinohansen/ynabber"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
@@ -36,20 +35,15 @@ func CSVBulkReader() (t []ynabber.Transaction, err error) {
 			return nil, err
 		}
 
-		amount, err := ynabber.AmountParser(line[3], ",")
-		if err != nil {
-			return nil, err
-		}
-
-		payee, err := ynabber.PayeeParser(line[1])
+		amount, err := ynabber.MilliunitsFromString(line[3], ",")
 		if err != nil {
 			return nil, err
 		}
 
 		x := ynabber.Transaction{
-			ID:     uuid.New(),
+			ID:     ynabber.ID(ynabber.IDFromString("")),
 			Date:   date,
-			Payee:  payee,
+			Payee:  ynabber.Payee(line[1]),
 			Memo:   line[1],
 			Amount: amount,
 		}
