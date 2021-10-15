@@ -11,4 +11,4 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /go/bin/app /app
 ENTRYPOINT /app
-LABEL Name=ynabber Version=0.0.1
+LABEL Name=ynabber
