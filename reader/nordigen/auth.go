@@ -10,6 +10,7 @@ import (
 
 	"github.com/frieser/nordigen-go-lib"
 	"github.com/martinohansen/ynabber"
+	"github.com/martinohansen/ynabber/notifier/telegram"
 )
 
 const redirectPort = ":3000"
@@ -81,7 +82,12 @@ func GetAuthorization(cli nordigen.Client, bankId string, endUserId string) (nor
 		return nordigen.Requisition{}, err
 	}
 
-	log.Printf("Initiate requisition by going to: %s", rr.Initiate)
+	message := fmt.Sprintf("Please visit %s to authorize the requisition.", rr.Initiate)
+	log.Print(message)
+	err = telegram.Notify("@martinohansen", message)
+	if err != nil {
+		return nordigen.Requisition{}, err
+	}
 
 	for r.Status == "CR" {
 		r, err = cli.GetRequisition(r.Id)

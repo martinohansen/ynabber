@@ -1,6 +1,7 @@
 package ynabber
 
 import (
+	"log"
 	"os"
 	"path"
 	"regexp"
@@ -84,4 +85,20 @@ func DataDir () string {
 		dataDir = path.Clean(dataDirLookup)
 	}
 	return dataDir
+}
+
+// ConfigLookup returns the value of the environment variable with the given
+// key. If the variable is not found the fallback string is returned. If the
+// fallback string is empty and the key dosent exist in the environment, the
+// program exits.
+func ConfigLookup(key string, fallback string) (string,) {
+	value, found := os.LookupEnv(key)
+	if !found {
+		if fallback ==  "" {
+			 log.Fatalf("environment variable %s not found", key)
+		} else {
+			return fallback
+		}
+	}
+	return value
 }
