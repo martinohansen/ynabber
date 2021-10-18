@@ -73,7 +73,10 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 		accountName := accountMetadata.Iban
 
 		log.Printf("Reading transactions from account: %s", accountName)
-		transactions, _ := c.GetAccountTransactions(accountID)
+		transactions, err := c.GetAccountTransactions(accountID)
+		if err != nil {
+			return nil, err
+		}
 		for _, v := range transactions.Transactions.Booked {
 			memo := v.RemittanceInformationUnstructured
 			amount, err := ynabber.MilliunitsFromString(v.TransactionAmount.Amount, ".")
