@@ -64,6 +64,7 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 		return nil, err
 	}
 
+	log.Printf("Found %v accounts", len(r.Accounts))
 	for _, account := range r.Accounts {
 		accountMetadata, err := c.GetAccountMetadata(account)
 		if err != nil {

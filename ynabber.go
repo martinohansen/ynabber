@@ -78,7 +78,7 @@ func MilliunitsFromString(amount string, separator string) (Milliunits, error) {
 	return Milliunits(x), nil
 }
 
-func DataDir () string {
+func DataDir() string {
 	dataDir := "."
 	dataDirLookup, found := os.LookupEnv("YNABBER_DATADIR")
 	if found {
@@ -91,14 +91,24 @@ func DataDir () string {
 // key. If the variable is not found the fallback string is returned. If the
 // fallback string is empty and the key dosent exist in the environment, the
 // program exits.
-func ConfigLookup(key string, fallback string) (string,) {
+func ConfigLookup(key string, fallback string) string {
 	value, found := os.LookupEnv(key)
 	if !found {
-		if fallback ==  "" {
-			 log.Fatalf("environment variable %s not found", key)
+		if fallback == "" {
+			log.Fatalf("environment variable %s not found", key)
 		} else {
 			return fallback
 		}
 	}
 	return value
+}
+
+// ConfigDebug returns true if the YNABBER_DEBUG environment variable is set.
+func ConfigDebug() bool {
+	_, found := os.LookupEnv("YNABBER_DEBUG")
+	if found {
+		return true
+	} else {
+		return false
+	}
 }

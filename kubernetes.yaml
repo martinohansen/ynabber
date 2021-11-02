@@ -1,42 +1,54 @@
-apiVersion: batch/v1
-kind: CronJob
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   labels:
     app: ynabber
   name: ynabber
+  namespace: default
 spec:
-  jobTemplate:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: ynabber
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
     metadata:
       labels:
         app: ynabber
-      name: ynabber
     spec:
-      template:
-        metadata:
-          labels:
-            app: ynabber
-        spec:
-          containers:
-          - envFrom:
-            - configMapRef:
-                name: ynabber-env
-            image: ghcr.io/martinohansen/ynabber:latest
-            name: ynabber
-            resources:
-              limits:
-                cpu: 250m
-                memory: 64Mi
-              requests:
-                cpu: 125m
-                memory: 32Mi
-            volumeMounts:
-            - mountPath: /data
-              name: ynabber-data
-          volumes:
-          - name: ynabber-data
-            persistentVolumeClaim:
-              claimName: ynabber-data
-  schedule: '*/15 * * * *'
+      containers:
+      - image: ghcr.io/martinohansen/ynabber:latest
+        imagePullPolicy: Always
+        name: ynabber
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        envFrom:
+        - configMapRef:
+            name: ynabber-env
+        resources:
+          limits:
+            cpu: 250m
+            memory: 64Mi
+          requests:
+            cpu: 125m
+            memory: 32Mi
+        volumeMounts:
+        - mountPath: /data
+          name: ynabber-data
+      volumes:
+      - name: ynabber-data
+        persistentVolumeClaim:
+          claimName: ynabber-data
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
