@@ -21,7 +21,7 @@ func main() {
 	for {
 		err = run()
 		if err != nil {
-			log.Fatalf("Run failed with: %s", err)
+			panic(err)
 		} else {
 			log.Printf("Run succeeded")
 		}
