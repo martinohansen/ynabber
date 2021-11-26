@@ -1,5 +1,5 @@
-github.com/frieser/nordigen-go-lib v1.0.0 h1:MGUtxGAqUzYc1OO1pPw8XY2YIomhnWrdbtANhB25myw=
-github.com/frieser/nordigen-go-lib v1.0.0/go.mod h1:hHJxIT+ZC3WllCdecwk8osrP7I6Ip1b04rCiUS6qS8c=
+github.com/frieser/nordigen-go-lib/v2 v2.0.1 h1:YQZXDrLsaLKX+IZKPjpXHg3lNqNhixb2okT+TYimSyE=
+github.com/frieser/nordigen-go-lib/v2 v2.0.1/go.mod h1:NejYisqD8GvynCN0vDGw7J66slnj7jB25c8tS1tr8bw=
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 golang.org/x/text v0.3.7 h1:olpwvP2KacW1ZWvsR7uQhoyTYvKAupfQrRGBFM352Gk=

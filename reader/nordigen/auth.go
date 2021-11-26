@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/frieser/nordigen-go-lib"
+	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
 )
 
@@ -64,30 +64,20 @@ func GetAuthorization(cli nordigen.Client, bankId string, endUserId string) (nor
 	requisition := nordigen.Requisition{
 		Redirect:  "http://localhost" + redirectPort,
 		Reference: strconv.Itoa(int(time.Now().Unix())),
-		EnduserId: endUserId,
-		Agreements: []string{
-
-		},
+		Agreement: "",
 	}
+
 	r, err := cli.CreateRequisition(requisition)
-
-	if err != nil {
-		return nordigen.Requisition{}, err
-	}
-	rr, err := cli.CreateRequisitionLink(r.Id, nordigen.RequisitionLinkRequest{
-		AspspsId: bankId})
-
 	if err != nil {
 		return nordigen.Requisition{}, err
 	}
 
-	log.Printf("Initiate requisition by going to: %s", rr.Initiate)
+	log.Printf("Initiate requisition by going to: %s", r.Redirect)
 
 	for r.Status == "CR" {
 		r, err = cli.GetRequisition(r.Id)
 
 		if err != nil {
-
 			return nordigen.Requisition{}, err
 		}
 		time.Sleep(1 * time.Second)

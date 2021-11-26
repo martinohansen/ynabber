@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/frieser/nordigen-go-lib"
+	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
 )
 
@@ -44,31 +44,32 @@ func accountParser(account string, accountMap AccountMap) (ynabber.Account, erro
 }
 
 func BulkReader() (t []ynabber.Transaction, err error) {
-	token, found := os.LookupEnv("NORDIGEN_TOKEN")
-	if !found {
-		return nil, fmt.Errorf("environment variable NORDIGEN_TOKEN not found")
-	}
+	secretID := ynabber.ConfigLookup("NORDIGEN_SECRET_ID", "")
+	secretKey := ynabber.ConfigLookup("NORDIGEN_SECRET_KEY", "")
 	bankId, found := os.LookupEnv("NORDIGEN_BANKID")
 	if !found {
 		return nil, fmt.Errorf("environment variable NORDIGEN_BANKID not found")
 	}
 
-	c := nordigen.NewClient(token)
-	r, err := AuthorizationWrapper(c, bankId, "ynabber")
+	c, err := nordigen.NewClient(secretID, secretKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+	r, err := AuthorizationWrapper(*c, bankId, "ynabber")
+	if err != nil {
+		return nil, fmt.Errorf("failed to authorize: %w", err)
 	}
 
 	accountMap, err := readAccountMap()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read account map: %w", err)
 	}
 
 	log.Printf("Found %v accounts", len(r.Accounts))
 	for _, account := range r.Accounts {
 		accountMetadata, err := c.GetAccountMetadata(account)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get account metadata: %w", err)
 		}
 		accountID := accountMetadata.Id
 		accountName := accountMetadata.Iban
