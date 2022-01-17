@@ -16,11 +16,11 @@ import (
 func BulkWriter(t []ynabber.Transaction) error {
 	budgetID, found := os.LookupEnv("YNAB_BUDGETID")
 	if !found {
-		return fmt.Errorf("environment variable YNAB_BUDGETID not found")
+		return fmt.Errorf("env variable YNAB_BUDGETID: %w", ynabber.ErrNotFound)
 	}
 	token, found := os.LookupEnv("YNAB_TOKEN")
 	if !found {
-		return fmt.Errorf("environment variable YNAB_TOKEN not found")
+		return fmt.Errorf("env variable YNAB_TOKEN: %w", ynabber.ErrNotFound)
 	}
 
 	if len(t) == 0 {

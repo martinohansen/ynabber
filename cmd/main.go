@@ -26,10 +26,9 @@ func main() {
 			log.Printf("Run succeeded")
 		}
 		log.Printf("Waiting %s before running again...", sleeps)
-        time.Sleep(sleep)
+		time.Sleep(sleep)
 	}
 }
-
 
 func run() error {
 	var transactions []ynabber.Transaction
@@ -38,14 +37,14 @@ func run() error {
 	r := ynabber.ConfigLookup("YNABBER_READERS", "[\"nordigen\"]")
 	err := json.Unmarshal([]byte(r), &readerList)
 	if err != nil {
-		return fmt.Errorf("couldn't parse readers: %s", err)
+		return fmt.Errorf("couldn't parse readers: %w", err)
 	}
 
 	var writerList []string
 	w := ynabber.ConfigLookup("YNABBER_WRITERS", "[\"ynab\"]")
 	err = json.Unmarshal([]byte(w), &writerList)
 	if err != nil {
-		return fmt.Errorf("couldn't parse writers: %s", err)
+		return fmt.Errorf("couldn't parse writers: %w", err)
 	}
 
 	for _, reader := range readerList {
@@ -54,7 +53,7 @@ func run() error {
 		case "nordigen":
 			t, err := nordigen.BulkReader()
 			if err != nil {
-				return fmt.Errorf("couldn't read from nordigen: %v", err)
+				return fmt.Errorf("couldn't read from nordigen: %w", err)
 			}
 			transactions = append(transactions, t...)
 		}

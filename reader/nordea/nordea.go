@@ -2,6 +2,7 @@ package nordea
 
 import (
 	"encoding/csv"
+	"fmt"
 	"os"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 func CSVBulkReader() (t []ynabber.Transaction, err error) {
 	file, err := os.Open("../input.csv")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("couldn't open input.csv: %w", err)
 	}
 	defer file.Close()
 
