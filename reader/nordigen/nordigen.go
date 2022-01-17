@@ -53,7 +53,12 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
-	r, err := AuthorizationWrapper(*c, bankId, "ynabber")
+	Authorization := Authorization{
+		Client:    *c,
+		BankID:    bankId,
+		EndUserId: "ynabber",
+	}
+	r, err := Authorization.Wrapper()
 	if err != nil {
 		return nil, fmt.Errorf("failed to authorize: %w", err)
 	}
