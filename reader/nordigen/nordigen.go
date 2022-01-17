@@ -16,12 +16,10 @@ const timeLayout = "2006-01-02"
 
 type AccountMap map[string]string
 
-var ErrNotFound = errors.New("not found")
-
 func readAccountMap() (AccountMap, error) {
 	accountMapFile, found := os.LookupEnv("NORDIGEN_ACCOUNTMAP")
 	if !found {
-		return nil, fmt.Errorf("environment variable NORDIGEN_ACCOUNTMAP not found")
+		return nil, fmt.Errorf("env variable NORDIGEN_ACCOUNTMAP: %w", ynabber.ErrNotFound)
 	}
 	var accountMap AccountMap
 	err := json.Unmarshal([]byte(accountMapFile), &accountMap)
@@ -40,7 +38,7 @@ func accountParser(account string, accountMap AccountMap) (ynabber.Account, erro
 			}, nil
 		}
 	}
-	return ynabber.Account{}, fmt.Errorf("account not found in map: %w", ErrNotFound)
+	return ynabber.Account{}, fmt.Errorf("account not found in map: %w", ynabber.ErrNotFound)
 }
 
 func BulkReader() (t []ynabber.Transaction, err error) {
@@ -48,7 +46,7 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 	secretKey := ynabber.ConfigLookup("NORDIGEN_SECRET_KEY", "")
 	bankId, found := os.LookupEnv("NORDIGEN_BANKID")
 	if !found {
-		return nil, fmt.Errorf("environment variable NORDIGEN_BANKID not found")
+		return nil, fmt.Errorf("env variable NORDIGEN_BANKID: %w", ynabber.ErrNotFound)
 	}
 
 	c, err := nordigen.NewClient(secretID, secretKey)
@@ -77,26 +75,24 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 		log.Printf("Reading transactions from account: %s", accountName)
 		transactions, err := c.GetAccountTransactions(accountID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
 		for _, v := range transactions.Transactions.Booked {
 			memo := v.RemittanceInformationUnstructured
 			amount, err := ynabber.MilliunitsFromString(v.TransactionAmount.Amount, ".")
 			if err != nil {
-				log.Printf("failed to convert string to milliunits: %s", err)
-				return nil, err
+				return nil, fmt.Errorf("failed to convert string to milliunits: %w", err)
 			}
 
 			date, err := time.Parse(timeLayout, v.BookingDate)
 			if err != nil {
-				log.Printf("failed to parse string to time: %s", err)
-				return nil, err
+				return nil, fmt.Errorf("failed to parse string to time: %w", err)
 			}
 
 			account, err := accountParser(accountName, accountMap)
 			if err != nil {
-				if errors.Is(err, ErrNotFound) {
-					log.Printf("No matching account found for: %s", accountName)
+				if errors.Is(err, ynabber.ErrNotFound) {
+					log.Printf("No matching account found for: %v", accountName)
 					break
 				}
 				return nil, err
@@ -105,11 +101,11 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 			// Append transation
 			x := ynabber.Transaction{
 				Account: account,
-				ID:     ynabber.ID(ynabber.IDFromString(v.TransactionId)),
-				Date:   date,
-				Payee:  ynabber.Payee(memo),
-				Memo:   memo,
-				Amount: amount,
+				ID:      ynabber.ID(ynabber.IDFromString(v.TransactionId)),
+				Date:    date,
+				Payee:   ynabber.Payee(memo),
+				Memo:    memo,
+				Amount:  amount,
 			}
 			t = append(t, x)
 		}
