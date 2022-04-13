@@ -2,7 +2,6 @@ package nordigen
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -19,40 +18,46 @@ type Authorization struct {
 	Client    nordigen.Client
 	BankID    string
 	EndUserId string
+	Store     string
 }
 
-func (auth Authorization) Store() string {
+func (auth Authorization) DiskStore() string {
 	return fmt.Sprintf("%s/%s.json", ynabber.DataDir(), auth.EndUserId)
 }
 
-// AuthorizationWrapper tries to get requisition from disk, if it fails it will
-// create a new and store that one to disk.
+// AuthorizationWrapper gets and stores a working requisition
 func (auth Authorization) Wrapper() (nordigen.Requisition, error) {
-	requisitionFile, err := os.ReadFile(auth.Store())
-	if errors.Is(err, os.ErrNotExist) {
-		log.Print("Requisition is not found")
-		return auth.CreateAndSave()
-	} else if err != nil {
-		return nordigen.Requisition{}, fmt.Errorf("ReadFile: %w", err)
-	}
-
-	var requisition nordigen.Requisition
-	err = json.Unmarshal(requisitionFile, &requisition)
+	requisition, err := auth.Client.GetRequisition(auth.Read().Id)
 	if err != nil {
-		log.Print("Failed to parse requisition file")
+		log.Printf("Cant get requisition: %s", err)
 		return auth.CreateAndSave()
 	}
-
-	switch requisition.Status {
-	case "EX":
-		log.Printf("Requisition is expired")
-		return auth.CreateAndSave()
-	case "LN":
+	if requisition.Status == "LN" {
+		log.Print("Reusing existing requisition")
 		return requisition, nil
-	default:
-		log.Printf("Unsupported requisition status: %s", requisition.Status)
+	} else {
+		log.Print("Unable to handle requisition")
 		return auth.CreateAndSave()
 	}
+}
+
+func (auth Authorization) Read() nordigen.Requisition {
+	var requisition nordigen.Requisition
+	switch auth.Store {
+	case "disk":
+		log.Print("Trying to read requisition from disk")
+		store, err := os.ReadFile(auth.DiskStore())
+		if err != nil {
+			log.Print("No requisition on disk is found")
+			return requisition
+		}
+		err = json.Unmarshal(store, &requisition)
+		if err != nil {
+			log.Print("Unsupported requisition format")
+			return requisition
+		}
+	}
+	return requisition
 }
 
 func (auth Authorization) CreateAndSave() (nordigen.Requisition, error) {
@@ -63,22 +68,27 @@ func (auth Authorization) CreateAndSave() (nordigen.Requisition, error) {
 	}
 	err = auth.Save(requisition)
 	if err != nil {
-		log.Printf("Failed to write requisition to disk: %s", err)
+		log.Printf("Failed to save requisition: %s", err)
 	}
-	log.Printf("Requisition stored for reuse: %s", auth.Store())
 	return requisition, nil
 }
 
 func (auth Authorization) Save(requisition nordigen.Requisition) error {
-	requisitionFile, err := json.Marshal(requisition)
+	requisition_blob, err := json.Marshal(requisition)
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(auth.Store(), requisitionFile, 0644)
-	if err != nil {
-		return err
+	switch auth.Store {
+	case "disk":
+		err = os.WriteFile(auth.DiskStore(), requisition_blob, 0644)
+		if err != nil {
+			return fmt.Errorf("cant store requisition on disk")
+		}
+	default:
+		return fmt.Errorf("unsupported disk store: %s", auth.Store)
 	}
+
 	return nil
 }
 

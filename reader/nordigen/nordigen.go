@@ -71,12 +71,17 @@ func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactio
 }
 
 func BulkReader() (t []ynabber.Transaction, err error) {
+	// Read required config values
 	secretID := ynabber.ConfigLookup("NORDIGEN_SECRET_ID", "")
 	secretKey := ynabber.ConfigLookup("NORDIGEN_SECRET_KEY", "")
 	bankId, found := os.LookupEnv("NORDIGEN_BANKID")
 	if !found {
 		return nil, fmt.Errorf("env variable NORDIGEN_BANKID: %w", ynabber.ErrNotFound)
 	}
+
+	// Read optional config values
+	store := ynabber.ConfigLookup("NORDIGEN_STORE", "disk")
+	endUserID := ynabber.ConfigLookup("NORDIGEN_ENDUSERID", "ynabber")
 
 	c, err := nordigen.NewClient(secretID, secretKey)
 	if err != nil {
@@ -85,7 +90,8 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 	Authorization := Authorization{
 		Client:    *c,
 		BankID:    bankId,
-		EndUserId: "ynabber",
+		EndUserId: endUserID,
+		Store:     store,
 	}
 	r, err := Authorization.Wrapper()
 	if err != nil {
