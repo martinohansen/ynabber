@@ -1,0 +1,18 @@
+{
+    "transactions": {
+        "booked": [
+            {
+                "transactionAmount": {
+                    "amount": "328.18"
+                },
+                "bookingDate": "2006-01-02"
+            },
+            {
+                "transactionAmount": {
+                    "amount": "32818"
+                },
+                "bookingDate": "2006-01-02"
+            }
+        ]
+    }
+}

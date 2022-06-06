@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
@@ -30,15 +31,43 @@ func readAccountMap() (AccountMap, error) {
 }
 
 func accountParser(account string, accountMap AccountMap) (ynabber.Account, error) {
-	for nordea, ynab := range accountMap {
-		if account == nordea {
+	for from, to := range accountMap {
+		if account == from {
 			return ynabber.Account{
-				ID:   ynabber.ID(ynabber.IDFromString(ynab)),
-				Name: nordea,
+				ID:   ynabber.ID(ynabber.IDFromString(to)),
+				Name: from,
 			}, nil
 		}
 	}
 	return ynabber.Account{}, fmt.Errorf("account not found in map: %w", ynabber.ErrNotFound)
+}
+
+func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
+	for _, v := range t.Transactions.Booked {
+		memo := v.RemittanceInformationUnstructured
+
+		amount, err := strconv.ParseFloat(v.TransactionAmount.Amount, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert string to float: %w", err)
+		}
+		milliunits := ynabber.MilliunitsFromAmount(amount)
+
+		date, err := time.Parse(timeLayout, v.BookingDate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse string to time: %w", err)
+		}
+
+		// Append transaction
+		x = append(x, ynabber.Transaction{
+			Account: account,
+			ID:      ynabber.ID(ynabber.IDFromString(v.TransactionId)),
+			Date:    date,
+			Payee:   ynabber.Payee(memo),
+			Memo:    memo,
+			Amount:  milliunits,
+		})
+	}
+	return x, nil
 }
 
 func BulkReader() (t []ynabber.Transaction, err error) {
@@ -78,42 +107,26 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 		accountName := accountMetadata.Iban
 
 		log.Printf("Reading transactions from account: %s", accountName)
+
+		account, err := accountParser(accountName, accountMap)
+		if err != nil {
+			if errors.Is(err, ynabber.ErrNotFound) {
+				log.Printf("No matching account found for: %v", accountName)
+				break
+			}
+			return nil, err
+		}
+
 		transactions, err := c.GetAccountTransactions(accountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
-		for _, v := range transactions.Transactions.Booked {
-			memo := v.RemittanceInformationUnstructured
-			amount, err := ynabber.MilliunitsFromString(v.TransactionAmount.Amount, ".")
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert string to milliunits: %w", err)
-			}
 
-			date, err := time.Parse(timeLayout, v.BookingDate)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse string to time: %w", err)
-			}
-
-			account, err := accountParser(accountName, accountMap)
-			if err != nil {
-				if errors.Is(err, ynabber.ErrNotFound) {
-					log.Printf("No matching account found for: %v", accountName)
-					break
-				}
-				return nil, err
-			}
-
-			// Append transation
-			x := ynabber.Transaction{
-				Account: account,
-				ID:      ynabber.ID(ynabber.IDFromString(v.TransactionId)),
-				Date:    date,
-				Payee:   ynabber.Payee(memo),
-				Memo:    memo,
-				Amount:  amount,
-			}
-			t = append(t, x)
+		x, err := transactionsToYnabber(account, transactions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert transaction: %w", err)
 		}
+		t = append(t, x...)
 	}
 	return t, nil
 }
