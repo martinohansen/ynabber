@@ -67,15 +67,9 @@ func (m Milliunits) String() string {
 	return strconv.FormatInt(int64(m), 10)
 }
 
-// MilliunitsFromString takes the amount string and the decimal seperator and
-// returns the amount in milliunits.
-func MilliunitsFromString(amount string, separator string) (Milliunits, error) {
-	x, err := strconv.ParseInt(strings.Replace(amount, separator, "", -1), 10, 64)
-	x = x * 10
-	if err != nil {
-		return 0, err
-	}
-	return Milliunits(x), nil
+// MilliunitsFromAmount returns a transaction amount in YNABs milliunits format
+func MilliunitsFromAmount(amount float64) Milliunits {
+	return Milliunits(amount * 1000)
 }
 
 func DataDir() string {
