@@ -45,23 +45,15 @@ func IDFromString(id string) uuid.UUID {
 	return x
 }
 
-func (p Payee) Parsed() (string, error) {
-	reg, err := regexp.Compile("[^a-zA-ZøæåØÆÅ]+")
-	if err != nil {
-		return "", err
+// Parsed removes all non-alphanumeric characters and elements of strips from p
+func (p Payee) Parsed(strips []string) (string, error) {
+	reg := regexp.MustCompile(`[^\p{L}]+`)
+	x := reg.ReplaceAllString(string(p), " ")
+
+	for _, strip := range strips {
+		x = strings.ReplaceAll(x, strip, "")
 	}
 
-	// TODO: Load the replace words from environment variables
-	x := reg.ReplaceAllString(string(p), " ")
-	x = strings.ReplaceAll(x, "Den", "")
-	x = strings.ReplaceAll(x, "Visa", "")
-	x = strings.ReplaceAll(x, "køb", "")
-	x = strings.ReplaceAll(x, "DKK", "")
-	x = strings.ReplaceAll(x, "Check", "")
-	x = strings.ReplaceAll(x, "Check", "")
-	x = strings.ReplaceAll(x, "Dankort", "")
-	x = strings.ReplaceAll(x, "Nota", "")
-	x = strings.ReplaceAll(x, "nota", "")
 	return strings.TrimSpace(x), nil
 }
 
@@ -85,7 +77,7 @@ func DataDir() string {
 
 // ConfigLookup returns the value of the environment variable with the given
 // key. If the variable is not found the fallback string is returned. If the
-// fallback string is empty and the key dosent exist in the environment, the
+// fallback string is empty and the key doesn't exist in the environment, the
 // program exits.
 func ConfigLookup(key string, fallback string) string {
 	value, found := os.LookupEnv(key)
