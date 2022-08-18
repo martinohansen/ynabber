@@ -13,8 +13,6 @@ import (
 	"github.com/martinohansen/ynabber"
 )
 
-const redirectPort = ":3000"
-
 type Authorization struct {
 	Client    nordigen.Client
 	BankID    string
@@ -84,7 +82,7 @@ func (auth Authorization) Save(requisition nordigen.Requisition) error {
 
 func (auth Authorization) Create() (nordigen.Requisition, error) {
 	requisition := nordigen.Requisition{
-		Redirect:      "http://localhost" + redirectPort,
+		Redirect:      "https://raw.githubusercontent.com/martinohansen/ynabber/main/ok.html",
 		Reference:     strconv.Itoa(int(time.Now().Unix())),
 		Agreement:     "",
 		InstitutionId: auth.BankID,
