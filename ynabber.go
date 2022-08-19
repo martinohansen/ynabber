@@ -50,6 +50,8 @@ func (p Payee) Parsed() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// TODO: Load the replace words from environment variables
 	x := reg.ReplaceAllString(string(p), " ")
 	x = strings.ReplaceAll(x, "Den", "")
 	x = strings.ReplaceAll(x, "Visa", "")
