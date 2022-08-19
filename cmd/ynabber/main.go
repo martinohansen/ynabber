@@ -1,57 +1,48 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 	"github.com/martinohansen/ynabber/reader/nordigen"
 	"github.com/martinohansen/ynabber/writer/ynab"
 )
 
 func main() {
-	sleeps := ynabber.ConfigLookup("YNABBER_INTERVAL", "5m")
-	sleep, err := time.ParseDuration(sleeps)
+	// Read config from env
+	var cfg ynabber.Config
+	err := envconfig.Process("", &cfg)
 	if err != nil {
-		log.Fatalf("Failed to parse YNABBER_INTERVAL: %s", err)
+		log.Fatal(err.Error())
+	}
+
+	if cfg.Debug {
+		log.Printf("Config: %+v\n", cfg)
 	}
 
 	for {
-		err = run()
+		err = run(cfg)
 		if err != nil {
 			panic(err)
 		} else {
 			log.Printf("Run succeeded")
 		}
-		log.Printf("Waiting %s before running again...", sleeps)
-		time.Sleep(sleep)
+		log.Printf("Waiting %s before running again...", cfg.Interval)
+		time.Sleep(cfg.Interval)
 	}
 }
 
-func run() error {
+func run(cfg ynabber.Config) error {
 	var transactions []ynabber.Transaction
 
-	var readerList []string
-	r := ynabber.ConfigLookup("YNABBER_READERS", "[\"nordigen\"]")
-	err := json.Unmarshal([]byte(r), &readerList)
-	if err != nil {
-		return fmt.Errorf("couldn't parse readers: %w", err)
-	}
-
-	var writerList []string
-	w := ynabber.ConfigLookup("YNABBER_WRITERS", "[\"ynab\"]")
-	err = json.Unmarshal([]byte(w), &writerList)
-	if err != nil {
-		return fmt.Errorf("couldn't parse writers: %w", err)
-	}
-
-	for _, reader := range readerList {
+	for _, reader := range cfg.Readers {
 		log.Printf("Reading from %s", reader)
 		switch reader {
 		case "nordigen":
-			t, err := nordigen.BulkReader()
+			t, err := nordigen.BulkReader(cfg)
 			if err != nil {
 				return fmt.Errorf("couldn't read from nordigen: %w", err)
 			}
@@ -59,11 +50,11 @@ func run() error {
 		}
 	}
 
-	for _, writer := range writerList {
+	for _, writer := range cfg.Writers {
 		log.Printf("Writing to %s", writer)
 		switch writer {
 		case "ynab":
-			err := ynab.BulkWriter(transactions)
+			err := ynab.BulkWriter(cfg, transactions)
 			if err != nil {
 				return fmt.Errorf("couldn't write to ynab: %w", err)
 			}

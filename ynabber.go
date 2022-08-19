@@ -1,9 +1,6 @@
 package ynabber
 
 import (
-	"log"
-	"os"
-	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -11,6 +8,46 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// Config is loaded from the environment during execution with cmd/ynabber
+type Config struct {
+	// DataDir is the path for storing files e.g. Nordigen authorization
+	DataDir string `envconfig:"YNABBER_DATADIR" default:"."`
+
+	// Debug prints more log statements
+	Debug bool `envconfig:"YNABBER_DEBUG" default:"false"`
+
+	// Interval is how often to execute the read/write loop
+	Interval time.Duration `envconfig:"YNABBER_INTERVAL" default:"5m"`
+
+	// Readers is a list of sources to read transactions from
+	Readers []string `envconfig:"YNABBER_READERS" default:"nordigen"`
+
+	// Writers is a list of destinations to write transactions from
+	Writers []string `envconfig:"YNABBER_WRITERS" default:"ynab"`
+
+	// Nordigen related settings
+	Nordigen struct {
+		// AccountMap of Nordigen account IDs to YNAB account IDs
+		AccountMap map[string]string `envconfig:"NORDIGEN_ACCOUNTMAP"`
+
+		// BankID is used to create requisition
+		BankID string `envconfig:"NORDIGEN_BANKID"`
+
+		// SecretID is used to create requisition
+		SecretID string `envconfig:"NORDIGEN_SECRET_ID"`
+
+		// SecretKey is used to create requisition
+		SecretKey string `envconfig:"NORDIGEN_SECRET_KEY"`
+	}
+
+	// YNAB related settings
+	YNAB struct {
+		// PayeeStrip is a list of words to remove from the Payee before sending
+		// to YNAB
+		PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
+	}
+}
 
 type Account struct {
 	ID   ID
@@ -64,39 +101,4 @@ func (m Milliunits) String() string {
 // MilliunitsFromAmount returns a transaction amount in YNABs milliunits format
 func MilliunitsFromAmount(amount float64) Milliunits {
 	return Milliunits(amount * 1000)
-}
-
-func DataDir() string {
-	dataDir := "."
-	dataDirLookup, found := os.LookupEnv("YNABBER_DATADIR")
-	if found {
-		dataDir = path.Clean(dataDirLookup)
-	}
-	return dataDir
-}
-
-// ConfigLookup returns the value of the environment variable with the given
-// key. If the variable is not found the fallback string is returned. If the
-// fallback string is empty and the key doesn't exist in the environment, the
-// program exits.
-func ConfigLookup(key string, fallback string) string {
-	value, found := os.LookupEnv(key)
-	if !found {
-		if fallback == "" {
-			log.Fatalf("environment variable %s not found", key)
-		} else {
-			return fallback
-		}
-	}
-	return value
-}
-
-// ConfigDebug returns true if the YNABBER_DEBUG environment variable is set.
-func ConfigDebug() bool {
-	_, found := os.LookupEnv("YNABBER_DEBUG")
-	if found {
-		return true
-	} else {
-		return false
-	}
 }
