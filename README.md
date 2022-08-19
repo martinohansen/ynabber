@@ -23,7 +23,7 @@ YNAB_BUDGETID=<budget_id>
 YNAB_TOKEN=<account token>
 
 # Nordigen
-NORDIGEN_ACCOUNTMAP={"<account iban>": "<ynab account id>"}
+NORDIGEN_ACCOUNTMAP='{"<nordigen account id>": "<ynab account id>"}'
 NORDIGEN_BANKID=<nordigen bankd id>
 NORDIGEN_SECRET_ID=<nordigen secret id>
 NORDIGEN_SECRET_KEY=<nordigen secret key>
