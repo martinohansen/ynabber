@@ -23,28 +23,28 @@ spec:
         app: ynabber
     spec:
       containers:
-      - image: ghcr.io/martinohansen/ynabber:latest
-        imagePullPolicy: Always
-        name: ynabber
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        envFrom:
-        - configMapRef:
-            name: ynabber-env
-        resources:
-          limits:
-            cpu: 250m
-            memory: 64Mi
-          requests:
-            cpu: 125m
-            memory: 32Mi
-        volumeMounts:
-        - mountPath: /data
-          name: ynabber-data
+        - image: ghcr.io/martinohansen/ynabber:latest
+          imagePullPolicy: Always
+          name: ynabber
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          envFrom:
+            - configMapRef:
+                name: ynabber-env
+          resources:
+            limits:
+              cpu: 250m
+              memory: 64Mi
+            requests:
+              cpu: 125m
+              memory: 32Mi
+          volumeMounts:
+            - mountPath: /data
+              name: ynabber-data
       volumes:
-      - name: ynabber-data
-        persistentVolumeClaim:
-          claimName: ynabber-data
+        - name: ynabber-data
+          persistentVolumeClaim:
+            claimName: ynabber-data
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
@@ -56,16 +56,7 @@ metadata:
   name: ynabber-data
 spec:
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   resources:
     requests:
       storage: 128Mi
----
-apiVersion: v1
-data:
-  YNAB_BUDGETID: ""
-  YNAB_TOKEN: ""
-  YNABBER_DATADIR: /data
-kind: ConfigMap
-metadata:
-  name: ynabber-env
