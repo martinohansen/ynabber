@@ -1,6 +1,7 @@
 package nordigen
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
+	"go.opentelemetry.io/otel"
 )
 
 const timeLayout = "2006-01-02"
@@ -70,16 +72,22 @@ func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactio
 	return x, nil
 }
 
-func BulkReader() (t []ynabber.Transaction, err error) {
+func BulkReader(ctx context.Context) (t []ynabber.Transaction, err error) {
+	tracer := otel.Tracer("ynabber")
+	spanName := "BulkReader"
+	newCtx, span := tracer.Start(ctx, spanName)
+
 	secretID := ynabber.ConfigLookup("NORDIGEN_SECRET_ID", "")
 	secretKey := ynabber.ConfigLookup("NORDIGEN_SECRET_KEY", "")
 	bankId, found := os.LookupEnv("NORDIGEN_BANKID")
 	if !found {
+		span.End()
 		return nil, fmt.Errorf("env variable NORDIGEN_BANKID: %w", ynabber.ErrNotFound)
 	}
 
 	c, err := nordigen.NewClient(secretID, secretKey)
 	if err != nil {
+		span.End()
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 	Authorization := Authorization{
@@ -89,18 +97,22 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 	}
 	r, err := Authorization.Wrapper()
 	if err != nil {
+		span.End()
 		return nil, fmt.Errorf("failed to authorize: %w", err)
 	}
 
 	accountMap, err := readAccountMap()
 	if err != nil {
+		span.End()
 		return nil, fmt.Errorf("failed to read account map: %w", err)
 	}
 
 	log.Printf("Found %v accounts", len(r.Accounts))
 	for _, account := range r.Accounts {
+		_, accountSpan := tracer.Start(newCtx, fmt.Sprintf("%s/%s", spanName, account))
 		accountMetadata, err := c.GetAccountMetadata(account)
 		if err != nil {
+			accountSpan.End()
 			return nil, fmt.Errorf("failed to get account metadata: %w", err)
 		}
 		accountID := accountMetadata.Id
@@ -114,19 +126,23 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 				log.Printf("No matching account found for: %v", accountName)
 				break
 			}
+			accountSpan.End()
 			return nil, err
 		}
 
 		transactions, err := c.GetAccountTransactions(accountID)
 		if err != nil {
+			accountSpan.End()
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
 
 		x, err := transactionsToYnabber(account, transactions)
 		if err != nil {
+			accountSpan.End()
 			return nil, fmt.Errorf("failed to convert transaction: %w", err)
 		}
 		t = append(t, x...)
 	}
+	span.End()
 	return t, nil
 }

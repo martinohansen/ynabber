@@ -2,6 +2,7 @@ package ynab
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -11,15 +12,23 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/martinohansen/ynabber"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-func BulkWriter(t []ynabber.Transaction) error {
+func BulkWriter(ctx context.Context, t []ynabber.Transaction) error {
+	tracer := otel.Tracer("ynabber")
+	spanName := "BulkWriter"
+	_, span := tracer.Start(ctx, spanName)
+
 	budgetID, found := os.LookupEnv("YNAB_BUDGETID")
 	if !found {
+		span.End()
 		return fmt.Errorf("env variable YNAB_BUDGETID: %w", ynabber.ErrNotFound)
 	}
 	token, found := os.LookupEnv("YNAB_TOKEN")
 	if !found {
+		span.End()
 		return fmt.Errorf("env variable YNAB_TOKEN: %w", ynabber.ErrNotFound)
 	}
 
@@ -28,11 +37,13 @@ func BulkWriter(t []ynabber.Transaction) error {
 	stripConfig := ynabber.ConfigLookup("YNABBER_PAYEE_STRIP", "[]")
 	err := json.Unmarshal([]byte(stripConfig), &strips)
 	if err != nil {
+		span.End()
 		return fmt.Errorf("env variable YNABBER_PAYEE_STRIP: %w", err)
 	}
 
 	if len(t) == 0 {
 		log.Println("No transactions to write")
+		span.End()
 		return nil
 	}
 
@@ -74,17 +85,20 @@ func BulkWriter(t []ynabber.Transaction) error {
 
 		y.Transactions = append(y.Transactions, x)
 	}
+	span.SetAttributes(attribute.Int("transactions.count", len(y.Transactions)))
 
 	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", budgetID)
 
 	payload, err := json.Marshal(y)
 	if err != nil {
+		span.End()
 		return err
 	}
 
 	client := &http.Client{}
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
 	if err != nil {
+		span.End()
 		return err
 	}
 	req.Header.Add("Content-Type", "application/json")
@@ -92,13 +106,16 @@ func BulkWriter(t []ynabber.Transaction) error {
 
 	res, err := client.Do(req)
 	if err != nil {
+		span.End()
 		return err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusCreated {
+		span.End()
 		return fmt.Errorf("failed to send request: %s", res.Status)
 	} else {
 		log.Printf("Successfully sent %v transaction(s) to YNAB", len(y.Transactions))
 	}
+	span.End()
 	return nil
 }
