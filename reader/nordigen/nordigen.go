@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
@@ -44,7 +45,14 @@ func accountParser(account string, accountMap AccountMap) (ynabber.Account, erro
 
 func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
 	for _, v := range t.Transactions.Booked {
-		memo := v.RemittanceInformationUnstructured
+		// If the bank provides us with an array of RemittanceInformation
+		// combine that into a single memo string for Ynabber to use.
+		memo := ""
+		if v.RemittanceInformationUnstructured != "" {
+			memo = v.RemittanceInformationUnstructured
+		} else {
+			memo = strings.Join(v.RemittanceInformationUnstructuredArray, " ")
+		}
 
 		amount, err := strconv.ParseFloat(v.TransactionAmount.Amount, 64)
 		if err != nil {
@@ -120,6 +128,9 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 		transactions, err := c.GetAccountTransactions(accountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
+		}
+		if ynabber.ConfigDebug() {
+			log.Printf("Received: %+v", transactions)
 		}
 
 		x, err := transactionsToYnabber(account, transactions)
