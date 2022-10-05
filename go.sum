@@ -1,7 +1,4 @@
-github.com/frieser/nordigen-go-lib/v2 v2.0.1 h1:YQZXDrLsaLKX+IZKPjpXHg3lNqNhixb2okT+TYimSyE=
-github.com/frieser/nordigen-go-lib/v2 v2.0.1/go.mod h1:NejYisqD8GvynCN0vDGw7J66slnj7jB25c8tS1tr8bw=
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-golang.org/x/text v0.3.7 h1:olpwvP2KacW1ZWvsR7uQhoyTYvKAupfQrRGBFM352Gk=
-golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
-golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
+github.com/martinohansen/nordigen-go-lib/v2 v2.0.0-20221005105930-28647b2a58c9 h1:EofNcovHvFORhvJDh4ZWHIiuVvtGy/dZEpf8THO7MW0=
+github.com/martinohansen/nordigen-go-lib/v2 v2.0.0-20221005105930-28647b2a58c9/go.mod h1:NejYisqD8GvynCN0vDGw7J66slnj7jB25c8tS1tr8bw=
