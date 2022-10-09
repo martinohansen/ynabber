@@ -1,6 +1,7 @@
 package ynabber
 
 import (
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
@@ -8,6 +9,16 @@ import (
 
 	"github.com/google/uuid"
 )
+
+type AccountMap map[string]string
+
+func (input *AccountMap) Decode(value string) error {
+	err := json.Unmarshal([]byte(value), &input)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 // Config is loaded from the environment during execution with cmd/ynabber
 type Config struct {
@@ -29,7 +40,7 @@ type Config struct {
 	// Nordigen related settings
 	Nordigen struct {
 		// AccountMap of Nordigen account IDs to YNAB account IDs
-		AccountMap map[string]string `envconfig:"NORDIGEN_ACCOUNTMAP"`
+		AccountMap AccountMap `envconfig:"NORDIGEN_ACCOUNTMAP"`
 
 		// BankID is used to create requisition
 		BankID string `envconfig:"NORDIGEN_BANKID"`
