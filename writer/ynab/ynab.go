@@ -13,7 +13,7 @@ import (
 	"github.com/martinohansen/ynabber"
 )
 
-func BulkWriter(t []ynabber.Transaction) error {
+func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 	budgetID, found := os.LookupEnv("YNAB_BUDGETID")
 	if !found {
 		return fmt.Errorf("env variable YNAB_BUDGETID: %w", ynabber.ErrNotFound)
@@ -21,14 +21,6 @@ func BulkWriter(t []ynabber.Transaction) error {
 	token, found := os.LookupEnv("YNAB_TOKEN")
 	if !found {
 		return fmt.Errorf("env variable YNAB_TOKEN: %w", ynabber.ErrNotFound)
-	}
-
-	// Read a list of payee strings to strip from env
-	var strips []string
-	stripConfig := ynabber.ConfigLookup("YNABBER_PAYEE_STRIP", "[]")
-	err := json.Unmarshal([]byte(stripConfig), &strips)
-	if err != nil {
-		return fmt.Errorf("env variable YNABBER_PAYEE_STRIP: %w", err)
 	}
 
 	if len(t) == 0 {
@@ -52,7 +44,7 @@ func BulkWriter(t []ynabber.Transaction) error {
 	for _, v := range t {
 		date := v.Date.Format("2006-01-02")
 		amount := v.Amount.String()
-		payee, err := v.Payee.Parsed(strips)
+		payee, err := v.Payee.Parsed(cfg.YNAB.PayeeStrip)
 		if err != nil {
 			payee = string(v.Payee)
 			log.Printf("Failed to parse payee: %s: %s", payee, err)

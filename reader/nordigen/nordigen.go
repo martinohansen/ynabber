@@ -1,11 +1,9 @@
 package nordigen
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"time"
 
@@ -15,22 +13,7 @@ import (
 
 const timeLayout = "2006-01-02"
 
-type AccountMap map[string]string
-
-func readAccountMap() (AccountMap, error) {
-	accountMapFile, found := os.LookupEnv("NORDIGEN_ACCOUNTMAP")
-	if !found {
-		return nil, fmt.Errorf("env variable NORDIGEN_ACCOUNTMAP: %w", ynabber.ErrNotFound)
-	}
-	var accountMap AccountMap
-	err := json.Unmarshal([]byte(accountMapFile), &accountMap)
-	if err != nil {
-		return nil, err
-	}
-	return accountMap, nil
-}
-
-func accountParser(account string, accountMap AccountMap) (ynabber.Account, error) {
+func accountParser(account string, accountMap map[string]string) (ynabber.Account, error) {
 	for from, to := range accountMap {
 		if account == from {
 			return ynabber.Account{
@@ -70,31 +53,19 @@ func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactio
 	return x, nil
 }
 
-func BulkReader() (t []ynabber.Transaction, err error) {
-	secretID := ynabber.ConfigLookup("NORDIGEN_SECRET_ID", "")
-	secretKey := ynabber.ConfigLookup("NORDIGEN_SECRET_KEY", "")
-	bankId, found := os.LookupEnv("NORDIGEN_BANKID")
-	if !found {
-		return nil, fmt.Errorf("env variable NORDIGEN_BANKID: %w", ynabber.ErrNotFound)
-	}
-
-	c, err := nordigen.NewClient(secretID, secretKey)
+func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
+	c, err := nordigen.NewClient(cfg.Nordigen.SecretID, cfg.Nordigen.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 	Authorization := Authorization{
-		Client:    *c,
-		BankID:    bankId,
-		EndUserId: "ynabber",
+		Client: *c,
+		BankID: cfg.Nordigen.BankID,
+		File:   fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber"),
 	}
 	r, err := Authorization.Wrapper()
 	if err != nil {
 		return nil, fmt.Errorf("failed to authorize: %w", err)
-	}
-
-	accountMap, err := readAccountMap()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read account map: %w", err)
 	}
 
 	log.Printf("Found %v accounts", len(r.Accounts))
@@ -106,16 +77,16 @@ func BulkReader() (t []ynabber.Transaction, err error) {
 		accountID := accountMetadata.Id
 		accountName := accountMetadata.Iban
 
-		log.Printf("Reading transactions from account: %s", accountName)
-
-		account, err := accountParser(accountName, accountMap)
+		account, err := accountParser(accountName, cfg.Nordigen.AccountMap)
 		if err != nil {
 			if errors.Is(err, ynabber.ErrNotFound) {
-				log.Printf("No matching account found for: %v", accountName)
+				log.Printf("No matching account found for: %s in: %v", accountName, cfg.Nordigen.AccountMap)
 				break
 			}
 			return nil, err
 		}
+
+		log.Printf("Reading transactions from account: %s", accountName)
 
 		transactions, err := c.GetAccountTransactions(accountID)
 		if err != nil {
