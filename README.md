@@ -30,6 +30,8 @@ NORDIGEN_SECRET_KEY=<nordigen secret key>
 EOT
 ```
 
+All valid config options can be seen [here](config.go).
+
 Run local:
 
 ```bash
