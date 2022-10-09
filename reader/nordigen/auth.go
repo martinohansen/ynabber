@@ -6,21 +6,22 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"strconv"
 	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
-	"github.com/martinohansen/ynabber"
 )
 
 type Authorization struct {
-	Client    nordigen.Client
-	BankID    string
-	EndUserId string
+	BankID string
+	Client nordigen.Client
+	File   string
 }
 
+// Store returns a clean path to the requisition file
 func (auth Authorization) Store() string {
-	return fmt.Sprintf("%s/%s.json", ynabber.DataDir(), auth.EndUserId)
+	return path.Clean(auth.File)
 }
 
 // AuthorizationWrapper tries to get requisition from disk, if it fails it will
