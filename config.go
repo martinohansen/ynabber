@@ -15,15 +15,18 @@ type Config struct {
 	// Interval is how often to execute the read/write loop
 	Interval time.Duration `envconfig:"YNABBER_INTERVAL" default:"5m"`
 
-	// Readers is a list of sources to read transactions from
+	// Readers is a list of sources to read transactions from. Currently only
+	// Nordigen is supported.
 	Readers []string `envconfig:"YNABBER_READERS" default:"nordigen"`
 
-	// Writers is a list of destinations to write transactions from
+	// Writers is a list of destinations to write transactions from. Currently
+	// only YNAB is supported.
 	Writers []string `envconfig:"YNABBER_WRITERS" default:"ynab"`
 
 	// Nordigen related settings
 	Nordigen struct {
-		// AccountMap of Nordigen account IDs to YNAB account IDs
+		// AccountMap of Nordigen account IDs to YNAB account IDs in JSON. For
+		// example: '{"<nordigen account id>": "<ynab account id>"}'
 		AccountMap AccountMap `envconfig:"NORDIGEN_ACCOUNTMAP"`
 
 		// BankID is used to create requisition
@@ -39,7 +42,7 @@ type Config struct {
 	// YNAB related settings
 	YNAB struct {
 		// PayeeStrip is a list of words to remove from the Payee before sending
-		// to YNAB
+		// to YNAB. For example: "foo,bar"
 		PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
 	}
 }
