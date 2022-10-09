@@ -23,26 +23,33 @@ YNAB_BUDGETID=<budget_id>
 YNAB_TOKEN=<account token>
 
 # Nordigen
-NORDIGEN_ACCOUNTMAP='{"<nordigen account id>": "<ynab account id>"}'
+NORDIGEN_ACCOUNTMAP={"<nordigen account id>": "<ynab account id>"}
 NORDIGEN_BANKID=<nordigen bankd id>
 NORDIGEN_SECRET_ID=<nordigen secret id>
 NORDIGEN_SECRET_KEY=<nordigen secret key>
 EOT
 ```
 
-All valid config options can be seen [here](config.go).
+All valid config options can be found [here](config.go).
 
 Run local:
 
 ```bash
 # Read environment variables from file and run ynabber
-export $(grep -v '^#' ynabber.env | xargs) && ynabber
+declare $(cat ynabber.env); ynabber
 ```
 
 Or with Docker:
 
 ```bash
 docker run --env-file=ynabber.env ghcr.io/martinohansen/ynabber:latest
+
+# To keep data persistent
+docker run \
+    --volume ${PWD}:/data \
+    --env 'YNABBER_DATADIR=/data' \
+    --env-file=ynabber.env \
+    ghcr.io/martinohansen/ynabber:latest
 ```
 
 Or deploying to Kubernetes with kubectl:
