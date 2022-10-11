@@ -40,12 +40,20 @@ func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactio
 			return nil, fmt.Errorf("failed to parse string to time: %w", err)
 		}
 
+		// Creditor or debtor name as the payee info for YNAB
+		payee := ynabber.Payee("")
+		if v.DebtorName != "" {
+			payee = ynabber.Payee(v.DebtorName)
+		} else if v.CreditorName != "" {
+			payee = ynabber.Payee(v.CreditorName)
+		}
+
 		// Append transaction
 		x = append(x, ynabber.Transaction{
 			Account: account,
 			ID:      ynabber.ID(ynabber.IDFromString(v.TransactionId)),
 			Date:    date,
-			Payee:   ynabber.Payee(memo),
+			Payee:   payee,
 			Memo:    memo,
 			Amount:  milliunits,
 		})
