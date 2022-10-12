@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"os"
 
 	"github.com/google/uuid"
@@ -75,6 +76,11 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 	}
 
 	client := &http.Client{}
+
+	if cfg.Debug {
+		log.Printf("Request: %s\n", payload)
+	}
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
@@ -87,6 +93,12 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 		return err
 	}
 	defer res.Body.Close()
+
+	if cfg.Debug {
+		b, _ := httputil.DumpResponse(res, true)
+		log.Printf("Response: %s\n", b)
+	}
+
 	if res.StatusCode != http.StatusCreated {
 		return fmt.Errorf("failed to send request: %s", res.Status)
 	} else {
