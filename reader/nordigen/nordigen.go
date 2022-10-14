@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -26,6 +27,7 @@ func accountParser(account string, accountMap map[string]string) (ynabber.Accoun
 }
 
 func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
+	space := regexp.MustCompile(`\s+`) // Reused on every iteration
 	for _, v := range t.Transactions.Booked {
 		memo := v.RemittanceInformationUnstructured
 
@@ -38,6 +40,14 @@ func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactio
 		date, err := time.Parse(timeLayout, v.BookingDate)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse string to time: %w", err)
+		}
+
+		// Clean and possibly truncate memo - YNAB has 200 char limit
+		memo = space.ReplaceAllString(memo, " ")
+		if len(memo) > 200 {
+			log.Printf("Memo on account %s on date %s is too long - truncated to 200 characters",
+				account.Name, v.BookingDate)
+			memo = memo[0:199]
 		}
 
 		// Append transaction
