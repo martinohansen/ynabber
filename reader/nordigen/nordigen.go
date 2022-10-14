@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
-	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
@@ -23,34 +21,6 @@ func accountParser(account string, accountMap map[string]string) (ynabber.Accoun
 		}
 	}
 	return ynabber.Account{}, fmt.Errorf("account not found in map: %w", ynabber.ErrNotFound)
-}
-
-func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
-	for _, v := range t.Transactions.Booked {
-		memo := v.RemittanceInformationUnstructured
-
-		amount, err := strconv.ParseFloat(v.TransactionAmount.Amount, 64)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert string to float: %w", err)
-		}
-		milliunits := ynabber.MilliunitsFromAmount(amount)
-
-		date, err := time.Parse(timeLayout, v.BookingDate)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse string to time: %w", err)
-		}
-
-		// Append transaction
-		x = append(x, ynabber.Transaction{
-			Account: account,
-			ID:      ynabber.ID(ynabber.IDFromString(v.TransactionId)),
-			Date:    date,
-			Payee:   ynabber.Payee(memo),
-			Memo:    memo,
-			Amount:  milliunits,
-		})
-	}
-	return x, nil
 }
 
 func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
@@ -93,7 +63,7 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
 
-		x, err := transactionsToYnabber(account, transactions)
+		x, err := transactionsToYnabber(cfg, account, transactions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert transaction: %w", err)
 		}

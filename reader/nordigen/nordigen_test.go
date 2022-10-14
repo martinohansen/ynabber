@@ -18,7 +18,7 @@ func TestTransactionsToYnabber(t *testing.T) {
 	}
 	json.Unmarshal([]byte(file), &dummy_transactions)
 
-	parsed, err := transactionsToYnabber(ynabber.Account{}, dummy_transactions)
+	parsed, err := transactionsToYnabber(ynabber.Config{}, ynabber.Account{}, dummy_transactions)
 	if err != nil {
 		t.Fatal(err)
 	}
