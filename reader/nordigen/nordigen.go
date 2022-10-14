@@ -40,12 +40,17 @@ func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactio
 			return nil, fmt.Errorf("failed to parse string to time: %w", err)
 		}
 
-		// Creditor or debtor name as the payee info for YNAB
-		payee := ynabber.Payee("")
+		// Creditor or debtor name if available - also truncate too long payees
+		payee := ynabber.Payee(memo)
 		if v.DebtorName != "" {
 			payee = ynabber.Payee(v.DebtorName)
 		} else if v.CreditorName != "" {
 			payee = ynabber.Payee(v.CreditorName)
+		}
+		if len(payee) > 100 {
+			log.Printf("Payee on account %s on date %s is too long - truncated to 100 characters",
+				account.Name, v.BookingDate)
+			payee = payee[0:99]
 		}
 
 		// Append transaction
