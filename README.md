@@ -44,8 +44,9 @@ Or with Docker:
 ```bash
 docker run --env-file=ynabber.env ghcr.io/martinohansen/ynabber:latest
 
-# To keep data persistent
+# To keep data persistent and datafile owner as the user running command
 docker run \
+    --user $(id -u):$(id -g)  \
     --volume ${PWD}:/data \
     --env 'YNABBER_DATADIR=/data' \
     --env-file=ynabber.env \
