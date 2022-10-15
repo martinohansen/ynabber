@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -30,8 +31,12 @@ func main() {
 		} else {
 			log.Printf("Run succeeded")
 		}
-		log.Printf("Waiting %s before running again...", cfg.Interval)
-		time.Sleep(cfg.Interval)
+		if cfg.Interval > 0 {
+			log.Printf("Waiting %s before running again...", cfg.Interval)
+			time.Sleep(cfg.Interval)
+		} else {
+			os.Exit(0)
+		}
 	}
 }
 

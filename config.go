@@ -12,7 +12,7 @@ type Config struct {
 	// Debug prints more log statements
 	Debug bool `envconfig:"YNABBER_DEBUG" default:"false"`
 
-	// Interval is how often to execute the read/write loop
+	// Interval is how often to execute the read/write loop, 0=run only once
 	Interval time.Duration `envconfig:"YNABBER_INTERVAL" default:"5m"`
 
 	// Readers is a list of sources to read transactions from. Currently only
