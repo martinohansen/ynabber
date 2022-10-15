@@ -9,12 +9,17 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/martinohansen/ynabber"
 )
 
 func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
+	const ynab_maxmemo int = 200  // Max size of memo field in YNAB API
+	const ynab_maxpayee int = 100 // Max size of payee field in YNAB API
+
 	budgetID, found := os.LookupEnv("YNAB_BUDGETID")
 	if !found {
 		return fmt.Errorf("env variable YNAB_BUDGETID: %w", ynabber.ErrNotFound)
@@ -42,13 +47,30 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 	}
 
 	y := new(Ytransactions)
+	space := regexp.MustCompile(`\s+`) // Reused on every iteration
 	for _, v := range t {
 		date := v.Date.Format("2006-01-02")
 		amount := v.Amount.String()
+
+		// Trim consecutive spaces from memo and truncate if too long
+		memo := strings.TrimSpace(space.ReplaceAllString(v.Memo, " "))
+		if len(memo) > ynab_maxmemo {
+			log.Printf("Memo on account %s on date %s is too long - truncated to %d characters",
+				v.Account.Name, date, ynab_maxmemo)
+			memo = memo[0:(ynab_maxmemo - 1)]
+		}
+
+		// Parse payee, trim consecutive spaces and truncate if too long
 		payee, err := v.Payee.Parsed(cfg.YNAB.PayeeStrip)
 		if err != nil {
 			payee = string(v.Payee)
 			log.Printf("Failed to parse payee: %s: %s", payee, err)
+		}
+		payee = strings.TrimSpace(space.ReplaceAllString(payee, " "))
+		if len(payee) > ynab_maxpayee {
+			log.Printf("Payee on account %s on date %s is too long - truncated to %d characters",
+				v.Account.Name, date, ynab_maxpayee)
+			payee = payee[0:(ynab_maxpayee - 1)]
 		}
 
 		// Generating YNAB compliant import ID, output example:
@@ -61,7 +83,7 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 			Date:      date,
 			Amount:    amount,
 			PayeeName: payee,
-			Memo:      v.Memo,
+			Memo:      memo,
 			ImportID:  id,
 		}
 
