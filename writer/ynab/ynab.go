@@ -60,13 +60,8 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 			memo = memo[0:(ynab_maxmemo - 1)]
 		}
 
-		// Parse payee, trim consecutive spaces and truncate if too long
-		payee, err := v.Payee.Parsed(cfg.YNAB.PayeeStrip)
-		if err != nil {
-			payee = string(v.Payee)
-			log.Printf("Failed to parse payee: %s: %s", payee, err)
-		}
-		payee = strings.TrimSpace(space.ReplaceAllString(payee, " "))
+		// Trim consecutive spaces from payee and truncate if too long
+		payee := strings.TrimSpace(space.ReplaceAllString(string(v.Payee), " "))
 		if len(payee) > ynab_maxpayee {
 			log.Printf("Payee on account %s on date %s is too long - truncated to %d characters",
 				v.Account.Name, date, ynab_maxpayee)

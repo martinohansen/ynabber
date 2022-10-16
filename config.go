@@ -37,12 +37,13 @@ type Config struct {
 
 		// SecretKey is used to create requisition
 		SecretKey string `envconfig:"NORDIGEN_SECRET_KEY"`
-	}
 
-	// YNAB related settings
-	YNAB struct {
+		// List of source for payee candidates
+		// Currently only name(=debtorName or creditorName) or unstructured are possible
+		PayeeSource []string `envconfig:"NORDIGEN_PAYEE_SOURCE" default:unstructured,name"`
+
 		// PayeeStrip is a list of words to remove from the Payee before sending
-		// to YNAB. For example: "foo,bar"
+		// to YNAB when using unstructured data as source. For example: "foo,bar"
 		PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
 	}
 }

@@ -18,7 +18,10 @@ func TestTransactionsToYnabber(t *testing.T) {
 	}
 	json.Unmarshal([]byte(file), &dummy_transactions)
 
-	parsed, err := transactionsToYnabber(ynabber.Account{}, dummy_transactions)
+	var cfg ynabber.Config
+	cfg.Nordigen.PayeeSource = append(cfg.Nordigen.PayeeSource, "unstructured")
+
+	parsed, err := transactionsToYnabber(cfg, ynabber.Account{}, dummy_transactions)
 	if err != nil {
 		t.Fatal(err)
 	}
