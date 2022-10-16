@@ -81,7 +81,7 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		if err != nil {
 			if errors.Is(err, ynabber.ErrNotFound) {
 				log.Printf("No matching account found for: %s in: %v", accountName, cfg.Nordigen.AccountMap)
-				break
+				continue
 			}
 			return nil, err
 		}
