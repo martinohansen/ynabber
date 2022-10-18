@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
@@ -26,7 +28,22 @@ func accountParser(account string, accountMap map[string]string) (ynabber.Accoun
 	return ynabber.Account{}, fmt.Errorf("account not found in map: %w", ynabber.ErrNotFound)
 }
 
-func transactionsToYnabber(config ynabber.Config, account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
+// payeeStrip returns payee with elements of strips removed
+func payeeStrip(payee string, strips []string) (x string) {
+	for _, strip := range strips {
+		x = strings.ReplaceAll(payee, strip, "")
+	}
+	return strings.TrimSpace(x)
+}
+
+// payeeStripNonAlphanumeric removes all non-alphanumeric characters from payee
+func payeeStripNonAlphanumeric(payee string) (x string) {
+	reg := regexp.MustCompile(`[^\p{L}]+`)
+	x = reg.ReplaceAllString(payee, " ")
+	return strings.TrimSpace(x)
+}
+
+func transactionsToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
 	for _, v := range t.Transactions.Booked {
 		memo := v.RemittanceInformationUnstructured
 
@@ -41,27 +58,30 @@ func transactionsToYnabber(config ynabber.Config, account ynabber.Account, t nor
 			return nil, fmt.Errorf("failed to parse string to time: %w", err)
 		}
 
-		// Find payee
-		payee := ynabber.Payee("")
-		for _, source := range config.Nordigen.PayeeSource {
+		// Get the Payee data source
+		payee := ""
+		for _, source := range cfg.Nordigen.PayeeSource {
 			if payee == "" {
-				if source == "name" {
+				switch source {
+				case "name":
 					// Creditor/debtor name can be used as is
 					if v.CreditorName != "" {
-						payee = ynabber.Payee(v.CreditorName)
+						payee = v.CreditorName
 					} else if v.DebtorName != "" {
-						payee = ynabber.Payee(v.DebtorName)
+						payee = v.DebtorName
 					}
-				} else if source == "unstructured" {
+				case "unstructured":
 					// Unstructured data may need some formatting
-					payee = ynabber.Payee(v.RemittanceInformationUnstructured)
-					s, err := payee.Parsed(config.Nordigen.PayeeStrip)
-					if err != nil {
-						log.Printf("Failed to parse payee: %s: %s", string(payee), err)
+					payee = v.RemittanceInformationUnstructured
+
+					// Parse Payee according the user specified strips and
+					// remove non-alphanumeric
+					if cfg.Nordigen.PayeeStrip != nil {
+						payee = payeeStrip(payee, cfg.Nordigen.PayeeStrip)
 					}
-					payee = ynabber.Payee(s)
-				} else {
-					return nil, fmt.Errorf("Unrecognized payee data source %s - fix configuration", source)
+					payee = payeeStripNonAlphanumeric(payee)
+				default:
+					return nil, fmt.Errorf("unrecognized PayeeSource: %s", source)
 				}
 			}
 		}
@@ -71,7 +91,7 @@ func transactionsToYnabber(config ynabber.Config, account ynabber.Account, t nor
 			Account: account,
 			ID:      ynabber.ID(ynabber.IDFromString(v.TransactionId)),
 			Date:    date,
-			Payee:   payee,
+			Payee:   ynabber.Payee(payee),
 			Memo:    memo,
 			Amount:  milliunits,
 		})

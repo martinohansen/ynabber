@@ -2,9 +2,7 @@ package ynabber
 
 import (
 	"encoding/json"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,18 +50,6 @@ func IDFromString(id string) uuid.UUID {
 		return uuid.New()
 	}
 	return x
-}
-
-// Parsed removes all non-alphanumeric characters and elements of strips from p
-func (p Payee) Parsed(strips []string) (string, error) {
-	reg := regexp.MustCompile(`[^\p{L}]+`)
-	x := reg.ReplaceAllString(string(p), " ")
-
-	for _, strip := range strips {
-		x = strings.ReplaceAll(x, strip, "")
-	}
-
-	return strings.TrimSpace(x), nil
 }
 
 func (m Milliunits) String() string {
