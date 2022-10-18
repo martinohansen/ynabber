@@ -25,7 +25,7 @@ func accountParser(account string, accountMap map[string]string) (ynabber.Accoun
 	return ynabber.Account{}, fmt.Errorf("account not found in map: %w", ynabber.ErrNotFound)
 }
 
-func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
+func transactionsToYnabber(config ynabber.Config, account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
 	for _, v := range t.Transactions.Booked {
 		memo := v.RemittanceInformationUnstructured
 
@@ -40,12 +40,37 @@ func transactionsToYnabber(account ynabber.Account, t nordigen.AccountTransactio
 			return nil, fmt.Errorf("failed to parse string to time: %w", err)
 		}
 
+		// Find payee
+		payee := ynabber.Payee("")
+		for _, source := range config.Nordigen.PayeeSource {
+			if payee == "" {
+				if source == "name" {
+					// Creditor/debtor name can be used as is
+					if v.CreditorName != "" {
+						payee = ynabber.Payee(v.CreditorName)
+					} else if v.DebtorName != "" {
+						payee = ynabber.Payee(v.DebtorName)
+					}
+				} else if source == "unstructured" {
+					// Unstructured data may need some formatting
+					payee = ynabber.Payee(v.RemittanceInformationUnstructured)
+					s, err := payee.Parsed(config.Nordigen.PayeeStrip)
+					if err != nil {
+						log.Printf("Failed to parse payee: %s: %s", string(payee), err)
+					}
+					payee = ynabber.Payee(s)
+				} else {
+					return nil, fmt.Errorf("Unrecognized payee data source %s - fix configuration", source)
+				}
+			}
+		}
+
 		// Append transaction
 		x = append(x, ynabber.Transaction{
 			Account: account,
 			ID:      ynabber.ID(ynabber.IDFromString(v.TransactionId)),
 			Date:    date,
-			Payee:   ynabber.Payee(memo),
+			Payee:   payee,
 			Memo:    memo,
 			Amount:  milliunits,
 		})
@@ -93,7 +118,7 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
 
-		x, err := transactionsToYnabber(account, transactions)
+		x, err := transactionsToYnabber(cfg, account, transactions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert transaction: %w", err)
 		}
