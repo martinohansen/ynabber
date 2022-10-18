@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
@@ -26,7 +28,22 @@ func accountParser(account string, accountMap map[string]string) (ynabber.Accoun
 	return ynabber.Account{}, fmt.Errorf("account not found in map: %w", ynabber.ErrNotFound)
 }
 
-func transactionsToYnabber(config ynabber.Config, account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
+// payeeStrip returns payee with elements of strips removed
+func payeeStrip(payee string, strips []string) (x string) {
+	for _, strip := range strips {
+		x = strings.ReplaceAll(payee, strip, "")
+	}
+	return strings.TrimSpace(x)
+}
+
+// payeeStripNonAlphanumeric removes all non-alphanumeric characters from payee
+func payeeStripNonAlphanumeric(payee string) (x string) {
+	reg := regexp.MustCompile(`[^\p{L}]+`)
+	x = reg.ReplaceAllString(payee, " ")
+	return strings.TrimSpace(x)
+}
+
+func transactionsToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
 	for _, v := range t.Transactions.Booked {
 		memo := v.RemittanceInformationUnstructured
 
@@ -41,27 +58,30 @@ func transactionsToYnabber(config ynabber.Config, account ynabber.Account, t nor
 			return nil, fmt.Errorf("failed to parse string to time: %w", err)
 		}
 
-		// Find payee
-		payee := ynabber.Payee("")
-		for _, source := range config.Nordigen.PayeeSource {
+		// Get the Payee data source
+		payee := ""
+		for _, source := range cfg.Nordigen.PayeeSource {
 			if payee == "" {
-				if source == "name" {
+				switch source {
+				case "name":
 					// Creditor/debtor name can be used as is
 					if v.CreditorName != "" {
-						payee = ynabber.Payee(v.CreditorName)
+						payee = v.CreditorName
 					} else if v.DebtorName != "" {
-						payee = ynabber.Payee(v.DebtorName)
+						payee = v.DebtorName
 					}
-				} else if source == "unstructured" {
+				case "unstructured":
 					// Unstructured data may need some formatting
-					payee = ynabber.Payee(v.RemittanceInformationUnstructured)
-					s, err := payee.Parsed(config.Nordigen.PayeeStrip)
-					if err != nil {
-						log.Printf("Failed to parse payee: %s: %s", string(payee), err)
+					payee = v.RemittanceInformationUnstructured
+
+					// Parse Payee according the user specified strips and
+					// remove non-alphanumeric
+					if cfg.Nordigen.PayeeStrip != nil {
+						payee = payeeStrip(payee, cfg.Nordigen.PayeeStrip)
 					}
-					payee = ynabber.Payee(s)
-				} else {
-					return nil, fmt.Errorf("Unrecognized payee data source %s - fix configuration", source)
+					payee = payeeStripNonAlphanumeric(payee)
+				default:
+					return nil, fmt.Errorf("unrecognized PayeeSource: %s", source)
 				}
 			}
 		}
@@ -71,7 +91,7 @@ func transactionsToYnabber(config ynabber.Config, account ynabber.Account, t nor
 			Account: account,
 			ID:      ynabber.ID(ynabber.IDFromString(v.TransactionId)),
 			Date:    date,
-			Payee:   payee,
+			Payee:   ynabber.Payee(payee),
 			Memo:    memo,
 			Amount:  milliunits,
 		})
@@ -85,28 +105,27 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
-	// Select persistent datafile
-	datafile_bankspecific := fmt.Sprintf("%s/%s-%s.json", cfg.DataDir, "ynabber", cfg.Nordigen.BankID)
-	datafile_generic := fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber")
-	datafile := datafile_bankspecific
+	// Select persistent dataFile
+	dataFileBankSpecific := fmt.Sprintf("%s/%s-%s.json", cfg.DataDir, "ynabber", cfg.Nordigen.BankID)
+	dataFileGeneric := fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber")
+	dataFile := dataFileBankSpecific
 
-	_, err = os.Stat(datafile_bankspecific)
+	_, err = os.Stat(dataFileBankSpecific)
 	if errors.Is(err, os.ErrNotExist) {
-		_, err := os.Stat(datafile_generic)
+		_, err := os.Stat(dataFileGeneric)
 		if errors.Is(err, os.ErrNotExist) {
-			// If bank specific does not exists and neither does generic, use bankspecific
-			datafile = datafile_bankspecific
+			// If bank specific does not exists and neither does generic, use dataFileBankSpecific
+			dataFile = dataFileBankSpecific
 		} else {
-			// Generic datafile exists(old naming) but not the bank speific, use old file
-			datafile = datafile_generic
-			log.Printf("Using non-bank specific persistent datafile %s, consider moving to %s\n", datafile_generic, datafile_bankspecific)
+			// Generic dataFile exists(old naming) but not the bank specific, use dataFileGeneric
+			dataFile = dataFileGeneric
 		}
 	}
 
 	Authorization := Authorization{
 		Client: *c,
 		BankID: cfg.Nordigen.BankID,
-		File:   datafile,
+		File:   dataFile,
 	}
 	r, err := Authorization.Wrapper()
 	if err != nil {

@@ -16,9 +16,10 @@ import (
 	"github.com/martinohansen/ynabber"
 )
 
+const maxMemoSize int = 200  // Max size of memo field in YNAB API
+const maxPayeeSize int = 100 // Max size of payee field in YNAB API
+
 func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
-	const ynab_maxmemo int = 200  // Max size of memo field in YNAB API
-	const ynab_maxpayee int = 100 // Max size of payee field in YNAB API
 
 	budgetID, found := os.LookupEnv("YNAB_BUDGETID")
 	if !found {
@@ -54,18 +55,18 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 
 		// Trim consecutive spaces from memo and truncate if too long
 		memo := strings.TrimSpace(space.ReplaceAllString(v.Memo, " "))
-		if len(memo) > ynab_maxmemo {
+		if len(memo) > maxMemoSize {
 			log.Printf("Memo on account %s on date %s is too long - truncated to %d characters",
-				v.Account.Name, date, ynab_maxmemo)
-			memo = memo[0:(ynab_maxmemo - 1)]
+				v.Account.Name, date, maxMemoSize)
+			memo = memo[0:(maxMemoSize - 1)]
 		}
 
 		// Trim consecutive spaces from payee and truncate if too long
 		payee := strings.TrimSpace(space.ReplaceAllString(string(v.Payee), " "))
-		if len(payee) > ynab_maxpayee {
+		if len(payee) > maxPayeeSize {
 			log.Printf("Payee on account %s on date %s is too long - truncated to %d characters",
-				v.Account.Name, date, ynab_maxpayee)
-			payee = payee[0:(ynab_maxpayee - 1)]
+				v.Account.Name, date, maxPayeeSize)
+			payee = payee[0:(maxPayeeSize - 1)]
 		}
 
 		// Generating YNAB compliant import ID, output example:
@@ -95,7 +96,7 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 	client := &http.Client{}
 
 	if cfg.Debug {
-		log.Printf("Request: %s\n", payload)
+		log.Printf("Request to YNAB: %s\n", payload)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
@@ -113,7 +114,7 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 
 	if cfg.Debug {
 		b, _ := httputil.DumpResponse(res, true)
-		log.Printf("Response: %s\n", b)
+		log.Printf("Response from YNAB: %s\n", b)
 	}
 
 	if res.StatusCode != http.StatusCreated {
