@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"time"
 
@@ -83,10 +84,29 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
+
+	// Select persistent datafile
+	datafile_bankspecific := fmt.Sprintf("%s/%s-%s.json", cfg.DataDir, "ynabber", cfg.Nordigen.BankID)
+	datafile_generic := fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber")
+	datafile := datafile_bankspecific
+
+	_, err = os.Stat(datafile_bankspecific)
+	if errors.Is(err, os.ErrNotExist) {
+		_, err := os.Stat(datafile_generic)
+		if errors.Is(err, os.ErrNotExist) {
+			// If bank specific does not exists and neither does generic, use bankspecific
+			datafile = datafile_bankspecific
+		} else {
+			// Generic datafile exists(old naming) but not the bank speific, use old file
+			datafile = datafile_generic
+			log.Printf("Using non-bank specific persistent datafile %s, consider moving to %s\n", datafile_generic, datafile_bankspecific)
+		}
+	}
+
 	Authorization := Authorization{
 		Client: *c,
 		BankID: cfg.Nordigen.BankID,
-		File:   fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber"),
+		File:   datafile,
 	}
 	r, err := Authorization.Wrapper()
 	if err != nil {
