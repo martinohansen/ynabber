@@ -38,12 +38,23 @@ type Config struct {
 		// SecretKey is used to create requisition
 		SecretKey string `envconfig:"NORDIGEN_SECRET_KEY"`
 
-		// List of source for payee candidates
-		// Currently only name(=debtorName or creditorName) or unstructured are possible
-		PayeeSource []string `envconfig:"NORDIGEN_PAYEE_SOURCE" default:unstructured,name"`
+		// PayeeSource is a list of sources for Payee candidates, the first
+		// method that yields a result will be used. Valid options are:
+		// unstructured and name.
+		//
+		// Option unstructured equals to the `RemittanceInformationUnstructured`
+		// filed from Nordigen while name equals either `debtorName` or
+		// `creditorName`.
+		PayeeSource []string `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name"`
 
-		// PayeeStrip is a list of words to remove from the Payee before sending
-		// to YNAB when using unstructured data as source. For example: "foo,bar"
+		// PayeeStrip is a list of words to remove from Payee. For example:
+		// "foo,bar"
+		PayeeStrip []string `envconfig:"NORDIGEN_PAYEE_STRIP"`
+	}
+
+	// YNAB related settings
+	YNAB struct {
+		// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
 		PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
 	}
 }
