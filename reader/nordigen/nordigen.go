@@ -30,8 +30,9 @@ func accountParser(account string, accountMap map[string]string) (ynabber.Accoun
 
 // payeeStrip returns payee with elements of strips removed
 func payeeStrip(payee string, strips []string) (x string) {
+	x = payee
 	for _, strip := range strips {
-		x = strings.ReplaceAll(payee, strip, "")
+		x = strings.ReplaceAll(x, strip, "")
 	}
 	return strings.TrimSpace(x)
 }
@@ -163,6 +164,10 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		transactions, err := c.GetAccountTransactions(accountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
+		}
+
+		if cfg.Debug {
+			log.Printf("Transactions received from Nordigen: %s\n", transactions)
 		}
 
 		x, err := transactionsToYnabber(cfg, account, transactions)
