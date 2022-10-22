@@ -119,10 +119,29 @@ func TestPayeeStripNonAlphanumeric(t *testing.T) {
 }
 
 func TestPayeeStrip(t *testing.T) {
-	want := "Im here"
-	got := payeeStrip("Im not here", []string{"not "})
-	if want != got {
-		t.Fatalf("strip words: %s != %s", want, got)
+	type args struct {
+		payee  string
+		strips []string
 	}
-
+	tests := []struct {
+		name  string
+		args  args
+		wantX string
+	}{
+		{name: "single",
+			args:  args{payee: "Im not here", strips: []string{"not "}},
+			wantX: "Im here",
+		},
+		{name: "multiple",
+			args:  args{payee: "Im not really here", strips: []string{"not ", "really "}},
+			wantX: "Im here",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if gotX := payeeStrip(tt.args.payee, tt.args.strips); gotX != tt.wantX {
+				t.Errorf("payeeStrip() = %v, want %v", gotX, tt.wantX)
+			}
+		})
+	}
 }
