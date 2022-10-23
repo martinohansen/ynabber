@@ -23,38 +23,42 @@ type Config struct {
 	// only YNAB is supported.
 	Writers []string `envconfig:"YNABBER_WRITERS" default:"ynab"`
 
-	// Nordigen related settings
-	Nordigen struct {
-		// AccountMap of Nordigen account IDs to YNAB account IDs in JSON. For
-		// example: '{"<nordigen account id>": "<ynab account id>"}'
-		AccountMap AccountMap `envconfig:"NORDIGEN_ACCOUNTMAP"`
+	// Reader and/or writer specific settings
+	Nordigen Nordigen
+	YNAB     YNAB
+}
 
-		// BankID is used to create requisition
-		BankID string `envconfig:"NORDIGEN_BANKID"`
+// Nordigen related settings
+type Nordigen struct {
+	// AccountMap of Nordigen account IDs to YNAB account IDs in JSON. For
+	// example: '{"<nordigen account id>": "<ynab account id>"}'
+	AccountMap AccountMap `envconfig:"NORDIGEN_ACCOUNTMAP"`
 
-		// SecretID is used to create requisition
-		SecretID string `envconfig:"NORDIGEN_SECRET_ID"`
+	// BankID is used to create requisition
+	BankID string `envconfig:"NORDIGEN_BANKID"`
 
-		// SecretKey is used to create requisition
-		SecretKey string `envconfig:"NORDIGEN_SECRET_KEY"`
+	// SecretID is used to create requisition
+	SecretID string `envconfig:"NORDIGEN_SECRET_ID"`
 
-		// PayeeSource is a list of sources for Payee candidates, the first
-		// method that yields a result will be used. Valid options are:
-		// unstructured and name.
-		//
-		// Option unstructured equals to the `RemittanceInformationUnstructured`
-		// filed from Nordigen while name equals either `debtorName` or
-		// `creditorName`.
-		PayeeSource []string `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name"`
+	// SecretKey is used to create requisition
+	SecretKey string `envconfig:"NORDIGEN_SECRET_KEY"`
 
-		// PayeeStrip is a list of words to remove from Payee. For example:
-		// "foo,bar"
-		PayeeStrip []string `envconfig:"NORDIGEN_PAYEE_STRIP"`
-	}
+	// PayeeSource is a list of sources for Payee candidates, the first
+	// method that yields a result will be used. Valid options are:
+	// unstructured and name.
+	//
+	// Option unstructured equals to the `RemittanceInformationUnstructured`
+	// filed from Nordigen while name equals either `debtorName` or
+	// `creditorName`.
+	PayeeSource []string `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name"`
 
-	// YNAB related settings
-	YNAB struct {
-		// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
-		PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
-	}
+	// PayeeStrip is a list of words to remove from Payee. For example:
+	// "foo,bar"
+	PayeeStrip []string `envconfig:"NORDIGEN_PAYEE_STRIP"`
+}
+
+// YNAB related settings
+type YNAB struct {
+	// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
+	PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
 }

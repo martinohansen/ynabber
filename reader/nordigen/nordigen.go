@@ -30,8 +30,9 @@ func accountParser(account string, accountMap map[string]string) (ynabber.Accoun
 
 // payeeStrip returns payee with elements of strips removed
 func payeeStrip(payee string, strips []string) (x string) {
+	x = payee
 	for _, strip := range strips {
-		x = strings.ReplaceAll(payee, strip, "")
+		x = strings.ReplaceAll(x, strip, "")
 	}
 	return strings.TrimSpace(x)
 }
@@ -43,58 +44,66 @@ func payeeStripNonAlphanumeric(payee string) (x string) {
 	return strings.TrimSpace(x)
 }
 
-func transactionsToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
-	for _, v := range t.Transactions.Booked {
-		memo := v.RemittanceInformationUnstructured
+func transactionToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.Transaction) (x ynabber.Transaction, err error) {
+	memo := t.RemittanceInformationUnstructured
 
-		amount, err := strconv.ParseFloat(v.TransactionAmount.Amount, 64)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert string to float: %w", err)
-		}
-		milliunits := ynabber.MilliunitsFromAmount(amount)
+	amount, err := strconv.ParseFloat(t.TransactionAmount.Amount, 64)
+	if err != nil {
+		return ynabber.Transaction{}, fmt.Errorf("failed to convert string to float: %w", err)
+	}
+	milliunits := ynabber.MilliunitsFromAmount(amount)
 
-		date, err := time.Parse(timeLayout, v.BookingDate)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse string to time: %w", err)
-		}
+	date, err := time.Parse(timeLayout, t.BookingDate)
+	if err != nil {
+		return ynabber.Transaction{}, fmt.Errorf("failed to parse string to time: %w", err)
+	}
 
-		// Get the Payee data source
-		payee := ""
-		for _, source := range cfg.Nordigen.PayeeSource {
-			if payee == "" {
-				switch source {
-				case "name":
-					// Creditor/debtor name can be used as is
-					if v.CreditorName != "" {
-						payee = v.CreditorName
-					} else if v.DebtorName != "" {
-						payee = v.DebtorName
-					}
-				case "unstructured":
-					// Unstructured data may need some formatting
-					payee = v.RemittanceInformationUnstructured
-
-					// Parse Payee according the user specified strips and
-					// remove non-alphanumeric
-					if cfg.Nordigen.PayeeStrip != nil {
-						payee = payeeStrip(payee, cfg.Nordigen.PayeeStrip)
-					}
-					payee = payeeStripNonAlphanumeric(payee)
-				default:
-					return nil, fmt.Errorf("unrecognized PayeeSource: %s", source)
+	// Get the Payee data source
+	payee := ""
+	for _, source := range cfg.Nordigen.PayeeSource {
+		if payee == "" {
+			switch source {
+			case "name":
+				// Creditor/debtor name can be used as is
+				if t.CreditorName != "" {
+					payee = t.CreditorName
+				} else if t.DebtorName != "" {
+					payee = t.DebtorName
 				}
+			case "unstructured":
+				// Unstructured data may need some formatting
+				payee = t.RemittanceInformationUnstructured
+
+				// Parse Payee according the user specified strips and
+				// remove non-alphanumeric
+				if cfg.Nordigen.PayeeStrip != nil {
+					payee = payeeStrip(payee, cfg.Nordigen.PayeeStrip)
+				}
+				payee = payeeStripNonAlphanumeric(payee)
+			default:
+				return ynabber.Transaction{}, fmt.Errorf("unrecognized PayeeSource: %s", source)
 			}
 		}
+	}
 
+	return ynabber.Transaction{
+		Account: account,
+		ID:      ynabber.ID(ynabber.IDFromString(t.TransactionId)),
+		Date:    date,
+		Payee:   ynabber.Payee(payee),
+		Memo:    memo,
+		Amount:  milliunits,
+	}, nil
+}
+
+func transactionsToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
+	for _, v := range t.Transactions.Booked {
+		transaction, err := transactionToYnabber(cfg, account, v)
+		if err != nil {
+			return nil, err
+		}
 		// Append transaction
-		x = append(x, ynabber.Transaction{
-			Account: account,
-			ID:      ynabber.ID(ynabber.IDFromString(v.TransactionId)),
-			Date:    date,
-			Payee:   ynabber.Payee(payee),
-			Memo:    memo,
-			Amount:  milliunits,
-		})
+		x = append(x, transaction)
 	}
 	return x, nil
 }
@@ -155,6 +164,10 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		transactions, err := c.GetAccountTransactions(accountID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
+		}
+
+		if cfg.Debug {
+			log.Printf("Transactions received from Nordigen: %s\n", transactions)
 		}
 
 		x, err := transactionsToYnabber(cfg, account, transactions)

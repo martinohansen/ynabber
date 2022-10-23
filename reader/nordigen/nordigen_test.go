@@ -1,41 +1,69 @@
 package nordigen
 
 import (
-	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
 )
 
-func TestTransactionsToYnabber(t *testing.T) {
-	var dummy_transactions nordigen.AccountTransactions
-
-	file, err := os.ReadFile("testdata/nordigen-transactions.json")
-	if err != nil {
-		t.Fatal(err)
+func TestTransactionToYnabber(t *testing.T) {
+	type args struct {
+		cfg     ynabber.Config
+		account ynabber.Account
+		t       nordigen.Transaction
 	}
-	json.Unmarshal([]byte(file), &dummy_transactions)
-
-	var cfg ynabber.Config
-	cfg.Nordigen.PayeeSource = append(cfg.Nordigen.PayeeSource, "unstructured")
-
-	parsed, err := transactionsToYnabber(cfg, ynabber.Account{}, dummy_transactions)
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name    string
+		args    args
+		want    ynabber.Transaction
+		wantErr bool
+	}{
+		{name: "milliunits a",
+			args: args{cfg: ynabber.Config{}, account: ynabber.Account{}, t: nordigen.Transaction{
+				TransactionId: "00000000-0000-0000-0000-000000000000",
+				BookingDate:   "0001-01-01",
+				TransactionAmount: struct {
+					Amount   string "json:\"amount,omitempty\""
+					Currency string "json:\"currency,omitempty\""
+				}{
+					Amount: "328.18",
+				},
+			}},
+			want: ynabber.Transaction{
+				Amount: ynabber.Milliunits(328180),
+			},
+			wantErr: false,
+		},
+		{name: "milliunits b",
+			args: args{cfg: ynabber.Config{}, account: ynabber.Account{}, t: nordigen.Transaction{
+				TransactionId: "00000000-0000-0000-0000-000000000000",
+				BookingDate:   "0001-01-01",
+				TransactionAmount: struct {
+					Amount   string "json:\"amount,omitempty\""
+					Currency string "json:\"currency,omitempty\""
+				}{
+					Amount: "32818",
+				},
+			}},
+			want: ynabber.Transaction{
+				Amount: ynabber.Milliunits(32818000),
+			},
+			wantErr: false,
+		},
 	}
 
-	want := ynabber.Milliunits(328180)
-	got := parsed[0].Amount
-	if got != want {
-		t.Fatalf("failed to parse amount: %s != %s", got, want)
-	}
-
-	want = ynabber.Milliunits(32818000)
-	got = parsed[1].Amount
-	if got != want {
-		t.Fatalf("failed to parse amount: %s != %s", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := transactionToYnabber(tt.args.cfg, tt.args.account, tt.args.t)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %+v, wantErr %+v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("got = \n%+v, want \n%+v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -60,11 +88,11 @@ func TestAccountParser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := accountParser(tt.args.account, tt.args.accountMap)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("accountParser() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got.Name != tt.args.account {
-				t.Errorf("accountParser() = %v, want %v", got.Name, tt.args.account)
+				t.Errorf("got = %v, want %v", got.Name, tt.args.account)
 			}
 		})
 	}
@@ -91,10 +119,29 @@ func TestPayeeStripNonAlphanumeric(t *testing.T) {
 }
 
 func TestPayeeStrip(t *testing.T) {
-	want := "Im here"
-	got := payeeStrip("Im not here", []string{"not "})
-	if want != got {
-		t.Fatalf("strip words: %s != %s", want, got)
+	type args struct {
+		payee  string
+		strips []string
 	}
-
+	tests := []struct {
+		name  string
+		args  args
+		wantX string
+	}{
+		{name: "single",
+			args:  args{payee: "Im not here", strips: []string{"not "}},
+			wantX: "Im here",
+		},
+		{name: "multiple",
+			args:  args{payee: "Im not really here", strips: []string{"not ", "really "}},
+			wantX: "Im here",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if gotX := payeeStrip(tt.args.payee, tt.args.strips); gotX != tt.wantX {
+				t.Errorf("payeeStrip() = %v, want %v", gotX, tt.wantX)
+			}
+		})
+	}
 }
