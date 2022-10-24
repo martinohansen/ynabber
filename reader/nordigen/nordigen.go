@@ -115,19 +115,23 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 	}
 
 	// Select persistent dataFile
-	dataFileBankSpecific := fmt.Sprintf("%s/%s-%s.json", cfg.DataDir, "ynabber", cfg.Nordigen.BankID)
-	dataFileGeneric := fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber")
-	dataFile := dataFileBankSpecific
-
-	_, err = os.Stat(dataFileBankSpecific)
-	if errors.Is(err, os.ErrNotExist) {
-		_, err := os.Stat(dataFileGeneric)
+	dataFile := ""
+	if cfg.Nordigen.Datafile != "" {
+		dataFile = cfg.Nordigen.Datafile
+	} else {
+		dataFileBankSpecific := fmt.Sprintf("%s/%s-%s.json", cfg.DataDir, "ynabber", cfg.Nordigen.BankID)
+		dataFileGeneric := fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber")
+		dataFile = dataFileBankSpecific
+		_, err = os.Stat(dataFileBankSpecific)
 		if errors.Is(err, os.ErrNotExist) {
-			// If bank specific does not exists and neither does generic, use dataFileBankSpecific
-			dataFile = dataFileBankSpecific
-		} else {
-			// Generic dataFile exists(old naming) but not the bank specific, use dataFileGeneric
-			dataFile = dataFileGeneric
+			_, err := os.Stat(dataFileGeneric)
+			if errors.Is(err, os.ErrNotExist) {
+				// If bank specific does not exists and neither does generic, use dataFileBankSpecific
+				dataFile = dataFileBankSpecific
+			} else {
+				// Generic dataFile exists(old naming) but not the bank specific, use dataFileGeneric
+				dataFile = dataFileGeneric
+			}
 		}
 	}
 

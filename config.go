@@ -43,6 +43,9 @@ type Nordigen struct {
 	// SecretKey is used to create requisition
 	SecretKey string `envconfig:"NORDIGEN_SECRET_KEY"`
 
+	// Use named datafile instead of default (ynabber-NORDIGEN_BANKID.json)
+	Datafile string `envconfig:"NORDIGEN_DATAFILE"`
+
 	// PayeeSource is a list of sources for Payee candidates, the first
 	// method that yields a result will be used. Valid options are:
 	// unstructured and name.
