@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -117,7 +118,11 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 	// Select persistent dataFile
 	dataFile := ""
 	if cfg.Nordigen.Datafile != "" {
-		dataFile = cfg.Nordigen.Datafile
+		if path.IsAbs(cfg.Nordigen.Datafile) {
+			dataFile = cfg.Nordigen.Datafile
+		} else {
+			dataFile = fmt.Sprintf("%s/%s", cfg.DataDir, cfg.Nordigen.Datafile)
+		}
 	} else {
 		dataFileBankSpecific := fmt.Sprintf("%s/%s-%s.json", cfg.DataDir, "ynabber", cfg.Nordigen.BankID)
 		dataFileGeneric := fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber")
