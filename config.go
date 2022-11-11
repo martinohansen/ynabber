@@ -99,9 +99,30 @@ type YNAB struct {
 	// settings section
 	Token string `envconfig:"YNAB_TOKEN"`
 
+	// ImportFromDate only import transactions from this date and onward. For
+	// FromDate only import transactions from this date and onward. For
+	// example: 2006-01-02
+	ImportFromDate Date `envconfig:"YNAB_IMPORT_FROM_DATE"`
+
 	// Set cleared status, possible values: cleared, uncleared, reconciled .
 	// Default is uncleared for historical reasons but recommend setting this
 	// to cleared because ynabber transactions are cleared by bank.
 	// They'd still be unapproved until approved in YNAB.
 	Cleared string `envconfig:"YNAB_CLEARED" default:"uncleared"`
+
+	ImportID ImportID
+}
+
+// ImportID can be either v1 or v2. All new users should use v2 because it
+// have a lower potability of making duplicate transactions. But v1 remains
+// the default to retain backwards compatibility.
+//
+// To migrate from v1 to v2 simply set the v2 to any date and all transactions
+// from and including that date will be using v2 of the import ID generator.
+type ImportID struct {
+	// V1 will be used from this date
+	V1 Date `envconfig:"YNAB_IMPORT_ID_V1" default:"1970-01-01"`
+
+	// V2 will be used from this date, for example: 2022-12-24
+	V2 Date `envconfig:"YNAB_IMPORT_ID_V2" default:"9999-01-01"`
 }

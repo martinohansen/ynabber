@@ -36,7 +36,46 @@ type Ytransactions struct {
 	Transactions []Ytransaction `json:"transactions"`
 }
 
-func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) Ytransaction {
+// importIDMaker tries to return a unique YNAB import ID to avoid duplicate
+// transactions.
+func importIDMaker(cfg ynabber.Config, t ynabber.Transaction) string {
+	// Common between versions
+	date := t.Date.Format("2006-01-02")
+	amount := t.Amount.String()
+
+	// Version 1 uses the memo, amount and date from Ytransaction
+	v1Cutover := time.Time(cfg.YNAB.ImportID.V1)
+	v1 := func(t ynabber.Transaction) string {
+		hash := sha256.Sum256([]byte(t.Memo))
+		return fmt.Sprintf("YBBR:%s:%s:%x", amount, date, hash[:2])
+	}
+
+	// Version 2 uses, in order, the account IBAN, transaction ID, date, and
+	// amount to build a hash of the transaction.
+	v2Cutover := time.Time(cfg.YNAB.ImportID.V2)
+	v2 := func(t ynabber.Transaction) string {
+		s := [][]byte{
+			[]byte(t.Account.IBAN),
+			[]byte(t.ID),
+			[]byte(date),
+			[]byte(amount),
+		}
+		hash := sha256.Sum256(bytes.Join(s, []byte("")))
+		return fmt.Sprintf("YBBR:%x", hash)[:32]
+	}
+
+	// Return the first generator from latest to oldest that have a cutover date
+	// after or equal to the transaction date.
+	if t.Date.After(v2Cutover) || t.Date.Equal(v2Cutover) {
+		return v2(t)
+	} else if t.Date.After(v1Cutover) || t.Date.Equal(v1Cutover) {
+		return v1(t)
+	} else {
+		return v1(t)
+	}
+}
+
+func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, error) {
 	date := t.Date.Format("2006-01-02")
 	amount := t.Amount.String()
 
@@ -56,21 +95,16 @@ func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) Ytransaction {
 		payee = payee[0:(maxPayeeSize - 1)]
 	}
 
-	// Generating YNAB compliant import ID, output example:
-	// YBBR:-741000:2021-02-18:92f2beb1
-	hash := sha256.Sum256([]byte(t.Memo))
-	id := fmt.Sprintf("YBBR:%s:%s:%x", amount, date, hash[:2])
-
 	return Ytransaction{
+		ImportID:  importIDMaker(cfg, t),
 		AccountID: string(t.Account.ID),
 		Date:      date,
 		Amount:    amount,
 		PayeeName: payee,
 		Memo:      memo,
-		ImportID:  id,
 		Cleared:   cfg.YNAB.Cleared,
 		Approved:  false,
-	}
+	}, nil
 }
 
 func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
@@ -82,7 +116,14 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 	// Build array of transactions to send to YNAB
 	y := new(Ytransactions)
 	for _, v := range t {
-		y.Transactions = append(y.Transactions, ynabberToYNAB(cfg, v))
+		transaction, err := ynabberToYNAB(cfg, v)
+		if err != nil {
+			// If we fail to parse a single transaction we log it but move on so
+			// we don't halt the entire program.
+			log.Printf("Failed to parse transaction: %s: %s", v, err)
+			continue
+		}
+		y.Transactions = append(y.Transactions, transaction)
 	}
 
 	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", cfg.YNAB.BudgetID)
