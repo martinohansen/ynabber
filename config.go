@@ -23,6 +23,9 @@ type Config struct {
 	// only YNAB is supported.
 	Writers []string `envconfig:"YNABBER_WRITERS" default:"ynab"`
 
+	// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
+	PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
+
 	// Reader and/or writer specific settings
 	Nordigen Nordigen
 	YNAB     YNAB
@@ -62,8 +65,13 @@ type Nordigen struct {
 
 // YNAB related settings
 type YNAB struct {
-	// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
-	PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
+	// BudgetID for the budget you want to import transactions into. You can
+	// find the ID in the URL of YNAB: https://app.youneedabudget.com/<budget_id>/budget
+	BudgetID string `envconfig:"YNAB_BUDGETID"`
+
+	// Token is your personal access token as obtained from the YNAB developer
+	// settings section
+	Token string `envconfig:"YNAB_TOKEN"`
 
 	// Set cleared status, possible values: cleared, uncleared, reconciled .
 	// Default is uncleared for historical reasons but recommend setting this
