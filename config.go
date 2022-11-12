@@ -1,8 +1,34 @@
 package ynabber
 
 import (
+	"encoding/json"
 	"time"
 )
+
+const DateFormat = "2006-01-02"
+
+type Date time.Time
+
+// Decode implements `envconfig.Decoder` for Date to parse string to time.Time
+func (date *Date) Decode(value string) error {
+	time, err := time.Parse(DateFormat, value)
+	if err != nil {
+		return err
+	}
+	*date = Date(time)
+	return nil
+}
+
+type AccountMap map[string]string
+
+// Decode implements `envconfig.Decoder` for AccountMap to decode JSON properly
+func (accountMap *AccountMap) Decode(value string) error {
+	err := json.Unmarshal([]byte(value), &accountMap)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 // Config is loaded from the environment during execution with cmd/ynabber
 type Config struct {

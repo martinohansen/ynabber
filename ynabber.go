@@ -1,21 +1,9 @@
 package ynabber
 
 import (
-	"encoding/json"
 	"strconv"
 	"time"
 )
-
-type AccountMap map[string]string
-
-// Decode implements `envconfig.Decoder` for AccountMap to decode JSON properly
-func (input *AccountMap) Decode(value string) error {
-	err := json.Unmarshal([]byte(value), &input)
-	if err != nil {
-		return err
-	}
-	return nil
-}
 
 type Account struct {
 	ID   ID
