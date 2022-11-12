@@ -117,13 +117,8 @@ func transactionsToYnabber(cfg ynabber.Config, account ynabber.Account, t nordig
 	return x, nil
 }
 
-func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
-	c, err := nordigen.NewClient(cfg.Nordigen.SecretID, cfg.Nordigen.SecretKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
-	}
-
-	// Select persistent dataFile
+// dataFile returns a persistent path
+func dataFile(cfg ynabber.Config) string {
 	dataFile := ""
 	if cfg.Nordigen.Datafile != "" {
 		if path.IsAbs(cfg.Nordigen.Datafile) {
@@ -135,7 +130,7 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		dataFileBankSpecific := fmt.Sprintf("%s/%s-%s.json", cfg.DataDir, "ynabber", cfg.Nordigen.BankID)
 		dataFileGeneric := fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber")
 		dataFile = dataFileBankSpecific
-		_, err = os.Stat(dataFileBankSpecific)
+		_, err := os.Stat(dataFileBankSpecific)
 		if errors.Is(err, os.ErrNotExist) {
 			_, err := os.Stat(dataFileGeneric)
 			if errors.Is(err, os.ErrNotExist) {
@@ -147,11 +142,19 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 			}
 		}
 	}
+	return dataFile
+}
+
+func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
+	c, err := nordigen.NewClient(cfg.Nordigen.SecretID, cfg.Nordigen.SecretKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
 
 	Authorization := Authorization{
 		Client: *c,
 		BankID: cfg.Nordigen.BankID,
-		File:   dataFile,
+		File:   dataFile(cfg),
 	}
 	r, err := Authorization.Wrapper()
 	if err != nil {
