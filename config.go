@@ -99,10 +99,9 @@ type YNAB struct {
 	// settings section
 	Token string `envconfig:"YNAB_TOKEN"`
 
-	// ImportFromDate only import transactions from this date and onward. For
 	// FromDate only import transactions from this date and onward. For
 	// example: 2006-01-02
-	ImportFromDate Date `envconfig:"YNAB_IMPORT_FROM_DATE"`
+	FromDate Date `envconfig:"YNAB_FROM_DATE"`
 
 	// Set cleared status, possible values: cleared, uncleared, reconciled .
 	// Default is uncleared for historical reasons but recommend setting this
