@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"strconv"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type AccountMap map[string]string
@@ -24,7 +22,7 @@ type Account struct {
 	Name string
 }
 
-type ID uuid.UUID
+type ID string
 
 type Payee string
 
@@ -42,14 +40,6 @@ type Transaction struct {
 type Ynabber interface {
 	bulkReader() ([]Transaction, error)
 	bulkWriter([]Transaction) error
-}
-
-func IDFromString(id string) uuid.UUID {
-	x, err := uuid.Parse(id)
-	if err != nil {
-		return uuid.New()
-	}
-	return x
 }
 
 func (m Milliunits) String() string {

@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/martinohansen/ynabber"
 )
 
@@ -63,7 +62,7 @@ func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) Ytransaction {
 	id := fmt.Sprintf("YBBR:%s:%s:%x", amount, date, hash[:2])
 
 	return Ytransaction{
-		AccountID: uuid.UUID(t.Account.ID).String(),
+		AccountID: string(t.Account.ID),
 		Date:      date,
 		Amount:    amount,
 		PayeeName: payee,

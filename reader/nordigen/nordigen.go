@@ -17,11 +17,14 @@ import (
 
 const timeLayout = "2006-01-02"
 
+// TODO(Martin): Move accountParser from Nordigen to YNAB package. We want to
+// map Ynabber transaction to YNAB and not so much Nordigen to Ynabber like this
+// is during currently.
 func accountParser(account string, accountMap map[string]string) (ynabber.Account, error) {
 	for from, to := range accountMap {
 		if account == from {
 			return ynabber.Account{
-				ID:   ynabber.ID(ynabber.IDFromString(to)),
+				ID:   ynabber.ID(to),
 				Name: from,
 			}, nil
 		}
@@ -46,6 +49,11 @@ func payeeStripNonAlphanumeric(payee string) (x string) {
 }
 
 func transactionToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.Transaction) (x ynabber.Transaction, err error) {
+	id := t.TransactionId
+	if id == "" {
+		log.Printf("Transaction ID is empty, this might cause duplicate entires in YNAB")
+	}
+
 	memo := t.RemittanceInformationUnstructured
 
 	amount, err := strconv.ParseFloat(t.TransactionAmount.Amount, 64)
@@ -89,7 +97,7 @@ func transactionToYnabber(cfg ynabber.Config, account ynabber.Account, t nordige
 
 	return ynabber.Transaction{
 		Account: account,
-		ID:      ynabber.ID(ynabber.IDFromString(t.TransactionId)),
+		ID:      ynabber.ID(id),
 		Date:    date,
 		Payee:   ynabber.Payee(payee),
 		Memo:    memo,
