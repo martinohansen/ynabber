@@ -108,3 +108,18 @@ func (auth Authorization) Create() (nordigen.Requisition, error) {
 
 	return r, nil
 }
+
+// accountReady returns true if the account is healthy and false if not and an
+// optional reason for the account health.
+func accountReady(account nordigen.AccountMetadata) (bool, string) {
+	switch account.Status {
+	case "ERROR":
+		return false, "status is error"
+	case "EXPIRED":
+		return false, "status is expired"
+	case "SUSPENDED":
+		return false, "status is suspended"
+	default:
+		return true, ""
+	}
+}

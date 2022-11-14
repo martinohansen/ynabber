@@ -156,6 +156,15 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get account metadata: %w", err)
 		}
+		ok, reason := accountReady(accountMetadata)
+		if !ok {
+			log.Printf(
+				"Account: %s is not ok: %s. Going to recreate the requisition...",
+				account,
+				reason,
+			)
+			Authorization.CreateAndSave()
+		}
 		accountID := accountMetadata.Id
 		accountName := accountMetadata.Iban
 
