@@ -64,4 +64,10 @@ type Nordigen struct {
 type YNAB struct {
 	// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
 	PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
+
+	// Set cleared status, possible values: cleared, uncleared, reconciled .
+	// Default is uncleared for historical reasons but recommend setting this
+	// to cleared because ynabber transactions are cleared by bank.
+	// They'd still be unapproved until approved in YNAB.
+	Cleared string `envconfig:"YNAB_CLEARED" default:"uncleared"`
 }
