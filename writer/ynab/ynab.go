@@ -42,6 +42,8 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 		PayeeName string `json:"payee_name"`
 		Memo      string `json:"memo"`
 		ImportID  string `json:"import_id"`
+		Cleared   string `json:"cleared"`
+		Approved  bool   `json:"approved"`
 	}
 	type Ytransactions struct {
 		Transactions []Ytransaction `json:"transactions"`
@@ -81,6 +83,8 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 			PayeeName: payee,
 			Memo:      memo,
 			ImportID:  id,
+			Cleared:   cfg.YNAB.Cleared,
+			Approved:  false,
 		}
 
 		y.Transactions = append(y.Transactions, x)
