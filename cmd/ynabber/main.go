@@ -31,9 +31,9 @@ func main() {
 
 	// Handle movement of PayeeStrip from YNAB to Nordigen config strut
 	if cfg.Nordigen.PayeeStrip == nil {
-		if cfg.YNAB.PayeeStrip != nil {
+		if cfg.PayeeStrip != nil {
 			log.Printf("Config YNABBER_PAYEE_STRIP is depreciated, please use NORDIGEN_PAYEE_STRIP instead")
-			cfg.Nordigen.PayeeStrip = cfg.YNAB.PayeeStrip
+			cfg.Nordigen.PayeeStrip = cfg.PayeeStrip
 		}
 	}
 

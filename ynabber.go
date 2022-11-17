@@ -1,30 +1,16 @@
 package ynabber
 
 import (
-	"encoding/json"
 	"strconv"
 	"time"
-
-	"github.com/google/uuid"
 )
-
-type AccountMap map[string]string
-
-// Decode implements `envconfig.Decoder` for AccountMap to decode JSON properly
-func (input *AccountMap) Decode(value string) error {
-	err := json.Unmarshal([]byte(value), &input)
-	if err != nil {
-		return err
-	}
-	return nil
-}
 
 type Account struct {
 	ID   ID
 	Name string
 }
 
-type ID uuid.UUID
+type ID string
 
 type Payee string
 
@@ -42,14 +28,6 @@ type Transaction struct {
 type Ynabber interface {
 	bulkReader() ([]Transaction, error)
 	bulkWriter([]Transaction) error
-}
-
-func IDFromString(id string) uuid.UUID {
-	x, err := uuid.Parse(id)
-	if err != nil {
-		return uuid.New()
-	}
-	return x
 }
 
 func (m Milliunits) String() string {

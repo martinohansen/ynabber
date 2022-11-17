@@ -21,8 +21,7 @@ func TestTransactionToYnabber(t *testing.T) {
 	}{
 		{name: "milliunits a",
 			args: args{cfg: ynabber.Config{}, account: ynabber.Account{}, t: nordigen.Transaction{
-				TransactionId: "00000000-0000-0000-0000-000000000000",
-				BookingDate:   "0001-01-01",
+				BookingDate: "0001-01-01",
 				TransactionAmount: struct {
 					Amount   string "json:\"amount,omitempty\""
 					Currency string "json:\"currency,omitempty\""
@@ -37,8 +36,7 @@ func TestTransactionToYnabber(t *testing.T) {
 		},
 		{name: "milliunits b",
 			args: args{cfg: ynabber.Config{}, account: ynabber.Account{}, t: nordigen.Transaction{
-				TransactionId: "00000000-0000-0000-0000-000000000000",
-				BookingDate:   "0001-01-01",
+				BookingDate: "0001-01-01",
 				TransactionAmount: struct {
 					Amount   string "json:\"amount,omitempty\""
 					Currency string "json:\"currency,omitempty\""

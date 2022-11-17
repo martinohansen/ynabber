@@ -1,8 +1,34 @@
 package ynabber
 
 import (
+	"encoding/json"
 	"time"
 )
+
+const DateFormat = "2006-01-02"
+
+type Date time.Time
+
+// Decode implements `envconfig.Decoder` for Date to parse string to time.Time
+func (date *Date) Decode(value string) error {
+	time, err := time.Parse(DateFormat, value)
+	if err != nil {
+		return err
+	}
+	*date = Date(time)
+	return nil
+}
+
+type AccountMap map[string]string
+
+// Decode implements `envconfig.Decoder` for AccountMap to decode JSON properly
+func (accountMap *AccountMap) Decode(value string) error {
+	err := json.Unmarshal([]byte(value), &accountMap)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 // Config is loaded from the environment during execution with cmd/ynabber
 type Config struct {
@@ -22,6 +48,9 @@ type Config struct {
 	// Writers is a list of destinations to write transactions from. Currently
 	// only YNAB is supported.
 	Writers []string `envconfig:"YNABBER_WRITERS" default:"ynab"`
+
+	// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
+	PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
 
 	// Reader and/or writer specific settings
 	Nordigen Nordigen
@@ -62,8 +91,13 @@ type Nordigen struct {
 
 // YNAB related settings
 type YNAB struct {
-	// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
-	PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
+	// BudgetID for the budget you want to import transactions into. You can
+	// find the ID in the URL of YNAB: https://app.youneedabudget.com/<budget_id>/budget
+	BudgetID string `envconfig:"YNAB_BUDGETID"`
+
+	// Token is your personal access token as obtained from the YNAB developer
+	// settings section
+	Token string `envconfig:"YNAB_TOKEN"`
 
 	// Set cleared status, possible values: cleared, uncleared, reconciled .
 	// Default is uncleared for historical reasons but recommend setting this
