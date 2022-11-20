@@ -37,6 +37,17 @@ type Ytransactions struct {
 	Transactions []Ytransaction `json:"transactions"`
 }
 
+// accountParser takes IBAN and returns the matching YNAB account ID in
+// accountMap
+func accountParser(iban string, accountMap map[string]string) (string, error) {
+	for from, to := range accountMap {
+		if iban == from {
+			return to, nil
+		}
+	}
+	return "", fmt.Errorf("no account for: %s in map: %s", iban, accountMap)
+}
+
 // importIDMaker tries to return a unique YNAB import ID to avoid duplicate
 // transactions.
 func importIDMaker(cfg ynabber.Config, t ynabber.Transaction) string {
@@ -77,6 +88,11 @@ func importIDMaker(cfg ynabber.Config, t ynabber.Transaction) string {
 }
 
 func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, error) {
+	accountID, err := accountParser(t.Account.IBAN, cfg.YNAB.AccountMap)
+	if err != nil {
+		return Ytransaction{}, err
+	}
+
 	date := t.Date.Format("2006-01-02")
 	amount := t.Amount.String()
 
@@ -98,7 +114,7 @@ func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, err
 
 	return Ytransaction{
 		ImportID:  importIDMaker(cfg, t),
-		AccountID: string(t.Account.ID),
+		AccountID: accountID,
 		Date:      date,
 		Amount:    amount,
 		PayeeName: payee,

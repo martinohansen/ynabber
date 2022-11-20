@@ -70,3 +70,39 @@ func TestImportIDMaker(t *testing.T) {
 		})
 	}
 }
+
+func TestAccountParser(t *testing.T) {
+	type args struct {
+		account    string
+		accountMap map[string]string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{name: "match",
+			args:    args{account: "N1", accountMap: map[string]string{"N1": "Y1"}},
+			want:    "Y1",
+			wantErr: false,
+		},
+		{name: "noMatch",
+			args:    args{account: "im-not-here", accountMap: map[string]string{"foo": "bar"}},
+			want:    "",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := accountParser(tt.args.account, tt.args.accountMap)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

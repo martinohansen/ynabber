@@ -59,8 +59,7 @@ type Config struct {
 
 // Nordigen related settings
 type Nordigen struct {
-	// AccountMap of Nordigen account IDs to YNAB account IDs in JSON. For
-	// example: '{"<nordigen account id>": "<ynab account id>"}'
+	// AccountMap is depreciated please use YNAB.AccountMap instead
 	AccountMap AccountMap `envconfig:"NORDIGEN_ACCOUNTMAP"`
 
 	// BankID is used to create requisition
@@ -98,6 +97,10 @@ type YNAB struct {
 	// Token is your personal access token as obtained from the YNAB developer
 	// settings section
 	Token string `envconfig:"YNAB_TOKEN"`
+
+	// AccountMap of IBAN to YNAB account IDs in JSON. For example:
+	// '{"<IBAN>": "<YNAB Account ID>"}'
+	AccountMap AccountMap `envconfig:"YNAB_ACCOUNTMAP"`
 
 	// FromDate only import transactions from this date and onward. For
 	// example: 2006-01-02
