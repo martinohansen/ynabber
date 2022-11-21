@@ -65,37 +65,6 @@ func TestTransactionToYnabber(t *testing.T) {
 	}
 }
 
-func TestAccountParser(t *testing.T) {
-	type args struct {
-		account    string
-		accountMap map[string]string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    ynabber.Account
-		wantErr bool
-	}{
-		{name: "match",
-			args:    args{account: "N1", accountMap: map[string]string{"N1": "Y1"}},
-			want:    ynabber.Account{Name: "Y1"},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := accountParser(tt.args.account, tt.args.accountMap)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got.Name != tt.args.account {
-				t.Errorf("got = %v, want %v", got.Name, tt.args.account)
-			}
-		})
-	}
-}
-
 func TestPayeeStripNonAlphanumeric(t *testing.T) {
 	want := "Im just alphanumeric"
 	got := payeeStripNonAlphanumeric("Im just alphanumeric")

@@ -29,11 +29,17 @@ func main() {
 		log.Fatal("YNAB_CLEARED must be one of cleared, uncleared or reconciled")
 	}
 
-	// Handle movement of PayeeStrip from YNAB to Nordigen config strut
+	// Handle movement of config options and warn users
 	if cfg.Nordigen.PayeeStrip == nil {
 		if cfg.PayeeStrip != nil {
 			log.Printf("Config YNABBER_PAYEE_STRIP is depreciated, please use NORDIGEN_PAYEE_STRIP instead")
 			cfg.Nordigen.PayeeStrip = cfg.PayeeStrip
+		}
+	}
+	if cfg.YNAB.AccountMap == nil {
+		if cfg.Nordigen.AccountMap != nil {
+			log.Printf("Config NORDIGEN_ACCOUNTMAP is depreciated, please use YNAB_ACCOUNTMAP instead")
+			cfg.YNAB.AccountMap = cfg.Nordigen.AccountMap
 		}
 	}
 

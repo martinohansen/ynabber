@@ -17,21 +17,6 @@ import (
 
 const timeLayout = "2006-01-02"
 
-// TODO(Martin): Move accountParser from Nordigen to YNAB package. We want to
-// map Ynabber transaction to YNAB and not so much Nordigen to Ynabber like this
-// is during currently.
-func accountParser(account string, accountMap map[string]string) (ynabber.Account, error) {
-	for from, to := range accountMap {
-		if account == from {
-			return ynabber.Account{
-				ID:   ynabber.ID(to),
-				Name: from,
-			}, nil
-		}
-	}
-	return ynabber.Account{}, fmt.Errorf("account not found in map: %w", ynabber.ErrNotFound)
-}
-
 // payeeStrip returns payee with elements of strips removed
 func payeeStrip(payee string, strips []string) (x string) {
 	x = payee
@@ -176,21 +161,16 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 			)
 			Authorization.CreateAndSave()
 		}
-		accountID := accountMetadata.Id
-		accountName := accountMetadata.Iban
 
-		account, err := accountParser(accountName, cfg.Nordigen.AccountMap)
-		if err != nil {
-			if errors.Is(err, ynabber.ErrNotFound) {
-				log.Printf("No matching account found for: %s in: %v", accountName, cfg.Nordigen.AccountMap)
-				continue
-			}
-			return nil, err
+		account := ynabber.Account{
+			ID:   ynabber.ID(accountMetadata.Id),
+			Name: accountMetadata.Iban,
+			IBAN: accountMetadata.Iban,
 		}
 
-		log.Printf("Reading transactions from account: %s", accountName)
+		log.Printf("Reading transactions from account: %s", account.Name)
 
-		transactions, err := c.GetAccountTransactions(accountID)
+		transactions, err := c.GetAccountTransactions(string(account.ID))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}

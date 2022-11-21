@@ -8,6 +8,7 @@ import (
 type Account struct {
 	ID   ID
 	Name string
+	IBAN string
 }
 
 type ID string
