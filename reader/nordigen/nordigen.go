@@ -152,12 +152,15 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get account metadata: %w", err)
 		}
-		ok, reason := accountReady(accountMetadata)
-		if !ok {
+
+		// Handle expired, or suspended accounts by recreating the
+		// requisition.
+		switch accountMetadata.Status {
+		case "EXPIRED", "SUSPENDED":
 			log.Printf(
-				"Account: %s is not ok: %s. Going to recreate the requisition...",
+				"Account: %s is %s. Going to recreate the requisition...",
 				account,
-				reason,
+				accountMetadata.Status,
 			)
 			Authorization.CreateAndSave()
 		}
