@@ -32,13 +32,13 @@ func main() {
 	// Handle movement of config options and warn users
 	if cfg.Nordigen.PayeeStrip == nil {
 		if cfg.PayeeStrip != nil {
-			log.Printf("Config YNABBER_PAYEE_STRIP is depreciated, please use NORDIGEN_PAYEE_STRIP instead")
+			log.Printf("Config YNABBER_PAYEE_STRIP is going to be depreciated, please use NORDIGEN_PAYEE_STRIP instead")
 			cfg.Nordigen.PayeeStrip = cfg.PayeeStrip
 		}
 	}
 	if cfg.YNAB.AccountMap == nil {
 		if cfg.Nordigen.AccountMap != nil {
-			log.Printf("Config NORDIGEN_ACCOUNTMAP is depreciated, please use YNAB_ACCOUNTMAP instead")
+			log.Printf("Config NORDIGEN_ACCOUNTMAP is going to be depreciated, please use YNAB_ACCOUNTMAP instead")
 			cfg.YNAB.AccountMap = cfg.Nordigen.AccountMap
 		}
 	}
