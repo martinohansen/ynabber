@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 	"github.com/martinohansen/ynabber/reader/nordigen"
@@ -47,8 +48,12 @@ func main() {
 		log.Printf("Config: %+v\n", cfg)
 	}
 
+	runner := func() error {
+		return run(cfg)
+	}
+
 	for {
-		err = run(cfg)
+		err = backoff.Retry(runner, backoff.NewExponentialBackOff())
 		if err != nil {
 			panic(err)
 		} else {

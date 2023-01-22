@@ -1,3 +1,5 @@
+github.com/cenkalti/backoff/v4 v4.2.0 h1:HN5dHm3WBOgndBH6E8V0q2jIYIR3s9yglV8k/+MN3u4=
+github.com/cenkalti/backoff/v4 v4.2.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/frieser/nordigen-go-lib/v2 v2.1.1 h1:nApiepW2oh+gPL2my9dvkHEVN6w30cmpAf0glNJkHCY=
 github.com/frieser/nordigen-go-lib/v2 v2.1.1/go.mod h1:NejYisqD8GvynCN0vDGw7J66slnj7jB25c8tS1tr8bw=
 github.com/kelseyhightower/envconfig v1.4.0 h1:Im6hONhd3pLkfDFsbRgu68RDNkGF1r3dvMUtDTo2cv8=
