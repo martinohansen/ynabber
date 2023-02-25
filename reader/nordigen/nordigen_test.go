@@ -4,10 +4,15 @@ import (
 	"testing"
 
 	"github.com/frieser/nordigen-go-lib/v2"
+	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 )
 
 func TestTransactionToYnabber(t *testing.T) {
+
+	var defaultConfig ynabber.Config
+	_ = envconfig.Process("", &defaultConfig)
+
 	type args struct {
 		cfg     ynabber.Config
 		account ynabber.Account
@@ -46,6 +51,32 @@ func TestTransactionToYnabber(t *testing.T) {
 			}},
 			want: ynabber.Transaction{
 				Amount: ynabber.Milliunits(32818000),
+			},
+			wantErr: false,
+		},
+		{
+			// Tests a common Nordigen transaction from NORDEA_NDEADKKK with the
+			// default config to highlight any breaking changes.
+			name: "NORDEA_NDEADKKK",
+			args: args{
+				cfg:     defaultConfig,
+				account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				t: nordigen.Transaction{
+					BookingDate:                       "0001-01-01",
+					RemittanceInformationUnstructured: "Im unstructured and non-alphanumeric 99",
+					TransactionAmount: struct {
+						Amount   string "json:\"amount,omitempty\""
+						Currency string "json:\"currency,omitempty\""
+					}{
+						Amount: "10",
+					},
+				},
+			},
+			want: ynabber.Transaction{
+				Account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				Payee:   "Im unstructured and non alphanumeric",
+				Memo:    "Im unstructured and non-alphanumeric 99",
+				Amount:  ynabber.Milliunits(10000),
 			},
 			wantErr: false,
 		},
