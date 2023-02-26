@@ -94,7 +94,6 @@ func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, err
 	}
 
 	date := t.Date.Format("2006-01-02")
-	amount := t.Amount.String()
 
 	// Trim consecutive spaces from memo and truncate if too long
 	memo := strings.TrimSpace(space.ReplaceAllString(t.Memo, " "))
@@ -112,11 +111,21 @@ func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, err
 		payee = payee[0:(maxPayeeSize - 1)]
 	}
 
+	// If SwapFlow is defined check if the account is configured to swap inflow
+	// to outflow. If so swap it by using the Negate method.
+	if cfg.YNAB.SwapFlow != nil {
+		for _, account := range cfg.YNAB.SwapFlow {
+			if account == t.Account.IBAN {
+				t.Amount = t.Amount.Negate()
+			}
+		}
+	}
+
 	return Ytransaction{
 		ImportID:  importIDMaker(cfg, t),
 		AccountID: accountID,
 		Date:      date,
-		Amount:    amount,
+		Amount:    t.Amount.String(),
 		PayeeName: payee,
 		Memo:      memo,
 		Cleared:   cfg.YNAB.Cleared,

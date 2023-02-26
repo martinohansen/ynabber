@@ -112,6 +112,12 @@ type YNAB struct {
 	// They'd still be unapproved until approved in YNAB.
 	Cleared string `envconfig:"YNAB_CLEARED" default:"uncleared"`
 
+	// SwapFlow changes inflow to outflow and vice versa for any account with a
+	// IBAN number in the list. This maybe be relevant for credit card accounts.
+	//
+	// Example: "DK9520000123456789,NO8330001234567"
+	SwapFlow []string `envconfig:"YNAB_SWAPFLOW"`
+
 	ImportID ImportID
 }
 

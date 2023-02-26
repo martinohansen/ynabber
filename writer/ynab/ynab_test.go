@@ -1,6 +1,7 @@
 package ynab
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -102,6 +103,77 @@ func TestAccountParser(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestYnabberToYNAB(t *testing.T) {
+	type args struct {
+		cfg ynabber.Config
+		t   ynabber.Transaction
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    Ytransaction
+		wantErr bool
+	}{
+		{
+			name: "Default",
+			args: args{
+				cfg: ynabber.Config{
+					YNAB: ynabber.YNAB{
+						AccountMap: map[string]string{"foobar": "abc"},
+					},
+				},
+				t: ynabber.Transaction{
+					Account: ynabber.Account{IBAN: "foobar"},
+					Amount:  10000,
+				},
+			},
+			want: Ytransaction{
+				AccountID: "abc",
+				Date:      "0001-01-01",
+				Amount:    "10000",
+				ImportID:  "YBBR:e066d58050f67a602720e5f123f",
+				Approved:  false,
+			},
+			wantErr: false,
+		},
+		{
+			name: "SwapFlow",
+			args: args{
+				cfg: ynabber.Config{
+					YNAB: ynabber.YNAB{
+						SwapFlow:   []string{"foobar"},
+						AccountMap: map[string]string{"foobar": "abc"},
+					},
+				},
+				t: ynabber.Transaction{
+					Account: ynabber.Account{IBAN: "foobar"},
+					Amount:  10000,
+				},
+			},
+			want: Ytransaction{
+				AccountID: "abc",
+				Date:      "0001-01-01",
+				Amount:    "-10000",
+				ImportID:  "YBBR:2e18b15a1a51f0c2278147a4ca5",
+				Approved:  false,
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ynabberToYNAB(tt.args.cfg, tt.args.t)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ynabberToYNAB() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ynabberToYNAB() = %v, want %v", got, tt.want)
 			}
 		})
 	}
