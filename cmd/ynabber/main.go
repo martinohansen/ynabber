@@ -29,7 +29,8 @@ func main() {
 		log.Fatal("YNAB_CLEARED must be one of cleared, uncleared or reconciled")
 	}
 
-	// Handle movement of config options and warn users
+	// Handle movement of config options and warn users if better options are
+	// available.
 	if cfg.Nordigen.PayeeStrip == nil {
 		if cfg.PayeeStrip != nil {
 			log.Printf("Config YNABBER_PAYEE_STRIP is going to be depreciated, please use NORDIGEN_PAYEE_STRIP instead")
@@ -41,6 +42,11 @@ func main() {
 			log.Printf("Config NORDIGEN_ACCOUNTMAP is going to be depreciated, please use YNAB_ACCOUNTMAP instead")
 			cfg.YNAB.AccountMap = cfg.Nordigen.AccountMap
 		}
+	}
+	// Defacto means that ImportID v2 is not used
+	if cfg.YNAB.ImportID.V2 == ynabber.Date(time.Date(9999, time.January, 1, 00, 00, 00, 00, time.UTC)) {
+		log.Printf("Consider using v2 import IDs for YNAB. See description " +
+			"for config option YNAB_IMPORT_ID_V2 for more information")
 	}
 
 	if cfg.Debug {
