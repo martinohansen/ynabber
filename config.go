@@ -74,14 +74,14 @@ type Nordigen struct {
 	// Use named datafile(relative path in datadir, absolute if starts with slash) instead of default (ynabber-NORDIGEN_BANKID.json)
 	Datafile string `envconfig:"NORDIGEN_DATAFILE"`
 
-	// PayeeSource is a list of sources for Payee candidates, the first
-	// method that yields a result will be used. Valid options are:
-	// unstructured and name.
+	// PayeeSource is a list of sources for Payee candidates, the first method
+	// that yields a result will be used. Valid options are: unstructured, name
+	// and additional.
 	//
-	// Option unstructured equals to the `RemittanceInformationUnstructured`
-	// filed from Nordigen while name equals either `debtorName` or
-	// `creditorName`.
-	PayeeSource []string `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name"`
+	//	* unstructured: uses the `RemittanceInformationUnstructured` field
+	//	* name: uses either the either `debtorName` or `creditorName` field
+	//	* additional: uses the `AdditionalInformation` field
+	PayeeSource []string `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name,additional"`
 
 	// PayeeStrip is a list of words to remove from Payee. For example:
 	// "foo,bar"

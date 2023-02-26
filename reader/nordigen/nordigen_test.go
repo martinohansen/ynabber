@@ -96,6 +96,46 @@ func TestTransactionToYnabber(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			// Test transaction from SEB_KORT_AB_NO_SKHSFI21
+			name: "SEB_KORT_AB_NO_SKHSFI21",
+			args: args{
+				cfg:     defaultConfig,
+				account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				t: nordigen.Transaction{
+					TransactionId:  "foobar",
+					EntryReference: "",
+					BookingDate:    "2023-02-24",
+					ValueDate:      "2023-02-24",
+					TransactionAmount: struct {
+						Amount   string "json:\"amount,omitempty\""
+						Currency string "json:\"currency,omitempty\""
+					}{Amount: "10", Currency: "NOK"},
+					CreditorName: "",
+					CreditorAccount: struct {
+						Iban string "json:\"iban,omitempty\""
+					}{Iban: "0"},
+					UltimateCreditor: "",
+					DebtorName:       "",
+					DebtorAccount: struct {
+						Iban string "json:\"iban,omitempty\""
+					}{Iban: ""},
+					UltimateDebtor:                         "",
+					RemittanceInformationUnstructured:      "",
+					RemittanceInformationUnstructuredArray: []string{""},
+					BankTransactionCode:                    "PURCHASE",
+					AdditionalInformation:                  "PASCAL AS"},
+			},
+			want: ynabber.Transaction{
+				Account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				ID:      ynabber.ID("foobar"),
+				Date:    time.Date(2023, time.February, 24, 0, 0, 0, 0, time.UTC),
+				Payee:   "PASCAL AS",
+				Memo:    "",
+				Amount:  ynabber.Milliunits(10000),
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

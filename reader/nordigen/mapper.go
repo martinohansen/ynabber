@@ -28,22 +28,33 @@ func (Default) Map(cfg ynabber.Config, account ynabber.Account, t nordigen.Trans
 		return ynabber.Transaction{}, fmt.Errorf("failed to parse string to time: %w", err)
 	}
 
-	// Get the Payee data source
+	// Get the Payee from the first data source that returns data in the order
+	// defined by config
 	payee := ""
 	for _, source := range cfg.Nordigen.PayeeSource {
 		if payee == "" {
 			switch source {
+			// Unstructured should properly have been called "remittance" but
+			// its not. Some banks use this field as Payee.
+			case "unstructured":
+				payee = t.RemittanceInformationUnstructured
+				// Unstructured data may need some formatting, some banks
+				// inserts the amount and date which will cause every
+				// transaction to create a new Payee
+				payee = payeeStripNonAlphanumeric(payee)
+
+			// Name is using either creditor or debtor as the payee
 			case "name":
-				// Creditor/debtor name can be used as is
+				// Use either one
 				if t.CreditorName != "" {
 					payee = t.CreditorName
 				} else if t.DebtorName != "" {
 					payee = t.DebtorName
 				}
-			case "unstructured":
-				// Unstructured data may need some formatting
-				payee = t.RemittanceInformationUnstructured
-				payee = payeeStripNonAlphanumeric(payee)
+
+			// Additional uses AdditionalInformation as payee
+			case "additional":
+				payee = t.AdditionalInformation
 			default:
 				return ynabber.Transaction{}, fmt.Errorf("unrecognized PayeeSource: %s", source)
 			}
