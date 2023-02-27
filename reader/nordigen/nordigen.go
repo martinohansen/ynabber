@@ -7,24 +7,11 @@ import (
 	"os"
 	"path"
 	"regexp"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
 )
-
-const timeLayout = "2006-01-02"
-
-// payeeStrip returns payee with elements of strips removed
-func payeeStrip(payee string, strips []string) (x string) {
-	x = payee
-	for _, strip := range strips {
-		x = strings.ReplaceAll(x, strip, "")
-	}
-	return strings.TrimSpace(x)
-}
 
 // payeeStripNonAlphanumeric removes all non-alphanumeric characters from payee
 func payeeStripNonAlphanumeric(payee string) (x string) {
@@ -33,61 +20,25 @@ func payeeStripNonAlphanumeric(payee string) (x string) {
 	return strings.TrimSpace(x)
 }
 
-func transactionToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.Transaction) (x ynabber.Transaction, err error) {
-	id := t.TransactionId
-	if id == "" {
-		log.Printf("Transaction ID is empty, this might cause duplicate entires in YNAB")
+func transactionToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.Transaction) (y ynabber.Transaction, err error) {
+	// Pick an appropriate mapper based on the BankID provided or fallback to
+	// our default best effort mapper.
+	switch cfg.Nordigen.BankID {
+	default:
+		y, err = Default{}.Map(cfg, account, t)
 	}
 
-	memo := t.RemittanceInformationUnstructured
-
-	amount, err := strconv.ParseFloat(t.TransactionAmount.Amount, 64)
+	// Return now if any of the mappings resulted in error
 	if err != nil {
-		return ynabber.Transaction{}, fmt.Errorf("failed to convert string to float: %w", err)
-	}
-	milliunits := ynabber.MilliunitsFromAmount(amount)
-
-	date, err := time.Parse(timeLayout, t.BookingDate)
-	if err != nil {
-		return ynabber.Transaction{}, fmt.Errorf("failed to parse string to time: %w", err)
+		return y, err
 	}
 
-	// Get the Payee data source
-	payee := ""
-	for _, source := range cfg.Nordigen.PayeeSource {
-		if payee == "" {
-			switch source {
-			case "name":
-				// Creditor/debtor name can be used as is
-				if t.CreditorName != "" {
-					payee = t.CreditorName
-				} else if t.DebtorName != "" {
-					payee = t.DebtorName
-				}
-			case "unstructured":
-				// Unstructured data may need some formatting
-				payee = t.RemittanceInformationUnstructured
-
-				// Parse Payee according the user specified strips and
-				// remove non-alphanumeric
-				if cfg.Nordigen.PayeeStrip != nil {
-					payee = payeeStrip(payee, cfg.Nordigen.PayeeStrip)
-				}
-				payee = payeeStripNonAlphanumeric(payee)
-			default:
-				return ynabber.Transaction{}, fmt.Errorf("unrecognized PayeeSource: %s", source)
-			}
-		}
+	// Execute strip method on payee if defined in config
+	if cfg.Nordigen.PayeeStrip != nil {
+		y.Payee = y.Payee.Strip(cfg.Nordigen.PayeeStrip)
 	}
 
-	return ynabber.Transaction{
-		Account: account,
-		ID:      ynabber.ID(id),
-		Date:    date,
-		Payee:   ynabber.Payee(payee),
-		Memo:    memo,
-		Amount:  milliunits,
-	}, nil
+	return y, err
 }
 
 func transactionsToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {

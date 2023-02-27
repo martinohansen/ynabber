@@ -29,3 +29,33 @@ func TestMilliunitsFromAmount(t *testing.T) {
 		t.Fatalf("amount with no separator: %s != %s", want, got)
 	}
 }
+
+func TestPayee_Strip(t *testing.T) {
+	type args struct {
+		s []string
+	}
+	tests := []struct {
+		name string
+		p    Payee
+		args args
+		want Payee
+	}{
+		{name: "single",
+			p:    Payee("Im not here"),
+			args: args{s: []string{"not "}},
+			want: "Im here",
+		},
+		{name: "multiple",
+			p:    Payee("Im not really here"),
+			args: args{s: []string{"not ", "really "}},
+			want: "Im here",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.p.Strip(tt.args.s); got != tt.want {
+				t.Errorf("Payee.Strip() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
