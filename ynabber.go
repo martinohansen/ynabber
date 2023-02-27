@@ -27,6 +27,11 @@ func (p Payee) Strip(s []string) Payee {
 
 type Milliunits int64
 
+// Negate changes the sign of m to the opposite
+func (m Milliunits) Negate() Milliunits {
+	return m * -1
+}
+
 type Transaction struct {
 	Account Account
 	ID      ID
