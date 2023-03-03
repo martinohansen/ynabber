@@ -8,9 +8,11 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
+	"github.com/martinohansen/ynabber/util"
 )
 
 // payeeStripNonAlphanumeric removes all non-alphanumeric characters from payee
@@ -124,7 +126,7 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 
 		log.Printf("Reading transactions from account: %s", account.Name)
 
-		transactions, err := c.GetAccountTransactions(string(account.ID))
+		transactions, err := getNordigenTransactions(*c, account)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
@@ -140,4 +142,27 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		t = append(t, x...)
 	}
 	return t, nil
+}
+
+func getNordigenTransactions(c nordigen.Client, account ynabber.Account) (t nordigen.AccountTransactions, err error) {
+	maxAttempts := 10
+	attempt := 1
+	for {
+		t, err = c.GetAccountTransactions(string(account.ID))
+		if err != nil {
+			// If the failure is server error do exponential backoff to not
+			// suspend account with failed calls
+			if apiErr, ok := err.(*nordigen.APIError); ok && apiErr.StatusCode >= 500 {
+				if attempt < maxAttempts {
+					wait := util.Backoff(attempt)
+					log.Printf("Failed to get transactions: %s, will retry in %s", err, wait)
+					time.Sleep(wait)
+					attempt++
+					continue
+				}
+			}
+			return t, err
+		}
+		return t, err
+	}
 }
