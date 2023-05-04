@@ -163,6 +163,10 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 		return nil
 	}
 
+	if cfg.Debug {
+		log.Printf("Request to YNAB: %+v", y)
+	}
+
 	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", cfg.YNAB.BudgetID)
 
 	payload, err := json.Marshal(y)
@@ -171,10 +175,6 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 	}
 
 	client := &http.Client{}
-
-	if cfg.Debug {
-		log.Printf("Request to YNAB: %s\n", payload)
-	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
 	if err != nil {
@@ -191,7 +191,7 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 
 	if cfg.Debug {
 		b, _ := httputil.DumpResponse(res, true)
-		log.Printf("Response from YNAB: %s\n", b)
+		log.Printf("Response from YNAB: %s", b)
 	}
 
 	if res.StatusCode != http.StatusCreated {
