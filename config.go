@@ -86,6 +86,11 @@ type Nordigen struct {
 	// PayeeStrip is a list of words to remove from Payee. For example:
 	// "foo,bar"
 	PayeeStrip []string `envconfig:"NORDIGEN_PAYEE_STRIP"`
+
+	// Apparently not even the transaction ID is guaranteed to work the same
+	// across banks. For NORDEA_NDEADKKK the TransactionId even changes with
+	// time, which might cause hard to debug duplicate entries in YNAB.
+	TransactionID string `envconfig:"NORDIGEN_TRANSACTION_ID" default:"TransactionId"`
 }
 
 // YNAB related settings
