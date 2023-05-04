@@ -173,7 +173,7 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 	client := &http.Client{}
 
 	if cfg.Debug {
-		log.Printf("Request to YNAB: %s\n", payload)
+		log.Printf("Request to YNAB: %+v", payload)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
@@ -191,7 +191,7 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 
 	if cfg.Debug {
 		b, _ := httputil.DumpResponse(res, true)
-		log.Printf("Response from YNAB: %s\n", b)
+		log.Printf("Response from YNAB: %+v", b)
 	}
 
 	if res.StatusCode != http.StatusCreated {

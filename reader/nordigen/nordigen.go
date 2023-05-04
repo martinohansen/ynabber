@@ -130,7 +130,7 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		}
 
 		if cfg.Debug {
-			log.Printf("Transactions received from Nordigen: %s\n", transactions)
+			log.Printf("Transactions received from Nordigen: %+v", transactions)
 		}
 
 		x, err := transactionsToYnabber(cfg, account, transactions)
