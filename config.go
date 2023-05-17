@@ -87,9 +87,13 @@ type Nordigen struct {
 	// "foo,bar"
 	PayeeStrip []string `envconfig:"NORDIGEN_PAYEE_STRIP"`
 
-	// Apparently not even the transaction ID is guaranteed to work the same
-	// across banks. For NORDEA_NDEADKKK the TransactionId even changes with
-	// time, which might cause hard to debug duplicate entries in YNAB.
+	// TransactionID picks the field to use as transaction ID. This is relevant
+	// for some banks where the ID provided by the bank is not consistent. For
+	// example with NORDEA_NDEADKKK the TransactionId changes with time, which
+	// might cause hard to debug duplicate entries in YNAB. Only change this if
+	// you have a good reason to do so.
+	//
+	// Valid options are: TransactionId, InternalTransactionId
 	TransactionID string `envconfig:"NORDIGEN_TRANSACTION_ID" default:"TransactionId"`
 }
 
