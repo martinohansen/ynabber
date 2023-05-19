@@ -17,7 +17,7 @@ type Mapper interface {
 type Default struct{}
 
 // Map Nordigen transactions using the default mapper
-func (Default) Map(cfg ynabber.Config, account ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
+func (Default) Map(cfg ynabber.Config, a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
 	amount, err := strconv.ParseFloat(t.TransactionAmount.Amount, 64)
 	if err != nil {
 		return ynabber.Transaction{}, fmt.Errorf("failed to convert string to float: %w", err)
@@ -61,9 +61,19 @@ func (Default) Map(cfg ynabber.Config, account ynabber.Account, t nordigen.Trans
 		}
 	}
 
+	// Get the ID from the first data source that returns data as defined in the
+	// config
+	var id string
+	switch cfg.Nordigen.TransactionID {
+	case "InternalTransactionId":
+		id = t.InternalTransactionId
+	default:
+		id = t.TransactionId
+	}
+
 	return ynabber.Transaction{
-		Account: account,
-		ID:      ynabber.ID(t.TransactionId),
+		Account: a,
+		ID:      ynabber.ID(id),
 		Date:    date,
 		Payee:   ynabber.Payee(payee),
 		Memo:    t.RemittanceInformationUnstructured,

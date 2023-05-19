@@ -56,20 +56,20 @@ docker run \
 
 ## Readers
 
-Currently supported readers and verified banks
+Currently tested readers and verified banks
 
 | Reader   | Bank            |   |
 |----------|-----------------|---|
 | Nordigen | ALANDSBANKEN_AABAFI22 | ✅
-| | NORDEA_NDEADKKK | ✅
+| | NORDEA_NDEADKKK | ✅[^1]
 | | NORDEA_NDEAFIHH | ✅
 | | NORWEGIAN_FI_NORWNOK1 | ✅
 | | S_PANKKI_SBANFIHH | ✅
 
-Note that additional banks may also be supported, but they have not been
-specifically verified and tested yet. Please open an
-[issue](https://github.com/martinohansen/ynabber/issues/new) if you have
-problems with a specific bank.
+Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if
+you have problems with a specific bank.
+
+[^1]: Set NORDIGEN_TRANSACTION_ID to "InternalTransactionId" if using YNAB_IMPORT_ID_V2
 
 ## Contributing
 
