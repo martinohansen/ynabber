@@ -10,6 +10,7 @@ import (
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 	"github.com/martinohansen/ynabber/reader/nordigen"
+	"github.com/martinohansen/ynabber/writer/json"
 	"github.com/martinohansen/ynabber/writer/ynab"
 )
 
@@ -53,8 +54,28 @@ func main() {
 		log.Printf("Config: %+v\n", cfg)
 	}
 
+	ynabber := ynabber.Ynabber{}
+	for _, reader := range cfg.Readers {
+		switch reader {
+		case "nordigen":
+			ynabber.Readers = append(ynabber.Readers, nordigen.Reader{Config: &cfg})
+		default:
+			log.Fatalf("Unknown reader: %s", reader)
+		}
+	}
+	for _, writer := range cfg.Writers {
+		switch writer {
+		case "ynab":
+			ynabber.Writers = append(ynabber.Writers, ynab.Writer{Config: &cfg})
+		case "json":
+			ynabber.Writers = append(ynabber.Writers, json.Writer{})
+		default:
+			log.Fatalf("Unknown writer: %s", writer)
+		}
+	}
+
 	for {
-		err = run(cfg)
+		err = run(ynabber, cfg.Interval)
 		if err != nil {
 			panic(err)
 		} else {
@@ -69,29 +90,23 @@ func main() {
 	}
 }
 
-func run(cfg ynabber.Config) error {
+func run(y ynabber.Ynabber, interval time.Duration) error {
 	var transactions []ynabber.Transaction
 
-	for _, reader := range cfg.Readers {
-		log.Printf("Reading from %s", reader)
-		switch reader {
-		case "nordigen":
-			t, err := nordigen.BulkReader(cfg)
-			if err != nil {
-				return fmt.Errorf("couldn't read from nordigen: %w", err)
-			}
-			transactions = append(transactions, t...)
+	// Read transactions from all readers
+	for _, reader := range y.Readers {
+		t, err := reader.Bulk()
+		if err != nil {
+			return fmt.Errorf("reading: %w", err)
 		}
+		transactions = append(transactions, t...)
 	}
 
-	for _, writer := range cfg.Writers {
-		log.Printf("Writing to %s", writer)
-		switch writer {
-		case "ynab":
-			err := ynab.BulkWriter(cfg, transactions)
-			if err != nil {
-				return fmt.Errorf("couldn't write to ynab: %w", err)
-			}
+	// Write transactions to all writers
+	for _, writer := range y.Writers {
+		err := writer.Bulk(transactions)
+		if err != nil {
+			return fmt.Errorf("writing: %w", err)
 		}
 	}
 	return nil
