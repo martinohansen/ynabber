@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/martinohansen/ynabber"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 	"strconv"
 	"time"
@@ -26,11 +28,11 @@ func (auth Authorization) Store() string {
 
 // AuthorizationWrapper tries to get requisition from disk, if it fails it will
 // create a new and store that one to disk.
-func (auth Authorization) Wrapper() (nordigen.Requisition, error) {
+func (auth Authorization) Wrapper(cfg ynabber.Config) (nordigen.Requisition, error) {
 	requisitionFile, err := os.ReadFile(auth.Store())
 	if errors.Is(err, os.ErrNotExist) {
 		log.Print("Requisition is not found")
-		return auth.CreateAndSave()
+		return auth.CreateAndSave(cfg)
 	} else if err != nil {
 		return nordigen.Requisition{}, fmt.Errorf("ReadFile: %w", err)
 	}
@@ -39,24 +41,24 @@ func (auth Authorization) Wrapper() (nordigen.Requisition, error) {
 	err = json.Unmarshal(requisitionFile, &requisition)
 	if err != nil {
 		log.Print("Failed to parse requisition file")
-		return auth.CreateAndSave()
+		return auth.CreateAndSave(cfg)
 	}
 
 	switch requisition.Status {
 	case "EX":
 		log.Printf("Requisition is expired")
-		return auth.CreateAndSave()
+		return auth.CreateAndSave(cfg)
 	case "LN":
 		return requisition, nil
 	default:
 		log.Printf("Unsupported requisition status: %s", requisition.Status)
-		return auth.CreateAndSave()
+		return auth.CreateAndSave(cfg)
 	}
 }
 
-func (auth Authorization) CreateAndSave() (nordigen.Requisition, error) {
+func (auth Authorization) CreateAndSave(cfg ynabber.Config) (nordigen.Requisition, error) {
 	log.Print("Creating new requisition...")
-	requisition, err := auth.Create()
+	requisition, err := auth.Create(cfg)
 	if err != nil {
 		return nordigen.Requisition{}, fmt.Errorf("AuthorizationCreate: %w", err)
 	}
@@ -81,7 +83,7 @@ func (auth Authorization) Save(requisition nordigen.Requisition) error {
 	return nil
 }
 
-func (auth Authorization) Create() (nordigen.Requisition, error) {
+func (auth Authorization) Create(cfg ynabber.Config) (nordigen.Requisition, error) {
 	requisition := nordigen.Requisition{
 		Redirect:      "https://raw.githubusercontent.com/martinohansen/ynabber/main/ok.html",
 		Reference:     strconv.Itoa(int(time.Now().Unix())),
@@ -94,6 +96,7 @@ func (auth Authorization) Create() (nordigen.Requisition, error) {
 		return nordigen.Requisition{}, fmt.Errorf("CreateRequisition: %w", err)
 	}
 
+	auth.Notify(cfg, r)
 	log.Printf("Initiate requisition by going to: %s", r.Link)
 
 	// Keep waiting for the user to accept the requisition
@@ -107,4 +110,16 @@ func (auth Authorization) Create() (nordigen.Requisition, error) {
 	}
 
 	return r, nil
+}
+
+func (auth Authorization) Notify(cfg ynabber.Config, r nordigen.Requisition) {
+	if cfg.NotificationScript != "" {
+		cmd := exec.Command(cfg.NotificationScript, r.Link)
+		_, err := cmd.Output()
+		if err != nil {
+			log.Println("Could not notify user about new requisition: ", err)
+		}
+	} else {
+		log.Println("No Notification Script set")
+	}
 }
