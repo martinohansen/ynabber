@@ -15,7 +15,7 @@ func TestStore(t *testing.T) {
 			DataDir: ".",
 		},
 	}
-	want := "foo"
+	want := "foo.json"
 	got := r.requisitionStore()
 	if want != got {
 		t.Fatalf("default: %s != %s", want, got)
