@@ -1,7 +1,4 @@
 .vscode
 *.csv
 *.env
-
-# Ignore config files
-nordigen*.json
-ynabber*.json
+*.json

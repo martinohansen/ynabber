@@ -23,7 +23,6 @@ cat <<EOT >> ynabber.env
 YNAB_BUDGETID=<budget_id>
 YNAB_TOKEN=<account token>
 YNAB_ACCOUNTMAP={"<IBAN>": "<YNAB account ID>"}
-YNAB_IMPORT_ID_V2=2023-01-01    # Not required but will give better results
 
 # Nordigen
 NORDIGEN_BANKID=<nordigen bank ID>

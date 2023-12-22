@@ -52,43 +52,19 @@ func accountParser(iban string, accountMap map[string]string) (string, error) {
 	return "", fmt.Errorf("no account for: %s in map: %s", iban, accountMap)
 }
 
-// importIDMaker tries to return a unique YNAB import ID to avoid duplicate
-// transactions.
-func importIDMaker(cfg ynabber.Config, t ynabber.Transaction) string {
-	// Common between versions
+// makeID returns a unique YNAB import ID to avoid duplicate transactions.
+func makeID(cfg ynabber.Config, t ynabber.Transaction) string {
 	date := t.Date.Format("2006-01-02")
 	amount := t.Amount.String()
 
-	// Version 1 uses the memo, amount and date from Ytransaction
-	v1Cutover := time.Time(cfg.YNAB.ImportID.V1)
-	v1 := func(t ynabber.Transaction) string {
-		hash := sha256.Sum256([]byte(t.Memo))
-		return fmt.Sprintf("YBBR:%s:%s:%x", amount, date, hash[:2])
+	s := [][]byte{
+		[]byte(t.Account.IBAN),
+		[]byte(t.ID),
+		[]byte(date),
+		[]byte(amount),
 	}
-
-	// Version 2 uses, in order, the account IBAN, transaction ID, date, and
-	// amount to build a hash of the transaction.
-	v2Cutover := time.Time(cfg.YNAB.ImportID.V2)
-	v2 := func(t ynabber.Transaction) string {
-		s := [][]byte{
-			[]byte(t.Account.IBAN),
-			[]byte(t.ID),
-			[]byte(date),
-			[]byte(amount),
-		}
-		hash := sha256.Sum256(bytes.Join(s, []byte("")))
-		return fmt.Sprintf("YBBR:%x", hash)[:32]
-	}
-
-	// Return the first generator from latest to oldest that have a cutover date
-	// after or equal to the transaction date.
-	if t.Date.After(v2Cutover) || t.Date.Equal(v2Cutover) {
-		return v2(t)
-	} else if t.Date.After(v1Cutover) || t.Date.Equal(v1Cutover) {
-		return v1(t)
-	} else {
-		return v1(t)
-	}
+	hash := sha256.Sum256(bytes.Join(s, []byte("")))
+	return fmt.Sprintf("YBBR:%x", hash)[:32]
 }
 
 func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, error) {
@@ -126,7 +102,7 @@ func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, err
 	}
 
 	return Ytransaction{
-		ImportID:  importIDMaker(cfg, t),
+		ImportID:  makeID(cfg, t),
 		AccountID: accountID,
 		Date:      date,
 		Amount:    t.Amount.String(),

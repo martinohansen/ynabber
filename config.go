@@ -32,7 +32,7 @@ func (accountMap *AccountMap) Decode(value string) error {
 
 // Config is loaded from the environment during execution with cmd/ynabber
 type Config struct {
-	// DataDir is the path for storing files e.g. Nordigen authorization
+	// DataDir is the path for storing files
 	DataDir string `envconfig:"YNABBER_DATADIR" default:"."`
 
 	// Debug prints more log statements
@@ -45,12 +45,8 @@ type Config struct {
 	// Nordigen is supported.
 	Readers []string `envconfig:"YNABBER_READERS" default:"nordigen"`
 
-	// Writers is a list of destinations to write transactions from. Currently
-	// only YNAB is supported.
+	// Writers is a list of destinations to write transactions to.
 	Writers []string `envconfig:"YNABBER_WRITERS" default:"ynab"`
-
-	// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
-	PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
 
 	// Reader and/or writer specific settings
 	Nordigen Nordigen
@@ -59,9 +55,6 @@ type Config struct {
 
 // Nordigen related settings
 type Nordigen struct {
-	// AccountMap is depreciated please use YNAB.AccountMap instead
-	AccountMap AccountMap `envconfig:"NORDIGEN_ACCOUNTMAP"`
-
 	// BankID is used to create requisition
 	BankID string `envconfig:"NORDIGEN_BANKID"`
 
@@ -128,20 +121,4 @@ type YNAB struct {
 	//
 	// Example: "DK9520000123456789,NO8330001234567"
 	SwapFlow []string `envconfig:"YNAB_SWAPFLOW"`
-
-	ImportID ImportID
-}
-
-// ImportID can be either v1 or v2. All new users should use v2 because it
-// have a lower potability of making duplicate transactions. But v1 remains
-// the default to retain backwards compatibility.
-//
-// To migrate from v1 to v2 simply set the v2 to any date and all transactions
-// from and including that date will be using v2 of the import ID generator.
-type ImportID struct {
-	// V1 will be used from this date
-	V1 Date `envconfig:"YNAB_IMPORT_ID_V1" default:"1970-01-01"`
-
-	// V2 will be used from this date, for example: 2022-12-24
-	V2 Date `envconfig:"YNAB_IMPORT_ID_V2" default:"9999-01-01"`
 }
