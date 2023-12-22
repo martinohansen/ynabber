@@ -18,6 +18,10 @@ import (
 const maxMemoSize int = 200  // Max size of memo field in YNAB API
 const maxPayeeSize int = 100 // Max size of payee field in YNAB API
 
+type Writer struct {
+	Config *ynabber.Config
+}
+
 var space = regexp.MustCompile(`\s+`) // Matches all whitespace characters
 
 // Ytransaction is a single YNAB transaction
@@ -133,7 +137,7 @@ func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, err
 	}, nil
 }
 
-func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
+func (w Writer) Bulk(t []ynabber.Transaction) error {
 	// skipped and failed counters
 	skipped := 0
 	failed := 0
@@ -142,12 +146,12 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 	y := new(Ytransactions)
 	for _, v := range t {
 		// Skip transaction if the date is before FromDate
-		if v.Date.Before(time.Time(cfg.YNAB.FromDate)) {
+		if v.Date.Before(time.Time(w.Config.YNAB.FromDate)) {
 			skipped += 1
 			continue
 		}
 
-		transaction, err := ynabberToYNAB(cfg, v)
+		transaction, err := ynabberToYNAB(*w.Config, v)
 		if err != nil {
 			// If we fail to parse a single transaction we log it but move on so
 			// we don't halt the entire program.
@@ -163,11 +167,11 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 		return nil
 	}
 
-	if cfg.Debug {
+	if w.Config.Debug {
 		log.Printf("Request to YNAB: %+v", y)
 	}
 
-	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", cfg.YNAB.BudgetID)
+	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", w.Config.YNAB.BudgetID)
 
 	payload, err := json.Marshal(y)
 	if err != nil {
@@ -181,7 +185,7 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 		return err
 	}
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", cfg.YNAB.Token))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", w.Config.YNAB.Token))
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -189,7 +193,7 @@ func BulkWriter(cfg ynabber.Config, t []ynabber.Transaction) error {
 	}
 	defer res.Body.Close()
 
-	if cfg.Debug {
+	if w.Config.Debug {
 		b, _ := httputil.DumpResponse(res, true)
 		log.Printf("Response from YNAB: %s", b)
 	}

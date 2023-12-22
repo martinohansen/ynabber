@@ -6,6 +6,19 @@ import (
 	"time"
 )
 
+type Ynabber struct {
+	Readers []Reader
+	Writers []Writer
+}
+
+type Reader interface {
+	Bulk() ([]Transaction, error)
+}
+
+type Writer interface {
+	Bulk([]Transaction) error
+}
+
 type Account struct {
 	ID   ID
 	Name string
@@ -33,17 +46,12 @@ func (m Milliunits) Negate() Milliunits {
 }
 
 type Transaction struct {
-	Account Account
-	ID      ID
-	Date    time.Time
-	Payee   Payee
-	Memo    string
-	Amount  Milliunits
-}
-
-type Ynabber interface {
-	bulkReader() ([]Transaction, error)
-	bulkWriter([]Transaction) error
+	Account Account    `json:"account"`
+	ID      ID         `json:"id"`
+	Date    time.Time  `json:"date"`
+	Payee   Payee      `json:"payee"`
+	Memo    string     `json:"memo"`
+	Amount  Milliunits `json:"amount"`
 }
 
 func (m Milliunits) String() string {

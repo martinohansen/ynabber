@@ -13,6 +13,10 @@ import (
 	"github.com/martinohansen/ynabber"
 )
 
+type Reader struct {
+	Config *ynabber.Config
+}
+
 // payeeStripNonAlphanumeric removes all non-alphanumeric characters from payee
 func payeeStripNonAlphanumeric(payee string) (x string) {
 	reg := regexp.MustCompile(`[^\p{L}]+`)
@@ -81,24 +85,24 @@ func dataFile(cfg ynabber.Config) string {
 	return dataFile
 }
 
-func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
-	c, err := nordigen.NewClient(cfg.Nordigen.SecretID, cfg.Nordigen.SecretKey)
+func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
+	c, err := nordigen.NewClient(r.Config.Nordigen.SecretID, r.Config.Nordigen.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
 	Authorization := Authorization{
 		Client: *c,
-		BankID: cfg.Nordigen.BankID,
-		File:   dataFile(cfg),
+		BankID: r.Config.Nordigen.BankID,
+		File:   dataFile(*r.Config),
 	}
-	r, err := Authorization.Wrapper(cfg)
+	req, err := Authorization.Wrapper(r.Config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to authorize: %w", err)
 	}
 
-	log.Printf("Found %v accounts", len(r.Accounts))
-	for _, account := range r.Accounts {
+	log.Printf("Found %v accounts", len(req.Accounts))
+	for _, account := range req.Accounts {
 		accountMetadata, err := c.GetAccountMetadata(account)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get account metadata: %w", err)
@@ -113,7 +117,7 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 				account,
 				accountMetadata.Status,
 			)
-			Authorization.CreateAndSave(cfg)
+			Authorization.CreateAndSave(*r.Config)
 		}
 
 		account := ynabber.Account{
@@ -129,11 +133,11 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
 
-		if cfg.Debug {
+		if r.Config.Debug {
 			log.Printf("Transactions received from Nordigen: %+v", transactions)
 		}
 
-		x, err := transactionsToYnabber(cfg, account, transactions)
+		x, err := transactionsToYnabber(*r.Config, account, transactions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert transaction: %w", err)
 		}

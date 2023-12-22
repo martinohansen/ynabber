@@ -71,6 +71,16 @@ you have problems with a specific bank.
 
 [^1]: Set NORDIGEN_TRANSACTION_ID to "InternalTransactionId" if using YNAB_IMPORT_ID_V2
 
+## Writers
+
+The default writer is YNAB (that's really what this tool is set out to handle)
+but we also have a JSON writer that can be used for testing purposes.
+
+| Writer  | Description   |
+|---------|---------------|
+| YNAB    | Pushes transactions to YNAB |
+| JSON    | Writes transactions to stdout in JSON format |
+
 ## Contributing
 
 Pull requests are welcome.

@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/martinohansen/ynabber"
 	"log"
 	"os"
 	"os/exec"
 	"path"
 	"strconv"
 	"time"
+
+	"github.com/martinohansen/ynabber"
 
 	"github.com/frieser/nordigen-go-lib/v2"
 )
@@ -28,11 +29,11 @@ func (auth Authorization) Store() string {
 
 // AuthorizationWrapper tries to get requisition from disk, if it fails it will
 // create a new and store that one to disk.
-func (auth Authorization) Wrapper(cfg ynabber.Config) (nordigen.Requisition, error) {
+func (auth Authorization) Wrapper(cfg *ynabber.Config) (nordigen.Requisition, error) {
 	requisitionFile, err := os.ReadFile(auth.Store())
 	if errors.Is(err, os.ErrNotExist) {
 		log.Print("Requisition is not found")
-		return auth.CreateAndSave(cfg)
+		return auth.CreateAndSave(*cfg)
 	} else if err != nil {
 		return nordigen.Requisition{}, fmt.Errorf("ReadFile: %w", err)
 	}
@@ -41,18 +42,18 @@ func (auth Authorization) Wrapper(cfg ynabber.Config) (nordigen.Requisition, err
 	err = json.Unmarshal(requisitionFile, &requisition)
 	if err != nil {
 		log.Print("Failed to parse requisition file")
-		return auth.CreateAndSave(cfg)
+		return auth.CreateAndSave(*cfg)
 	}
 
 	switch requisition.Status {
 	case "EX":
 		log.Printf("Requisition is expired")
-		return auth.CreateAndSave(cfg)
+		return auth.CreateAndSave(*cfg)
 	case "LN":
 		return requisition, nil
 	default:
 		log.Printf("Unsupported requisition status: %s", requisition.Status)
-		return auth.CreateAndSave(cfg)
+		return auth.CreateAndSave(*cfg)
 	}
 }
 
