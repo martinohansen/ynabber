@@ -2,12 +2,21 @@ package nordigen
 
 import (
 	"testing"
+
+	"github.com/martinohansen/ynabber"
 )
 
 func TestStore(t *testing.T) {
-	auth := Authorization{File: "./ynabber.json"}
-	want := "ynabber.json"
-	got := auth.Store()
+	r := Reader{
+		Config: &ynabber.Config{
+			Nordigen: ynabber.Nordigen{
+				BankID: "foo",
+			},
+			DataDir: ".",
+		},
+	}
+	want := "foo"
+	got := r.requisitionStore()
 	if want != got {
 		t.Fatalf("default: %s != %s", want, got)
 	}

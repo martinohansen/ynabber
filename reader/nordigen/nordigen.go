@@ -1,11 +1,8 @@
 package nordigen
 
 import (
-	"errors"
 	"fmt"
 	"log"
-	"os"
-	"path"
 	"regexp"
 	"strings"
 
@@ -15,6 +12,21 @@ import (
 
 type Reader struct {
 	Config *ynabber.Config
+
+	Client *nordigen.Client
+}
+
+// NewReader returns a new nordigen reader or panics
+func NewReader(cfg *ynabber.Config) Reader {
+	client, err := nordigen.NewClient(cfg.Nordigen.SecretID, cfg.Nordigen.SecretKey)
+	if err != nil {
+		panic("Failed to create nordigen client")
+	}
+
+	return Reader{
+		Config: cfg,
+		Client: client,
+	}
 }
 
 // payeeStripNonAlphanumeric removes all non-alphanumeric characters from payee
@@ -57,53 +69,15 @@ func transactionsToYnabber(cfg ynabber.Config, account ynabber.Account, t nordig
 	return x, nil
 }
 
-// dataFile returns a persistent path
-func dataFile(cfg ynabber.Config) string {
-	dataFile := ""
-	if cfg.Nordigen.Datafile != "" {
-		if path.IsAbs(cfg.Nordigen.Datafile) {
-			dataFile = cfg.Nordigen.Datafile
-		} else {
-			dataFile = fmt.Sprintf("%s/%s", cfg.DataDir, cfg.Nordigen.Datafile)
-		}
-	} else {
-		dataFileBankSpecific := fmt.Sprintf("%s/%s-%s.json", cfg.DataDir, "ynabber", cfg.Nordigen.BankID)
-		dataFileGeneric := fmt.Sprintf("%s/%s.json", cfg.DataDir, "ynabber")
-		dataFile = dataFileBankSpecific
-		_, err := os.Stat(dataFileBankSpecific)
-		if errors.Is(err, os.ErrNotExist) {
-			_, err := os.Stat(dataFileGeneric)
-			if errors.Is(err, os.ErrNotExist) {
-				// If bank specific does not exists and neither does generic, use dataFileBankSpecific
-				dataFile = dataFileBankSpecific
-			} else {
-				// Generic dataFile exists(old naming) but not the bank specific, use dataFileGeneric
-				dataFile = dataFileGeneric
-			}
-		}
-	}
-	return dataFile
-}
-
 func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
-	c, err := nordigen.NewClient(r.Config.Nordigen.SecretID, r.Config.Nordigen.SecretKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
-	}
-
-	Authorization := Authorization{
-		Client: *c,
-		BankID: r.Config.Nordigen.BankID,
-		File:   dataFile(*r.Config),
-	}
-	req, err := Authorization.Wrapper(r.Config)
+	req, err := r.Requisition()
 	if err != nil {
 		return nil, fmt.Errorf("failed to authorize: %w", err)
 	}
 
 	log.Printf("Found %v accounts", len(req.Accounts))
 	for _, account := range req.Accounts {
-		accountMetadata, err := c.GetAccountMetadata(account)
+		accountMetadata, err := r.Client.GetAccountMetadata(account)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get account metadata: %w", err)
 		}
@@ -117,7 +91,7 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 				account,
 				accountMetadata.Status,
 			)
-			Authorization.CreateAndSave(*r.Config)
+			r.createRequisition()
 		}
 
 		account := ynabber.Account{
@@ -128,7 +102,7 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 
 		log.Printf("Reading transactions from account: %s", account.Name)
 
-		transactions, err := c.GetAccountTransactions(string(account.ID))
+		transactions, err := r.Client.GetAccountTransactions(string(account.ID))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}

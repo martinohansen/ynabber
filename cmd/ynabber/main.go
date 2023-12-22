@@ -58,7 +58,7 @@ func main() {
 	for _, reader := range cfg.Readers {
 		switch reader {
 		case "nordigen":
-			ynabber.Readers = append(ynabber.Readers, nordigen.Reader{Config: &cfg})
+			ynabber.Readers = append(ynabber.Readers, nordigen.NewReader(&cfg))
 		default:
 			log.Fatalf("Unknown reader: %s", reader)
 		}
