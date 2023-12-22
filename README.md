@@ -1,7 +1,7 @@
 # Ynabber
 
-Ynabber reads and writes transactions from one or more sources (known as
-readers) to one or more destinations (known as writers).
+Ynabber sets out to read and write bank transactions from one or more sources
+(known as readers) to one or more destinations (known as writers).
 
 For a list of supported see the [readers](#readers) and [writers](#writers)
 subsections.
@@ -17,8 +17,8 @@ go install github.com/martinohansen/ynabber/cmd/ynabber@latest
 ## Usage
 
 Ynabber is configured with environment variables. To read from
- [Nordigen](https://nordigen.com/en/) (now known as GoCardless) and write to
-YNAB use these values:
+[Nordigen](https://nordigen.com/en/) (now known as GoCardless) and write to YNAB
+use these values:
 
 ```bash
 cat <<EOT >> ynabber.env
