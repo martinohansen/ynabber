@@ -96,7 +96,7 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		BankID: r.Config.Nordigen.BankID,
 		File:   dataFile(*r.Config),
 	}
-	req, err := Authorization.Wrapper()
+	req, err := Authorization.Wrapper(r.Config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to authorize: %w", err)
 	}
@@ -117,7 +117,7 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 				account,
 				accountMetadata.Status,
 			)
-			Authorization.CreateAndSave()
+			Authorization.CreateAndSave(*r.Config)
 		}
 
 		account := ynabber.Account{

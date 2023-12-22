@@ -52,6 +52,9 @@ type Config struct {
 	// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
 	PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
 
+	// SecretID is used to create requisition
+	NotificationScript string `envconfig:"NOTIFICATION_SCRIPT"`
+
 	// Reader and/or writer specific settings
 	Nordigen Nordigen
 	YNAB     YNAB
