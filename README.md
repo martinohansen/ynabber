@@ -1,8 +1,10 @@
 # Ynabber
 
 Ynabber reads and writes transactions from one or more sources (known as
-readers) to one or more destinations (known as writers). For a list of supported
-see the [readers](#readers) and [writers](#writers) subsections.
+readers) to one or more destinations (known as writers).
+
+For a list of supported see the [readers](#readers) and [writers](#writers)
+subsections.
 
 ## Installation
 
