@@ -107,7 +107,7 @@ func BulkReader(cfg ynabber.Config) (t []ynabber.Transaction, err error) {
 		// Handle expired, or suspended accounts by recreating the
 		// requisition.
 		switch accountMetadata.Status {
-		case "EXPIRED", "SUSPENDED ":
+		case "EXPIRED", "SUSPENDED":
 			log.Printf(
 				"Account: %s is %s. Going to recreate the requisition...",
 				account,
