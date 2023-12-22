@@ -52,9 +52,6 @@ type Config struct {
 	// PayeeStrip is depreciated please use Nordigen.PayeeStrip instead
 	PayeeStrip []string `envconfig:"YNABBER_PAYEE_STRIP"`
 
-	// SecretID is used to create requisition
-	NotificationScript string `envconfig:"NOTIFICATION_SCRIPT"`
-
 	// Reader and/or writer specific settings
 	Nordigen Nordigen
 	YNAB     YNAB
@@ -73,9 +70,6 @@ type Nordigen struct {
 
 	// SecretKey is used to create requisition
 	SecretKey string `envconfig:"NORDIGEN_SECRET_KEY"`
-
-	// Use named datafile(relative path in datadir, absolute if starts with slash) instead of default (ynabber-NORDIGEN_BANKID.json)
-	Datafile string `envconfig:"NORDIGEN_DATAFILE"`
 
 	// PayeeSource is a list of sources for Payee candidates, the first method
 	// that yields a result will be used. Valid options are: unstructured, name
@@ -98,6 +92,11 @@ type Nordigen struct {
 	//
 	// Valid options are: TransactionId, InternalTransactionId
 	TransactionID string `envconfig:"NORDIGEN_TRANSACTION_ID" default:"TransactionId"`
+
+	// RequisitionHook is a exec hook thats executed at various stages of the
+	// requisition process. The hook is executed with the following arguments:
+	// <status> <link>
+	RequisitionHook string `envconfig:"NORDIGEN_REQUISITION_HOOK"`
 }
 
 // YNAB related settings

@@ -11,29 +11,23 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/martinohansen/ynabber"
-
 	"github.com/frieser/nordigen-go-lib/v2"
 )
 
-type Authorization struct {
-	BankID string
-	Client nordigen.Client
-	File   string
+const RequisitionRedirect = "https://raw.githubusercontent.com/martinohansen/ynabber/main/ok.html"
+
+// requisitionStore returns a clean path to the requisition file
+func (r Reader) requisitionStore() string {
+	return path.Clean(fmt.Sprintf("%s/%s", r.Config.DataDir, r.Config.Nordigen.BankID))
 }
 
-// Store returns a clean path to the requisition file
-func (auth Authorization) Store() string {
-	return path.Clean(auth.File)
-}
-
-// AuthorizationWrapper tries to get requisition from disk, if it fails it will
-// create a new and store that one to disk.
-func (auth Authorization) Wrapper(cfg *ynabber.Config) (nordigen.Requisition, error) {
-	requisitionFile, err := os.ReadFile(auth.Store())
+// Requisition tries to get requisition from disk, if it fails it will create a
+// new and store that one to disk.
+func (r Reader) Requisition() (nordigen.Requisition, error) {
+	requisitionFile, err := os.ReadFile(r.requisitionStore())
 	if errors.Is(err, os.ErrNotExist) {
 		log.Print("Requisition is not found")
-		return auth.CreateAndSave(*cfg)
+		return r.createRequisition()
 	} else if err != nil {
 		return nordigen.Requisition{}, fmt.Errorf("ReadFile: %w", err)
 	}
@@ -42,85 +36,76 @@ func (auth Authorization) Wrapper(cfg *ynabber.Config) (nordigen.Requisition, er
 	err = json.Unmarshal(requisitionFile, &requisition)
 	if err != nil {
 		log.Print("Failed to parse requisition file")
-		return auth.CreateAndSave(*cfg)
+		return r.createRequisition()
 	}
 
 	switch requisition.Status {
 	case "EX":
+		// Create a new requisition if expired
 		log.Printf("Requisition is expired")
-		return auth.CreateAndSave(*cfg)
+		return r.createRequisition()
 	case "LN":
+		// Return requisition if it's still valid
 		return requisition, nil
 	default:
+		// Handle unknown status by recreating requisition
 		log.Printf("Unsupported requisition status: %s", requisition.Status)
-		return auth.CreateAndSave(*cfg)
+		return r.createRequisition()
 	}
 }
 
-func (auth Authorization) CreateAndSave(cfg ynabber.Config) (nordigen.Requisition, error) {
-	log.Print("Creating new requisition...")
-	requisition, err := auth.Create(cfg)
-	if err != nil {
-		return nordigen.Requisition{}, fmt.Errorf("AuthorizationCreate: %w", err)
-	}
-	err = auth.Save(requisition)
-	if err != nil {
-		log.Printf("Failed to write requisition to disk: %s", err)
-	}
-	log.Printf("Requisition stored for reuse: %s", auth.Store())
-	return requisition, nil
-}
-
-func (auth Authorization) Save(requisition nordigen.Requisition) error {
+func (r Reader) saveRequisition(requisition nordigen.Requisition) error {
 	requisitionFile, err := json.Marshal(requisition)
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(auth.Store(), requisitionFile, 0644)
+	err = os.WriteFile(r.requisitionStore(), requisitionFile, 0644)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (auth Authorization) Create(cfg ynabber.Config) (nordigen.Requisition, error) {
-	requisition := nordigen.Requisition{
-		Redirect:      "https://raw.githubusercontent.com/martinohansen/ynabber/main/ok.html",
+func (r Reader) createRequisition() (nordigen.Requisition, error) {
+	requisition, err := r.Client.CreateRequisition(nordigen.Requisition{
+		Redirect:      RequisitionRedirect,
 		Reference:     strconv.Itoa(int(time.Now().Unix())),
 		Agreement:     "",
-		InstitutionId: auth.BankID,
-	}
-
-	r, err := auth.Client.CreateRequisition(requisition)
+		InstitutionId: r.Config.Nordigen.BankID,
+	})
 	if err != nil {
 		return nordigen.Requisition{}, fmt.Errorf("CreateRequisition: %w", err)
 	}
 
-	auth.Notify(cfg, r)
-	log.Printf("Initiate requisition by going to: %s", r.Link)
+	r.requisitionHook(requisition)
+	log.Printf("Initiate requisition by going to: %s", requisition.Link)
 
 	// Keep waiting for the user to accept the requisition
-	for r.Status != "LN" {
-		r, err = auth.Client.GetRequisition(r.Id)
-
+	for requisition.Status != "LN" {
+		requisition, err = r.Client.GetRequisition(requisition.Id)
 		if err != nil {
 			return nordigen.Requisition{}, fmt.Errorf("GetRequisition: %w", err)
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 
-	return r, nil
+	// Store requisition on disk
+	err = r.saveRequisition(requisition)
+	if err != nil {
+		log.Printf("Failed to write requisition to disk: %s", err)
+	}
+
+	return requisition, nil
 }
 
-func (auth Authorization) Notify(cfg ynabber.Config, r nordigen.Requisition) {
-	if cfg.NotificationScript != "" {
-		cmd := exec.Command(cfg.NotificationScript, r.Link)
+// requisitionHook executes the hook with the status and link as arguments
+func (r Reader) requisitionHook(req nordigen.Requisition) {
+	if r.Config.Nordigen.RequisitionHook != "" {
+		cmd := exec.Command(r.Config.Nordigen.RequisitionHook, req.Status, req.Link)
 		_, err := cmd.Output()
 		if err != nil {
-			log.Println("Could not notify user about new requisition: ", err)
+			log.Printf("failed to run requisition hook: %s", err)
 		}
-	} else {
-		log.Println("No Notification Script set")
 	}
 }
