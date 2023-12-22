@@ -1,7 +1,7 @@
 # Ynabber
 
-Ynabber reads transactions from one or more places, called [readers](#readers),
-and pushes them into [YNAB](https://www.youneedabudget.com/).
+Ynabber reads and writes transactions from one or more places. For a list of
+supported see [readers](#readers) and [writers](#writers).
 
 ## Installation
 
@@ -40,7 +40,8 @@ command
 declare $(cat ynabber.env); ynabber
 ```
 
-Or run the container and parse in the variables with [Docker](https://docs.docker.com/engine/reference/run/)
+Or run the container and parse in the variables with
+[Docker](https://docs.docker.com/engine/reference/run/)
 
 ```bash
 docker run --env-file=ynabber.env ghcr.io/martinohansen/ynabber:latest
@@ -55,7 +56,8 @@ docker run \
 
 ## Readers
 
-Currently tested readers and verified banks
+Currently tested readers and verified banks. Any bank supported by
+[Nordigen](https://nordigen.com/) (now known as GoCardless) should work.
 
 | Reader   | Bank            |   |
 |----------|-----------------|---|
@@ -68,7 +70,7 @@ Currently tested readers and verified banks
 Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if
 you have problems with a specific bank.
 
-[^1]: Set NORDIGEN_TRANSACTION_ID to "InternalTransactionId" if using YNAB_IMPORT_ID_V2
+[^1]: Requires setting NORDIGEN_TRANSACTION_ID to "InternalTransactionId"
 
 ## Writers
 
