@@ -1,7 +1,8 @@
 # Ynabber
 
-Ynabber reads and writes transactions from one or more places. For a list of
-supported see [readers](#readers) and [writers](#writers).
+Ynabber reads and writes transactions from one or more sources (known as
+readers) to one or more destinations (known as writers). For a list of supported
+see the [readers](#readers) and [writers](#writers) subsections.
 
 ## Installation
 
@@ -13,9 +14,9 @@ go install github.com/martinohansen/ynabber/cmd/ynabber@latest
 
 ## Usage
 
-Ynabber is configured with environment variables, for example, reading from
-[Nordigen](https://nordigen.com/en/) requires these. All valid config options
-can be found in the [config.go](config.go) file.
+Ynabber is configured with environment variables. To read from
+ [Nordigen](https://nordigen.com/en/) (now known as GoCardless) and write to
+YNAB use these values:
 
 ```bash
 cat <<EOT >> ynabber.env
@@ -31,9 +32,11 @@ NORDIGEN_SECRET_KEY=<nordigen secret key>
 EOT
 ```
 
+All valid config options can be found in the [config.go](config.go) file.
+
 To read the environment variables from a file and run the binary one can use the
 [declare](https://www.gnu.org/software/bash/manual/bash.html#index-declare)
-command
+command:
 
 ```bash
 # Read environment variables from file and run ynabber
@@ -56,8 +59,8 @@ docker run \
 
 ## Readers
 
-Currently tested readers and verified banks. Any bank supported by
-[Nordigen](https://nordigen.com/) (now known as GoCardless) should work.
+Currently tested readers and verified banks, but any bank supported by Nordigen
+should work.
 
 | Reader   | Bank            |   |
 |----------|-----------------|---|
