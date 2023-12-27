@@ -59,6 +59,28 @@ docker run \
     ghcr.io/martinohansen/ynabber:latest
 ```
 
+
+### Requisition URL Hooks
+
+In order to allow bank account data to flow to YNAB, this application requires an authentication with Nordigen. That URL is called "requistion URL" and is available in the docker logs. For some banks, this access is only valid for 90 days. This application requires a relogin after. In order to make that process easier (i.e. by sending the requistion URL to the phone) ynabber supports hooks when creating a requisition URL. In order to set it up, one first creates a shell-script, for example named `hook.sh`:
+
+```bash
+#! /bin/sh
+
+echo "Hi from hook 👋
+status: $1
+link: $2
+at: $(date)"
+fi
+```
+
+And then configures a hook in the configuration file:
+```bash
+NORDIGEN_REQUISITION_HOOK=/data/hook.sh
+```
+
+When using ynabber throuch docker, keep in mind that the docker container does not support a vast array of command line tools (i.e. no bash, wget instead of cURL).
+
 ## Readers
 
 Currently tested readers and verified banks, but any bank supported by Nordigen
