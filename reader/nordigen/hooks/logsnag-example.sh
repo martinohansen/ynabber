@@ -1,4 +1,8 @@
 #!/bin/sh
+
+# This is an example of how to use Logsnag (https://logsnag.com/) to send a
+# notifications.
+
 reqURL=$2
 
 logsnagToken="<your-logsnag-token>"
