@@ -28,6 +28,18 @@ func TestMilliunitsFromAmount(t *testing.T) {
 	if want != got {
 		t.Fatalf("amount with no separator: %s != %s", want, got)
 	}
+
+	want = Milliunits(328180)
+	got = MilliunitsFromAmount(328.18)
+	if want != got {
+		t.Fatalf("amount with no separator: %s != %s", want, got)
+	}
+
+	want = Milliunits(32818000)
+	got = MilliunitsFromAmount(32818)
+	if want != got {
+		t.Fatalf("amount with no separator: %s != %s", want, got)
+	}
 }
 
 func TestPayee_Strip(t *testing.T) {
