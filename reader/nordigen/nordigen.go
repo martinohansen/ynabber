@@ -36,37 +36,52 @@ func payeeStripNonAlphanumeric(payee string) (x string) {
 	return strings.TrimSpace(x)
 }
 
-func transactionToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.Transaction) (y ynabber.Transaction, err error) {
-	// Pick an appropriate mapper based on the BankID provided or fallback to
-	// our default best effort mapper.
-	switch cfg.Nordigen.BankID {
-	default:
-		y, err = Default{}.Map(cfg, account, t)
-	}
+// Mapper returns a mapper to transform the banks transaction to Ynabber
+func (r Reader) Mapper() Mapper {
+	switch r.Config.Nordigen.BankID {
+	case "NORDEA_NDEADKKK":
+		return Default{
+			PayeeSource: r.Config.Nordigen.PayeeSource,
+			// Nordea seems to think it makes sense to change the ID with time,
+			// I think its changing once a statement is booked. This causes
+			// duplicate entries in YNAB because the ID is used in the dedup
+			// hash.
+			TransactionID: "InternalTransactionId",
+		}
 
-	// Return now if any of the mappings resulted in error
+	default:
+		return Default{
+			PayeeSource: r.Config.Nordigen.PayeeSource,
+		}
+	}
+}
+
+func (r Reader) toYnabber(a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
+	transaction, err := r.Mapper().Map(a, t)
 	if err != nil {
-		return y, err
+		return ynabber.Transaction{}, err
 	}
 
 	// Execute strip method on payee if defined in config
-	if cfg.Nordigen.PayeeStrip != nil {
-		y.Payee = y.Payee.Strip(cfg.Nordigen.PayeeStrip)
+	if r.Config.Nordigen.PayeeStrip != nil {
+		transaction.Payee = transaction.Payee.Strip(r.Config.Nordigen.PayeeStrip)
 	}
 
-	return y, err
+	return transaction, nil
 }
 
-func transactionsToYnabber(cfg ynabber.Config, account ynabber.Account, t nordigen.AccountTransactions) (x []ynabber.Transaction, err error) {
+func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([]ynabber.Transaction, error) {
+	y := []ynabber.Transaction{}
 	for _, v := range t.Transactions.Booked {
-		transaction, err := transactionToYnabber(cfg, account, v)
+		transaction, err := r.toYnabber(a, v)
 		if err != nil {
 			return nil, err
 		}
+
 		// Append transaction
-		x = append(x, transaction)
+		y = append(y, transaction)
 	}
-	return x, nil
+	return y, nil
 }
 
 func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
@@ -111,7 +126,7 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 			log.Printf("Transactions received from Nordigen: %+v", transactions)
 		}
 
-		x, err := transactionsToYnabber(*r.Config, account, transactions)
+		x, err := r.toYnabbers(account, transactions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert transaction: %w", err)
 		}

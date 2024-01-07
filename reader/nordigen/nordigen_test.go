@@ -14,8 +14,11 @@ func TestTransactionToYnabber(t *testing.T) {
 	var defaultConfig ynabber.Config
 	_ = envconfig.Process("", &defaultConfig)
 
+	reader := Reader{
+		Config: &defaultConfig,
+	}
+
 	type args struct {
-		cfg     ynabber.Config
 		account ynabber.Account
 		t       nordigen.Transaction
 	}
@@ -26,7 +29,7 @@ func TestTransactionToYnabber(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "milliunits a",
-			args: args{cfg: ynabber.Config{}, account: ynabber.Account{}, t: nordigen.Transaction{
+			args: args{account: ynabber.Account{}, t: nordigen.Transaction{
 				BookingDate: "0001-01-01",
 				TransactionAmount: struct {
 					Amount   string "json:\"amount,omitempty\""
@@ -41,7 +44,7 @@ func TestTransactionToYnabber(t *testing.T) {
 			wantErr: false,
 		},
 		{name: "milliunits b",
-			args: args{cfg: ynabber.Config{}, account: ynabber.Account{}, t: nordigen.Transaction{
+			args: args{account: ynabber.Account{}, t: nordigen.Transaction{
 				BookingDate: "0001-01-01",
 				TransactionAmount: struct {
 					Amount   string "json:\"amount,omitempty\""
@@ -60,7 +63,6 @@ func TestTransactionToYnabber(t *testing.T) {
 			// default config to highlight any breaking changes.
 			name: "NORDEA_NDEADKKK",
 			args: args{
-				cfg:     defaultConfig,
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: nordigen.Transaction{
 					TransactionId:  "H00000000000000000000",
@@ -100,7 +102,6 @@ func TestTransactionToYnabber(t *testing.T) {
 			// Test transaction from SEB_KORT_AB_NO_SKHSFI21
 			name: "SEB_KORT_AB_NO_SKHSFI21",
 			args: args{
-				cfg:     defaultConfig,
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: nordigen.Transaction{
 					TransactionId:  "foobar",
@@ -140,7 +141,7 @@ func TestTransactionToYnabber(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := transactionToYnabber(tt.args.cfg, tt.args.account, tt.args.t)
+			got, err := reader.toYnabber(tt.args.account, tt.args.t)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %+v, wantErr %+v", err, tt.wantErr)
 				return

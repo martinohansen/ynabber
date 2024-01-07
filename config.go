@@ -77,15 +77,6 @@ type Nordigen struct {
 	// "foo,bar"
 	PayeeStrip []string `envconfig:"NORDIGEN_PAYEE_STRIP"`
 
-	// TransactionID picks the field to use as transaction ID. This is relevant
-	// for some banks where the ID provided by the bank is not consistent. For
-	// example with NORDEA_NDEADKKK the TransactionId changes with time, which
-	// might cause hard to debug duplicate entries in YNAB. Only change this if
-	// you have a good reason to do so.
-	//
-	// Valid options are: TransactionId, InternalTransactionId
-	TransactionID string `envconfig:"NORDIGEN_TRANSACTION_ID" default:"TransactionId"`
-
 	// RequisitionHook is a exec hook thats executed at various stages of the
 	// requisition process. The hook is executed with the following arguments:
 	// <status> <link>

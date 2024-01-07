@@ -10,14 +10,17 @@ import (
 )
 
 type Mapper interface {
-	Map(ynabber.Config, ynabber.Account, nordigen.Transaction) ynabber.Transaction
+	Map(ynabber.Account, nordigen.Transaction) (ynabber.Transaction, error)
 }
 
 // Default mapping for all banks unless a more specific mapping exists
-type Default struct{}
+type Default struct {
+	PayeeSource   []string
+	TransactionID string
+}
 
 // Map Nordigen transactions using the default mapper
-func (Default) Map(cfg ynabber.Config, a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
+func (mapper Default) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
 	amount, err := strconv.ParseFloat(t.TransactionAmount.Amount, 64)
 	if err != nil {
 		return ynabber.Transaction{}, fmt.Errorf("failed to convert string to float: %w", err)
@@ -31,7 +34,7 @@ func (Default) Map(cfg ynabber.Config, a ynabber.Account, t nordigen.Transaction
 	// Get the Payee from the first data source that returns data in the order
 	// defined by config
 	payee := ""
-	for _, source := range cfg.Nordigen.PayeeSource {
+	for _, source := range mapper.PayeeSource {
 		if payee == "" {
 			switch source {
 			// Unstructured should properly have been called "remittance" but
@@ -64,7 +67,7 @@ func (Default) Map(cfg ynabber.Config, a ynabber.Account, t nordigen.Transaction
 	// Get the ID from the first data source that returns data as defined in the
 	// config
 	var id string
-	switch cfg.Nordigen.TransactionID {
+	switch mapper.TransactionID {
 	case "InternalTransactionId":
 		id = t.InternalTransactionId
 	default:
