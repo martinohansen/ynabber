@@ -36,26 +36,6 @@ func payeeStripNonAlphanumeric(payee string) (x string) {
 	return strings.TrimSpace(x)
 }
 
-// Mapper returns a mapper to transform the banks transaction to Ynabber
-func (r Reader) Mapper() Mapper {
-	switch r.Config.Nordigen.BankID {
-	case "NORDEA_NDEADKKK":
-		return Default{
-			PayeeSource: r.Config.Nordigen.PayeeSource,
-			// Nordea seems to think it makes sense to change the ID with time,
-			// I think its changing once a statement is booked. This causes
-			// duplicate entries in YNAB because the ID is used in the dedup
-			// hash.
-			TransactionID: "InternalTransactionId",
-		}
-
-	default:
-		return Default{
-			PayeeSource: r.Config.Nordigen.PayeeSource,
-		}
-	}
-}
-
 func (r Reader) toYnabber(a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
 	transaction, err := r.Mapper().Map(a, t)
 	if err != nil {

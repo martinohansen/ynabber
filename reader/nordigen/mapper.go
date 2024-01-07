@@ -13,22 +13,49 @@ type Mapper interface {
 	Map(ynabber.Account, nordigen.Transaction) (ynabber.Transaction, error)
 }
 
-// Default mapping for all banks unless a more specific mapping exists
-type Default struct {
-	PayeeSource   []string
-	TransactionID string
+// Mapper returns a mapper to transform the banks transaction to Ynabber
+func (r Reader) Mapper() Mapper {
+	switch r.Config.Nordigen.BankID {
+	case "NORDEA_NDEADKKK":
+		return Nordea{}
+
+	default:
+		return Default{
+			PayeeSource: r.Config.Nordigen.PayeeSource,
+		}
+	}
 }
 
-// Map Nordigen transactions using the default mapper
-func (mapper Default) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
+func parseAmount(t nordigen.Transaction) (float64, error) {
 	amount, err := strconv.ParseFloat(t.TransactionAmount.Amount, 64)
 	if err != nil {
-		return ynabber.Transaction{}, fmt.Errorf("failed to convert string to float: %w", err)
+		return 0, fmt.Errorf("failed to convert string to float: %w", err)
 	}
+	return amount, nil
+}
 
+func parseDate(t nordigen.Transaction) (time.Time, error) {
 	date, err := time.Parse("2006-01-02", t.BookingDate)
 	if err != nil {
-		return ynabber.Transaction{}, fmt.Errorf("failed to parse string to time: %w", err)
+		return time.Time{}, fmt.Errorf("failed to parse string to time: %w", err)
+	}
+	return date, nil
+}
+
+// Default mapping for all banks unless a more specific mapping exists
+type Default struct {
+	PayeeSource []string
+}
+
+// Map t using the default mapper
+func (mapper Default) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
+	amount, err := parseAmount(t)
+	if err != nil {
+		return ynabber.Transaction{}, err
+	}
+	date, err := parseDate(t)
+	if err != nil {
+		return ynabber.Transaction{}, err
 	}
 
 	// Get the Payee from the first data source that returns data in the order
@@ -64,21 +91,35 @@ func (mapper Default) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Tr
 		}
 	}
 
-	// Get the ID from the first data source that returns data as defined in the
-	// config
-	var id string
-	switch mapper.TransactionID {
-	case "InternalTransactionId":
-		id = t.InternalTransactionId
-	default:
-		id = t.TransactionId
+	return ynabber.Transaction{
+		Account: a,
+		ID:      ynabber.ID(t.TransactionId),
+		Date:    date,
+		Payee:   ynabber.Payee(payee),
+		Memo:    t.RemittanceInformationUnstructured,
+		Amount:  ynabber.MilliunitsFromAmount(amount),
+	}, nil
+}
+
+// Nordea implements a specific mapper for Nordea
+type Nordea struct{}
+
+// Map t using the Nordea mapper
+func (mapper Nordea) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
+	amount, err := parseAmount(t)
+	if err != nil {
+		return ynabber.Transaction{}, err
+	}
+	date, err := parseDate(t)
+	if err != nil {
+		return ynabber.Transaction{}, err
 	}
 
 	return ynabber.Transaction{
 		Account: a,
-		ID:      ynabber.ID(id),
+		ID:      ynabber.ID(t.InternalTransactionId),
 		Date:    date,
-		Payee:   ynabber.Payee(payee),
+		Payee:   ynabber.Payee(payeeStripNonAlphanumeric(t.RemittanceInformationUnstructured)),
 		Memo:    t.RemittanceInformationUnstructured,
 		Amount:  ynabber.MilliunitsFromAmount(amount),
 	}, nil
