@@ -21,7 +21,8 @@ func (r Reader) Mapper() Mapper {
 
 	default:
 		return Default{
-			PayeeSource: r.Config.Nordigen.PayeeSource,
+			PayeeSource:   r.Config.Nordigen.PayeeSource,
+			TransactionID: r.Config.Nordigen.TransactionID,
 		}
 	}
 }
@@ -44,7 +45,8 @@ func parseDate(t nordigen.Transaction) (time.Time, error) {
 
 // Default mapping for all banks unless a more specific mapping exists
 type Default struct {
-	PayeeSource []string
+	PayeeSource   []string
+	TransactionID string
 }
 
 // Map t using the default mapper
@@ -91,9 +93,20 @@ func (mapper Default) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Tr
 		}
 	}
 
+	// Set the transaction ID according to config
+	var id string
+	switch mapper.TransactionID {
+	case "InternalTransactionId":
+		id = t.InternalTransactionId
+	case "TransactionId":
+		id = t.TransactionId
+	default:
+		return ynabber.Transaction{}, fmt.Errorf("unrecognized TransactionID: %s", mapper.TransactionID)
+	}
+
 	return ynabber.Transaction{
 		Account: a,
-		ID:      ynabber.ID(t.TransactionId),
+		ID:      ynabber.ID(id),
 		Date:    date,
 		Payee:   ynabber.Payee(payee),
 		Memo:    t.RemittanceInformationUnstructured,
