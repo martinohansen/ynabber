@@ -1,4 +1,6 @@
-github.com/frieser/nordigen-go-lib/v2 v2.1.4 h1:dg5uSCAONW7nPONcmzvMcqloj5I37gbMLk3YsEF3rMU=
-github.com/frieser/nordigen-go-lib/v2 v2.1.4/go.mod h1:NejYisqD8GvynCN0vDGw7J66slnj7jB25c8tS1tr8bw=
+github.com/carlmjohnson/versioninfo v0.22.5 h1:O00sjOLUAFxYQjlN/bzYTuZiS0y6fWDQjMRvwtKgwwc=
+github.com/carlmjohnson/versioninfo v0.22.5/go.mod h1:QT9mph3wcVfISUKd0i9sZfVrPviHuSF+cUtLjm2WSf8=
+github.com/frieser/nordigen-go-lib/v2 v2.1.5 h1:sdRrGXnBaG+nJ7k2YWd/4ztocZOMVfmXxmoQJddbCkI=
+github.com/frieser/nordigen-go-lib/v2 v2.1.5/go.mod h1:NejYisqD8GvynCN0vDGw7J66slnj7jB25c8tS1tr8bw=
 github.com/kelseyhightower/envconfig v1.4.0 h1:Im6hONhd3pLkfDFsbRgu68RDNkGF1r3dvMUtDTo2cv8=
 github.com/kelseyhightower/envconfig v1.4.0/go.mod h1:cccZRl6mQpaq41TPp5QxidR+Sa3axMbJDNb//FQX6Gg=
