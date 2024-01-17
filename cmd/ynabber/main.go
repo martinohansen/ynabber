@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/carlmjohnson/versioninfo"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 	"github.com/martinohansen/ynabber/reader/nordigen"
@@ -15,6 +16,8 @@ import (
 )
 
 func main() {
+	log.Println("Version:", versioninfo.Short())
+
 	// Read config from env
 	var cfg ynabber.Config
 	err := envconfig.Process("", &cfg)
