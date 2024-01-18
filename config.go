@@ -77,6 +77,12 @@ type Nordigen struct {
 	// "foo,bar"
 	PayeeStrip []string `envconfig:"NORDIGEN_PAYEE_STRIP"`
 
+	// TransactionID is the field to use as transaction ID. Not all banks use
+	// the same field and some even change the ID over time.
+	//
+	// Valid options are: TransactionId, InternalTransactionId
+	TransactionID string `envconfig:"NORDIGEN_TRANSACTION_ID" default:"TransactionId"`
+
 	// RequisitionHook is a exec hook thats executed at various stages of the
 	// requisition process. The hook is executed with the following arguments:
 	// <status> <link>
