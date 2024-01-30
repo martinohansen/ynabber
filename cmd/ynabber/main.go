@@ -13,10 +13,18 @@ import (
 	"github.com/martinohansen/ynabber/reader/nordigen"
 	"github.com/martinohansen/ynabber/writer/json"
 	"github.com/martinohansen/ynabber/writer/ynab"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 func main() {
 	log.Println("Version:", versioninfo.Short())
+
+	// Start pprof server in the background to allow profiling
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	// Read config from env
 	var cfg ynabber.Config
