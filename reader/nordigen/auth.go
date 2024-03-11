@@ -18,7 +18,15 @@ const RequisitionRedirect = "https://raw.githubusercontent.com/martinohansen/yna
 
 // requisitionStore returns a clean path to the requisition file
 func (r Reader) requisitionStore() string {
-	return path.Clean(fmt.Sprintf("%s/%s.json", r.Config.DataDir, r.Config.Nordigen.BankID))
+	// Use BankID or RequisitionFile as filename
+	var file string
+	if r.Config.Nordigen.RequisitionFile == "" {
+		file = r.Config.Nordigen.BankID
+	} else {
+		file = r.Config.Nordigen.RequisitionFile
+	}
+
+	return path.Clean(fmt.Sprintf("%s/%s.json", r.Config.DataDir, file))
 }
 
 // Requisition tries to get requisition from disk, if it fails it will create a

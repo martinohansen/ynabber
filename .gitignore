@@ -1,4 +1,5 @@
 .vscode
+.cache
 *.csv
 *.env
 *.json

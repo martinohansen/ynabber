@@ -87,6 +87,10 @@ type Nordigen struct {
 	// requisition process. The hook is executed with the following arguments:
 	// <status> <link>
 	RequisitionHook string `envconfig:"NORDIGEN_REQUISITION_HOOK"`
+
+	// RequisitionFile overrides the file used to store the requisition. This
+	// file is placed inside the YNABBER_DATADIR.
+	RequisitionFile string `envconfig:"NORDIGEN_REQUISITION_FILE"`
 }
 
 // YNAB related settings
