@@ -113,6 +113,14 @@ func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, err
 	}, nil
 }
 
+// validTransaction checks if date is within the limits of YNAB and w.Config.
+func (w Writer) validTransaction(date time.Time) bool {
+	fiveYearsAgo := time.Now().AddDate(-5, 0, 0)
+	return !date.Before(fiveYearsAgo) &&
+		!date.Before(time.Time(w.Config.YNAB.FromDate)) &&
+		!date.After(time.Now())
+}
+
 func (w Writer) Bulk(t []ynabber.Transaction) error {
 	// skipped and failed counters
 	skipped := 0
@@ -121,8 +129,9 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	// Build array of transactions to send to YNAB
 	y := new(Ytransactions)
 	for _, v := range t {
-		// Skip transaction if the date is before FromDate
-		if v.Date.Before(time.Time(w.Config.YNAB.FromDate)) {
+
+		// Skip transactions that are not within the valid date range.
+		if !w.validTransaction(v.Date) {
 			skipped += 1
 			continue
 		}
