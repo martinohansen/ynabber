@@ -159,3 +159,49 @@ func TestYnabberToYNAB(t *testing.T) {
 		})
 	}
 }
+
+func TestValidTransaction(t *testing.T) {
+	fromDate := time.Now().AddDate(-1, 0, 0)
+	mockFromDate := ynabber.Date(fromDate)
+	writer := Writer{
+		Config: &ynabber.Config{
+			YNAB: ynabber.YNAB{
+				FromDate: mockFromDate,
+			},
+		},
+	}
+
+	tests := []struct {
+		name string
+		date time.Time
+		want bool
+	}{
+		{
+			name: "Yesterday",
+			date: time.Now().AddDate(0, 0, -1),
+			want: true,
+		},
+		{
+			name: "Tomorrow",
+			date: time.Now().AddDate(0, 0, 1),
+			want: false,
+		},
+		{
+			name: "5 years ago",
+			date: time.Now().AddDate(-5, 0, 0),
+			want: false,
+		},
+		{
+			name: "Before FromDate",
+			date: fromDate.AddDate(0, 0, -1),
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := writer.validTransaction(tt.date); got != tt.want {
+				t.Errorf("validTransaction() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
