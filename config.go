@@ -39,7 +39,7 @@ type Config struct {
 	Debug bool `envconfig:"YNABBER_DEBUG" default:"false"`
 
 	// Interval is how often to execute the read/write loop, 0=run only once
-	Interval time.Duration `envconfig:"YNABBER_INTERVAL" default:"5m"`
+	Interval time.Duration `envconfig:"YNABBER_INTERVAL" default:"6h"`
 
 	// Readers is a list of sources to read transactions from. Currently only
 	// Nordigen is supported.
