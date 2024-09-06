@@ -3,6 +3,7 @@ package nordigen
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
@@ -66,28 +67,33 @@ func (mapper Default) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Tr
 	for _, source := range mapper.PayeeSource {
 		if payee == "" {
 			switch source {
-			// Unstructured should properly have been called "remittance" but
-			// its not. Some banks use this field as Payee.
 			case "unstructured":
-				payee = t.RemittanceInformationUnstructured
+				// Use first unstructured string or array that is defied
+				if t.RemittanceInformationUnstructured != "" {
+					payee = t.RemittanceInformationUnstructured
+				} else if t.RemittanceInformationUnstructuredArray != nil {
+					payee = strings.Join(t.RemittanceInformationUnstructuredArray, " ")
+				}
+
 				// Unstructured data may need some formatting, some banks
 				// inserts the amount and date which will cause every
 				// transaction to create a new Payee
 				payee = payeeStripNonAlphanumeric(payee)
 
-			// Name is using either creditor or debtor as the payee
 			case "name":
-				// Use either one
+				// Use either creditor or debtor as the payee
 				if t.CreditorName != "" {
 					payee = t.CreditorName
 				} else if t.DebtorName != "" {
 					payee = t.DebtorName
 				}
 
-			// Additional uses AdditionalInformation as payee
 			case "additional":
+				// Use AdditionalInformation as payee
 				payee = t.AdditionalInformation
+
 			default:
+				// Return an error if source is not recognized
 				return ynabber.Transaction{}, fmt.Errorf("unrecognized PayeeSource: %s", source)
 			}
 		}
