@@ -1,6 +1,6 @@
 module github.com/martinohansen/ynabber
 
-go 1.21
+go 1.23
 
 require github.com/frieser/nordigen-go-lib/v2 v2.1.7
 
