@@ -97,7 +97,7 @@ func TestYnabberToYNAB(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    Ytransaction
+		want    Transaction
 		wantErr bool
 	}{
 		{
@@ -113,7 +113,7 @@ func TestYnabberToYNAB(t *testing.T) {
 					Amount:  10000,
 				},
 			},
-			want: Ytransaction{
+			want: Transaction{
 				AccountID: "abc",
 				Date:      "0001-01-01",
 				Amount:    "10000",
@@ -136,7 +136,7 @@ func TestYnabberToYNAB(t *testing.T) {
 					Amount:  10000,
 				},
 			},
-			want: Ytransaction{
+			want: Transaction{
 				AccountID: "abc",
 				Date:      "0001-01-01",
 				Amount:    "-10000",
@@ -210,7 +210,7 @@ func TestValidTransaction(t *testing.T) {
 			writer.Config.YNAB.FromDate = ynabber.Date(tt.fromDate)
 			writer.Config.YNAB.Delay = tt.delay
 
-			if got := writer.validTransaction(tt.date); got != tt.want {
+			if got := writer.checkTransactionDateValidity(tt.date); got != tt.want {
 				t.Errorf("got = %v, want %v", got, tt.want)
 			}
 		})

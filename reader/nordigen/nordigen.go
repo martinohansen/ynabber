@@ -58,12 +58,12 @@ func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([
 	y := []ynabber.Transaction{}
 	for _, v := range t.Transactions.Booked {
 		transaction, err := r.toYnabber(a, v)
-		r.logger.Debug("mapping transaction", "from", v, "to", transaction)
 		if err != nil {
 			return nil, err
 		}
 
 		// Append transaction
+		r.logger.Debug("mapped transaction", "from", v, "to", transaction)
 		y = append(y, transaction)
 	}
 	return y, nil

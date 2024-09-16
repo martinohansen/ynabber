@@ -19,8 +19,8 @@ const maxPayeeSize int = 100 // Max size of payee field in YNAB API
 
 var space = regexp.MustCompile(`\s+`) // Matches all whitespace characters
 
-// Ytransaction is a single YNAB transaction
-type Ytransaction struct {
+// Transaction is a single YNAB transaction
+type Transaction struct {
 	AccountID string `json:"account_id"`
 	Date      string `json:"date"`
 	Amount    string `json:"amount"`
@@ -31,9 +31,9 @@ type Ytransaction struct {
 	Approved  bool   `json:"approved"`
 }
 
-// Ytransactions is multiple YNAB transactions
-type Ytransactions struct {
-	Transactions []Ytransaction `json:"transactions"`
+// Transactions is multiple YNAB transactions
+type Transactions struct {
+	Transactions []Transaction `json:"transactions"`
 }
 
 type Writer struct {
@@ -78,26 +78,25 @@ func makeID(t ynabber.Transaction) string {
 	return fmt.Sprintf("YBBR:%x", hash)[:32]
 }
 
-func (w Writer) toYNAB(t ynabber.Transaction) (Ytransaction, error) {
-	accountID, err := accountParser(t.Account.IBAN, w.Config.YNAB.AccountMap)
+func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
+	accountID, err := accountParser(source.Account.IBAN, w.Config.YNAB.AccountMap)
 	if err != nil {
-		return Ytransaction{}, err
+		return Transaction{}, err
 	}
-	logger := w.logger.With("account", accountID)
 
-	date := t.Date.Format("2006-01-02")
+	date := source.Date.Format("2006-01-02")
 
 	// Trim consecutive spaces from memo and truncate if too long
-	memo := strings.TrimSpace(space.ReplaceAllString(t.Memo, " "))
+	memo := strings.TrimSpace(space.ReplaceAllString(source.Memo, " "))
 	if len(memo) > maxMemoSize {
-		logger.Warn("memo too long", "transaction", t, "max_size", maxMemoSize)
+		w.logger.Warn("memo too long", "transaction", source, "max_size", maxMemoSize)
 		memo = memo[0:(maxMemoSize - 1)]
 	}
 
 	// Trim consecutive spaces from payee and truncate if too long
-	payee := strings.TrimSpace(space.ReplaceAllString(string(t.Payee), " "))
+	payee := strings.TrimSpace(space.ReplaceAllString(string(source.Payee), " "))
 	if len(payee) > maxPayeeSize {
-		logger.Warn("payee too long", "transaction", t, "max_size", maxPayeeSize)
+		w.logger.Warn("payee too long", "transaction", source, "max_size", maxPayeeSize)
 		payee = payee[0:(maxPayeeSize - 1)]
 	}
 
@@ -105,27 +104,29 @@ func (w Writer) toYNAB(t ynabber.Transaction) (Ytransaction, error) {
 	// to outflow. If so swap it by using the Negate method.
 	if w.Config.YNAB.SwapFlow != nil {
 		for _, account := range w.Config.YNAB.SwapFlow {
-			if account == t.Account.IBAN {
-				t.Amount = t.Amount.Negate()
+			if account == source.Account.IBAN {
+				source.Amount = source.Amount.Negate()
 			}
 		}
 	}
 
-	return Ytransaction{
-		ImportID:  makeID(t),
+	transaction := Transaction{
+		ImportID:  makeID(source),
 		AccountID: accountID,
 		Date:      date,
-		Amount:    t.Amount.String(),
+		Amount:    source.Amount.String(),
 		PayeeName: payee,
 		Memo:      memo,
 		Cleared:   string(w.Config.YNAB.Cleared),
 		Approved:  false,
-	}, nil
+	}
+	w.logger.Debug("mapped transaction", "from", source, "to", transaction)
+	return transaction, nil
 }
 
-// validTransaction checks if date is within the limits of YNAB and
+// checkTransactionDateValidity checks if date is within the limits of YNAB and
 // ynabber.Config.
-func (w Writer) validTransaction(date time.Time) bool {
+func (w Writer) checkTransactionDateValidity(date time.Time) bool {
 	now := time.Now()
 	fiveYearsAgo := now.AddDate(-5, 0, 0)
 	fromDate := time.Time(w.Config.YNAB.FromDate)
@@ -140,11 +141,11 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	failed := 0
 
 	// Build array of transactions to send to YNAB
-	y := new(Ytransactions)
+	y := new(Transactions)
 	for _, v := range t {
-
 		// Skip transactions that are not within the valid date range.
-		if !w.validTransaction(v.Date) {
+		if !w.checkTransactionDateValidity(v.Date) {
+			w.logger.Debug("date out of range", "transaction", v)
 			skipped += 1
 			continue
 		}
@@ -153,7 +154,7 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 		if err != nil {
 			// If we fail to parse a single transaction we log it but move on so
 			// we don't halt the entire program.
-			w.logger.Error("parsing", "transaction", v, "err", err)
+			w.logger.Error("mapping to YNAB", "transaction", transaction, "err", err)
 			failed += 1
 			continue
 		}
@@ -161,7 +162,7 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	}
 
 	if len(t) == 0 || len(y.Transactions) == 0 {
-		w.logger.Info("No transactions to write")
+		w.logger.Info("no transactions to write")
 		return nil
 	}
 
