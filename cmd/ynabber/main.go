@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/carlmjohnson/versioninfo"
@@ -15,9 +15,19 @@ import (
 	"github.com/martinohansen/ynabber/writer/ynab"
 )
 
-func main() {
-	log.Println("Version:", versioninfo.Short())
+func setupLogging(debug bool) {
+	programLevel := slog.LevelInfo
+	if debug {
+		programLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(
+		os.Stderr, &slog.HandlerOptions{
+			Level: programLevel,
+		}))
+	slog.SetDefault(logger)
+}
 
+func main() {
 	// Read config from env
 	var cfg ynabber.Config
 	err := envconfig.Process("", &cfg)
@@ -25,17 +35,9 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	// Check that some values are valid
-	cfg.YNAB.Cleared = strings.ToLower(cfg.YNAB.Cleared)
-	if cfg.YNAB.Cleared != "cleared" &&
-		cfg.YNAB.Cleared != "uncleared" &&
-		cfg.YNAB.Cleared != "reconciled" {
-		log.Fatal("YNAB_CLEARED must be one of cleared, uncleared or reconciled")
-	}
-
-	if cfg.Debug {
-		log.Printf("Config: %+v\n", cfg)
-	}
+	setupLogging(cfg.Debug)
+	slog.Info("starting...", "version", versioninfo.Short())
+	slog.Debug("", "config", cfg)
 
 	ynabber := ynabber.Ynabber{}
 	for _, reader := range cfg.Readers {
@@ -49,7 +51,7 @@ func main() {
 	for _, writer := range cfg.Writers {
 		switch writer {
 		case "ynab":
-			ynabber.Writers = append(ynabber.Writers, ynab.Writer{Config: &cfg})
+			ynabber.Writers = append(ynabber.Writers, ynab.NewWriter(&cfg))
 		case "json":
 			ynabber.Writers = append(ynabber.Writers, json.Writer{})
 		default:
@@ -58,22 +60,23 @@ func main() {
 	}
 
 	for {
-		err = run(ynabber, cfg.Interval)
+		start := time.Now()
+		err = run(ynabber)
 		if err != nil {
 			panic(err)
 		} else {
-			log.Printf("Run succeeded")
-		}
-		if cfg.Interval > 0 {
-			log.Printf("Waiting %s before running again...", cfg.Interval)
-			time.Sleep(cfg.Interval)
-		} else {
-			os.Exit(0)
+			slog.Info("run succeeded", "in", time.Since(start))
+			if cfg.Interval > 0 {
+				slog.Info("waiting for next run", "in", cfg.Interval)
+				time.Sleep(cfg.Interval)
+			} else {
+				os.Exit(0)
+			}
 		}
 	}
 }
 
-func run(y ynabber.Ynabber, interval time.Duration) error {
+func run(y ynabber.Ynabber) error {
 	var transactions []ynabber.Transaction
 
 	// Read transactions from all readers
