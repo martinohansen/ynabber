@@ -29,10 +29,7 @@ func NewReader(cfg *ynabber.Config) Reader {
 	return Reader{
 		Config: cfg,
 		Client: client,
-		logger: slog.Default().With(
-			"reader", "nordigen",
-			"bank_id", cfg.Nordigen.BankID,
-		),
+		logger: slog.Default().With("reader", "nordigen"),
 	}
 }
 
@@ -78,7 +75,7 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		return nil, fmt.Errorf("failed to authorize: %w", err)
 	}
 
-	r.logger.Info("", "accounts", len(req.Accounts))
+	r.logger.Info("loaded requisition", "accounts", len(req.Accounts))
 	for _, account := range req.Accounts {
 		accountMetadata, err := r.Client.GetAccountMetadata(account)
 		if err != nil {

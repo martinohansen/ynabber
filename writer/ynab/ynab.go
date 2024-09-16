@@ -192,9 +192,9 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 		return fmt.Errorf("failed to send request: %s", res.Status)
 	} else {
 		w.logger.Info(
-			"Request sent",
+			"sent transactions",
 			"status",
-			res.Status,
+			res.StatusCode,
 			"transactions",
 			len(y.Transactions),
 			"skipped",
