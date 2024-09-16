@@ -2,7 +2,7 @@ package nordigen
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -12,8 +12,8 @@ import (
 
 type Reader struct {
 	Config *ynabber.Config
-
 	Client *nordigen.Client
+	logger *slog.Logger
 }
 
 // NewReader returns a new nordigen reader or panics
@@ -26,6 +26,10 @@ func NewReader(cfg *ynabber.Config) Reader {
 	return Reader{
 		Config: cfg,
 		Client: client,
+		logger: slog.Default().With(
+			"reader", "nordigen",
+			"bank_id", cfg.Nordigen.BankID,
+		),
 	}
 }
 
@@ -54,6 +58,7 @@ func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([
 	y := []ynabber.Transaction{}
 	for _, v := range t.Transactions.Booked {
 		transaction, err := r.toYnabber(a, v)
+		r.logger.Debug("mapping transaction", "from", v, "to", transaction)
 		if err != nil {
 			return nil, err
 		}
@@ -70,8 +75,9 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		return nil, fmt.Errorf("failed to authorize: %w", err)
 	}
 
-	log.Printf("Found %v accounts", len(req.Accounts))
+	r.logger.Info("bulk reading", "accounts", len(req.Accounts))
 	for _, account := range req.Accounts {
+		logger := r.logger.With("account", account)
 		accountMetadata, err := r.Client.GetAccountMetadata(account)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get account metadata: %w", err)
@@ -81,11 +87,7 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		// requisition.
 		switch accountMetadata.Status {
 		case "EXPIRED", "SUSPENDED":
-			log.Printf(
-				"Account: %s is %s. Going to recreate the requisition...",
-				account,
-				accountMetadata.Status,
-			)
+			logger.Info("recreating requisition", "status", accountMetadata.Status)
 			r.createRequisition()
 		}
 
@@ -95,15 +97,10 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 			IBAN: accountMetadata.Iban,
 		}
 
-		log.Printf("Reading transactions from account: %s", account.Name)
-
+		logger.Info("reading transactions")
 		transactions, err := r.Client.GetAccountTransactions(string(account.ID))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
-		}
-
-		if r.Config.Debug {
-			log.Printf("Transactions received from Nordigen: %+v", transactions)
 		}
 
 		x, err := r.toYnabbers(account, transactions)

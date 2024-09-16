@@ -5,9 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
-	"net/http/httputil"
 	"regexp"
 	"strings"
 	"time"
@@ -17,10 +16,6 @@ import (
 
 const maxMemoSize int = 200  // Max size of memo field in YNAB API
 const maxPayeeSize int = 100 // Max size of payee field in YNAB API
-
-type Writer struct {
-	Config *ynabber.Config
-}
 
 var space = regexp.MustCompile(`\s+`) // Matches all whitespace characters
 
@@ -41,6 +36,22 @@ type Ytransactions struct {
 	Transactions []Ytransaction `json:"transactions"`
 }
 
+type Writer struct {
+	Config *ynabber.Config
+	logger *slog.Logger
+}
+
+// NewWriter returns a new YNAB writer
+func NewWriter(cfg *ynabber.Config) Writer {
+	return Writer{
+		Config: cfg,
+		logger: slog.Default().With(
+			"writer", "ynab",
+			"budget_id", cfg.YNAB.BudgetID,
+		),
+	}
+}
+
 // accountParser takes IBAN and returns the matching YNAB account ID in
 // accountMap
 func accountParser(iban string, accountMap map[string]string) (string, error) {
@@ -53,7 +64,7 @@ func accountParser(iban string, accountMap map[string]string) (string, error) {
 }
 
 // makeID returns a unique YNAB import ID to avoid duplicate transactions.
-func makeID(cfg ynabber.Config, t ynabber.Transaction) string {
+func makeID(t ynabber.Transaction) string {
 	date := t.Date.Format("2006-01-02")
 	amount := t.Amount.String()
 
@@ -67,34 +78,33 @@ func makeID(cfg ynabber.Config, t ynabber.Transaction) string {
 	return fmt.Sprintf("YBBR:%x", hash)[:32]
 }
 
-func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, error) {
-	accountID, err := accountParser(t.Account.IBAN, cfg.YNAB.AccountMap)
+func (w Writer) toYNAB(t ynabber.Transaction) (Ytransaction, error) {
+	accountID, err := accountParser(t.Account.IBAN, w.Config.YNAB.AccountMap)
 	if err != nil {
 		return Ytransaction{}, err
 	}
+	logger := w.logger.With("account", accountID)
 
 	date := t.Date.Format("2006-01-02")
 
 	// Trim consecutive spaces from memo and truncate if too long
 	memo := strings.TrimSpace(space.ReplaceAllString(t.Memo, " "))
 	if len(memo) > maxMemoSize {
-		log.Printf("Memo on account %s on date %s is too long - truncated to %d characters",
-			t.Account.Name, date, maxMemoSize)
+		logger.Warn("memo too long", "transaction", t, "max_size", maxMemoSize)
 		memo = memo[0:(maxMemoSize - 1)]
 	}
 
 	// Trim consecutive spaces from payee and truncate if too long
 	payee := strings.TrimSpace(space.ReplaceAllString(string(t.Payee), " "))
 	if len(payee) > maxPayeeSize {
-		log.Printf("Payee on account %s on date %s is too long - truncated to %d characters",
-			t.Account.Name, date, maxPayeeSize)
+		logger.Warn("payee too long", "transaction", t, "max_size", maxPayeeSize)
 		payee = payee[0:(maxPayeeSize - 1)]
 	}
 
 	// If SwapFlow is defined check if the account is configured to swap inflow
 	// to outflow. If so swap it by using the Negate method.
-	if cfg.YNAB.SwapFlow != nil {
-		for _, account := range cfg.YNAB.SwapFlow {
+	if w.Config.YNAB.SwapFlow != nil {
+		for _, account := range w.Config.YNAB.SwapFlow {
 			if account == t.Account.IBAN {
 				t.Amount = t.Amount.Negate()
 			}
@@ -102,13 +112,13 @@ func ynabberToYNAB(cfg ynabber.Config, t ynabber.Transaction) (Ytransaction, err
 	}
 
 	return Ytransaction{
-		ImportID:  makeID(cfg, t),
+		ImportID:  makeID(t),
 		AccountID: accountID,
 		Date:      date,
 		Amount:    t.Amount.String(),
 		PayeeName: payee,
 		Memo:      memo,
-		Cleared:   cfg.YNAB.Cleared,
+		Cleared:   string(w.Config.YNAB.Cleared),
 		Approved:  false,
 	}, nil
 }
@@ -136,11 +146,11 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 			continue
 		}
 
-		transaction, err := ynabberToYNAB(*w.Config, v)
+		transaction, err := w.toYNAB(v)
 		if err != nil {
 			// If we fail to parse a single transaction we log it but move on so
 			// we don't halt the entire program.
-			log.Printf("Failed to parse transaction: %s: %s", v, err)
+			w.logger.Error("parsing", "transaction", v, "err", err)
 			failed += 1
 			continue
 		}
@@ -148,12 +158,8 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	}
 
 	if len(t) == 0 || len(y.Transactions) == 0 {
-		log.Println("No transactions to write")
+		w.logger.Info("No transactions to write")
 		return nil
-	}
-
-	if w.Config.Debug {
-		log.Printf("Request to YNAB: %+v", y)
 	}
 
 	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", w.Config.YNAB.BudgetID)
@@ -178,18 +184,18 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	}
 	defer res.Body.Close()
 
-	if w.Config.Debug {
-		b, _ := httputil.DumpResponse(res, true)
-		log.Printf("Response from YNAB: %s", b)
-	}
-
 	if res.StatusCode != http.StatusCreated {
 		return fmt.Errorf("failed to send request: %s", res.Status)
 	} else {
-		log.Printf(
-			"Successfully sent %v transaction(s) to YNAB. %d got skipped and %d failed.",
+		w.logger.Info(
+			"Request sent",
+			"status",
+			res.Status,
+			"transactions",
 			len(y.Transactions),
+			"skipped",
 			skipped,
+			"failed",
 			failed,
 		)
 	}
