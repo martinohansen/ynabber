@@ -37,7 +37,6 @@ func main() {
 
 	setupLogging(cfg.Debug)
 	slog.Info("starting...", "version", versioninfo.Short())
-	slog.Debug("", "config", cfg)
 
 	ynabber := ynabber.Ynabber{}
 	for _, reader := range cfg.Readers {
