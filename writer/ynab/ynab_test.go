@@ -40,7 +40,7 @@ func TestMakeID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := makeID(tt.args.cfg, tt.args.t)
+			got := makeID(tt.args.t)
 			// Test max length of all test cases
 			if len(got) > maxLength {
 				t.Errorf("importIDMaker() = %v chars long, max length is %v", len(got), maxLength)
@@ -148,13 +148,14 @@ func TestYnabberToYNAB(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ynabberToYNAB(tt.args.cfg, tt.args.t)
+			writer := NewWriter(&tt.args.cfg)
+			got, err := writer.toYNAB(tt.args.t)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ynabberToYNAB() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ynabberToYNAB() = %v, want %v", got, tt.want)
+				t.Errorf("got = %v, want %v", got, tt.want)
 			}
 		})
 	}
