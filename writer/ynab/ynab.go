@@ -123,12 +123,15 @@ func (w Writer) toYNAB(t ynabber.Transaction) (Ytransaction, error) {
 	}, nil
 }
 
-// validTransaction checks if date is within the limits of YNAB and w.Config.
+// validTransaction checks if date is within the limits of YNAB and
+// ynabber.Config.
 func (w Writer) validTransaction(date time.Time) bool {
-	fiveYearsAgo := time.Now().AddDate(-5, 0, 0)
-	return !date.Before(fiveYearsAgo) &&
-		!date.Before(time.Time(w.Config.YNAB.FromDate)) &&
-		!date.After(time.Now())
+	now := time.Now()
+	fiveYearsAgo := now.AddDate(-5, 0, 0)
+	fromDate := time.Time(w.Config.YNAB.FromDate)
+	delay := w.Config.YNAB.Delay
+
+	return date.After(fiveYearsAgo) && date.After(fromDate) && date.Before(now.Add(-delay))
 }
 
 func (w Writer) Bulk(t []ynabber.Transaction) error {

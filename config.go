@@ -137,6 +137,11 @@ type YNAB struct {
 	// example: 2006-01-02
 	FromDate Date `envconfig:"YNAB_FROM_DATE"`
 
+	// Delay sending transaction to YNAB by this duration. This can be necessary
+	// if the bank changes transaction IDs after some time. Default is 0 (no
+	// delay).
+	Delay time.Duration `envconfig:"YNAB_DELAY" default:"0"`
+
 	// Set cleared status, possible values: cleared, uncleared, reconciled .
 	// Default is uncleared for historical reasons but recommend setting this
 	// to cleared because ynabber transactions are cleared by bank.
