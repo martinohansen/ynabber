@@ -1,6 +1,7 @@
 package nordigen
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -9,6 +10,8 @@ import (
 	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
 )
+
+const rateLimitExceededStatusCode = 429
 
 type Reader struct {
 	Config *ynabber.Config
@@ -75,13 +78,13 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		return nil, fmt.Errorf("failed to authorize: %w", err)
 	}
 
-	r.logger.Info("bulk reading", "accounts", len(req.Accounts))
+	r.logger.Info("", "accounts", len(req.Accounts))
 	for _, account := range req.Accounts {
-		logger := r.logger.With("account", account)
 		accountMetadata, err := r.Client.GetAccountMetadata(account)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get account metadata: %w", err)
 		}
+		logger := r.logger.With("iban", accountMetadata.Iban)
 
 		// Handle expired, or suspended accounts by recreating the
 		// requisition.
@@ -100,6 +103,11 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		logger.Info("reading transactions")
 		transactions, err := r.Client.GetAccountTransactions(string(account.ID))
 		if err != nil {
+			var apiErr *nordigen.APIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode == rateLimitExceededStatusCode {
+				logger.Warn("rate limit exceeded, skipping account")
+				continue
+			}
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
 
