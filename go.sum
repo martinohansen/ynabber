@@ -4,3 +4,5 @@ github.com/frieser/nordigen-go-lib/v2 v2.1.7 h1:n6qhksPY9iPPXBmbdnIxwWQeaMM2fsQe
 github.com/frieser/nordigen-go-lib/v2 v2.1.7/go.mod h1:NejYisqD8GvynCN0vDGw7J66slnj7jB25c8tS1tr8bw=
 github.com/kelseyhightower/envconfig v1.4.0 h1:Im6hONhd3pLkfDFsbRgu68RDNkGF1r3dvMUtDTo2cv8=
 github.com/kelseyhightower/envconfig v1.4.0/go.mod h1:cccZRl6mQpaq41TPp5QxidR+Sa3axMbJDNb//FQX6Gg=
+github.com/lmittmann/tint v1.0.5 h1:NQclAutOfYsqs2F1Lenue6OoWCajs5wJcP3DfWVpePw=
+github.com/lmittmann/tint v1.0.5/go.mod h1:HIS3gSy7qNwGCj+5oRjAutErFBl4BzdQP6cJZ0NfMwE=

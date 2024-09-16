@@ -9,6 +9,7 @@ import (
 
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/lmittmann/tint"
 	"github.com/martinohansen/ynabber"
 	"github.com/martinohansen/ynabber/reader/nordigen"
 	"github.com/martinohansen/ynabber/writer/json"
@@ -20,8 +21,8 @@ func setupLogging(debug bool) {
 	if debug {
 		programLevel = slog.LevelDebug
 	}
-	logger := slog.New(slog.NewTextHandler(
-		os.Stderr, &slog.HandlerOptions{
+	logger := slog.New(tint.NewHandler(
+		os.Stderr, &tint.Options{
 			Level: programLevel,
 		}))
 	slog.SetDefault(logger)
