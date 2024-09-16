@@ -2,6 +2,8 @@ package ynabber
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -28,6 +30,30 @@ func (accountMap *AccountMap) Decode(value string) error {
 		return err
 	}
 	return nil
+}
+
+type TransactionStatus string
+
+const (
+	Cleared    TransactionStatus = "cleared"
+	Uncleared  TransactionStatus = "uncleared"
+	Reconciled TransactionStatus = "reconciled"
+)
+
+// Decode implements `envconfig.Decoder` for TransactionStatus
+func (cs *TransactionStatus) Decode(value string) error {
+	lowered := strings.ToLower(value)
+	switch lowered {
+	case string(Cleared), string(Uncleared), string(Reconciled):
+		*cs = TransactionStatus(lowered)
+		return nil
+	default:
+		return fmt.Errorf("unknown value %s", value)
+	}
+}
+
+func (cs TransactionStatus) String() string {
+	return string(cs)
 }
 
 // Config is loaded from the environment during execution with cmd/ynabber
@@ -111,11 +137,16 @@ type YNAB struct {
 	// example: 2006-01-02
 	FromDate Date `envconfig:"YNAB_FROM_DATE"`
 
+	// Delay sending transaction to YNAB by this duration. This can be necessary
+	// if the bank changes transaction IDs after some time. Default is 0 (no
+	// delay).
+	Delay time.Duration `envconfig:"YNAB_DELAY" default:"0"`
+
 	// Set cleared status, possible values: cleared, uncleared, reconciled .
 	// Default is uncleared for historical reasons but recommend setting this
 	// to cleared because ynabber transactions are cleared by bank.
 	// They'd still be unapproved until approved in YNAB.
-	Cleared string `envconfig:"YNAB_CLEARED" default:"uncleared"`
+	Cleared TransactionStatus `envconfig:"YNAB_CLEARED" default:"uncleared"`
 
 	// SwapFlow changes inflow to outflow and vice versa for any account with a
 	// IBAN number in the list. This maybe be relevant for credit card accounts.

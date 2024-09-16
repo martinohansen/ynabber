@@ -40,7 +40,7 @@ func TestMakeID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := makeID(tt.args.cfg, tt.args.t)
+			got := makeID(tt.args.t)
 			// Test max length of all test cases
 			if len(got) > maxLength {
 				t.Errorf("importIDMaker() = %v chars long, max length is %v", len(got), maxLength)
@@ -148,59 +148,70 @@ func TestYnabberToYNAB(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ynabberToYNAB(tt.args.cfg, tt.args.t)
+			writer := NewWriter(&tt.args.cfg)
+			got, err := writer.toYNAB(tt.args.t)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ynabberToYNAB() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ynabberToYNAB() = %v, want %v", got, tt.want)
+				t.Errorf("got = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestValidTransaction(t *testing.T) {
-	fromDate := time.Now().AddDate(-1, 0, 0)
-	mockFromDate := ynabber.Date(fromDate)
-	writer := Writer{
-		Config: &ynabber.Config{
-			YNAB: ynabber.YNAB{
-				FromDate: mockFromDate,
-			},
-		},
-	}
+	yesterday := time.Now().AddDate(-1, 0, 0)
+	writer := Writer{Config: &ynabber.Config{}, logger: nil}
 
 	tests := []struct {
-		name string
-		date time.Time
-		want bool
+		name     string
+		date     time.Time
+		fromDate time.Time
+		delay    time.Duration
+		want     bool
 	}{
 		{
-			name: "Yesterday",
-			date: time.Now().AddDate(0, 0, -1),
-			want: true,
+			name:     "Yesterday",
+			date:     time.Now().AddDate(0, 0, -1),
+			fromDate: yesterday,
+			delay:    0, // Default value
+			want:     true,
 		},
 		{
-			name: "Tomorrow",
-			date: time.Now().AddDate(0, 0, 1),
-			want: false,
+			name:     "Day before yesterday (25h delay)",
+			date:     time.Now().AddDate(0, 0, -2),
+			fromDate: yesterday,
+			delay:    25 * time.Hour,
+			want:     true,
 		},
 		{
-			name: "5 years ago",
-			date: time.Now().AddDate(-5, 0, 0),
-			want: false,
+			name:     "Tomorrow",
+			date:     time.Now().AddDate(0, 0, 1),
+			fromDate: yesterday,
+			want:     false,
 		},
 		{
-			name: "Before FromDate",
-			date: fromDate.AddDate(0, 0, -1),
-			want: false,
+			name:     "5 years ago",
+			date:     time.Now().AddDate(-5, 0, 0),
+			fromDate: yesterday,
+			want:     false,
+		},
+		{
+			name:     "Before FromDate",
+			date:     yesterday.AddDate(0, 0, -1),
+			fromDate: yesterday,
+			want:     false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			writer.Config.YNAB.FromDate = ynabber.Date(tt.fromDate)
+			writer.Config.YNAB.Delay = tt.delay
+
 			if got := writer.validTransaction(tt.date); got != tt.want {
-				t.Errorf("validTransaction() = %v, want %v", got, tt.want)
+				t.Errorf("got = %v, want %v", got, tt.want)
 			}
 		})
 	}
