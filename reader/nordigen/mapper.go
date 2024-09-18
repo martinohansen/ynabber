@@ -10,21 +10,14 @@ import (
 	"github.com/martinohansen/ynabber"
 )
 
-type Mapper interface {
-	Map(ynabber.Account, nordigen.Transaction) (ynabber.Transaction, error)
-}
-
-// Mapper returns a mapper to transform the banks transaction to Ynabber
-func (r Reader) Mapper() Mapper {
-	switch r.Config.Nordigen.BankID {
-	case "NORDEA_NDEADKKK":
-		return Nordea{}
+// Mapper uses the most specific mapper for the bank in question
+func (r Reader) Mapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
+	switch {
+	case strings.HasPrefix(r.Config.Nordigen.BankID, "NORDEA_"):
+		return r.nordeaMapper(a, t)
 
 	default:
-		return Default{
-			PayeeSource:   r.Config.Nordigen.PayeeSource,
-			TransactionID: r.Config.Nordigen.TransactionID,
-		}
+		return r.defaultMapper(a, t)
 	}
 }
 
@@ -44,27 +37,24 @@ func parseDate(t nordigen.Transaction) (time.Time, error) {
 	return date, nil
 }
 
-// Default mapping for all banks unless a more specific mapping exists
-type Default struct {
-	PayeeSource   []string
-	TransactionID string
-}
+// defaultMapper is generic and tries to identify the appropriate mapping
+func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
+	PayeeSource := r.Config.Nordigen.PayeeSource
+	TransactionID := r.Config.Nordigen.TransactionID
 
-// Map t using the default mapper
-func (mapper Default) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
 	amount, err := parseAmount(t)
 	if err != nil {
-		return ynabber.Transaction{}, err
+		return nil, err
 	}
 	date, err := parseDate(t)
 	if err != nil {
-		return ynabber.Transaction{}, err
+		return nil, err
 	}
 
 	// Get the Payee from the first data source that returns data in the order
 	// defined by config
 	payee := ""
-	for _, source := range mapper.PayeeSource {
+	for _, source := range PayeeSource {
 		if payee == "" {
 			switch source {
 			case "unstructured":
@@ -94,23 +84,23 @@ func (mapper Default) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Tr
 
 			default:
 				// Return an error if source is not recognized
-				return ynabber.Transaction{}, fmt.Errorf("unrecognized PayeeSource: %s", source)
+				return nil, fmt.Errorf("unrecognized PayeeSource: %s", source)
 			}
 		}
 	}
 
 	// Set the transaction ID according to config
 	var id string
-	switch mapper.TransactionID {
+	switch TransactionID {
 	case "InternalTransactionId":
 		id = t.InternalTransactionId
 	case "TransactionId":
 		id = t.TransactionId
 	default:
-		return ynabber.Transaction{}, fmt.Errorf("unrecognized TransactionID: %s", mapper.TransactionID)
+		return nil, fmt.Errorf("unrecognized TransactionID: %s", TransactionID)
 	}
 
-	return ynabber.Transaction{
+	return &ynabber.Transaction{
 		Account: a,
 		ID:      ynabber.ID(id),
 		Date:    date,
@@ -120,26 +110,16 @@ func (mapper Default) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Tr
 	}, nil
 }
 
-// Nordea implements a specific mapper for Nordea
-type Nordea struct{}
-
-// Map t using the Nordea mapper
-func (mapper Nordea) Map(a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
-	amount, err := parseAmount(t)
-	if err != nil {
-		return ynabber.Transaction{}, err
-	}
-	date, err := parseDate(t)
-	if err != nil {
-		return ynabber.Transaction{}, err
+// nordeaMapper handles Nordea transactions specifically
+func (r Reader) nordeaMapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
+	// They now maintain two transactions for every actual transaction. First
+	// they show up prefixed with a ID prefixed with a H, sometime later another
+	// transaction describing the same transactions shows up with a new ID
+	// prefixed with a P instead. The H transaction matches the date which its
+	// visible in my account so i will discard the P transactions for now.
+	if strings.HasPrefix(t.TransactionId, "P") {
+		return nil, nil
 	}
 
-	return ynabber.Transaction{
-		Account: a,
-		ID:      ynabber.ID(t.InternalTransactionId),
-		Date:    date,
-		Payee:   ynabber.Payee(payeeStripNonAlphanumeric(t.RemittanceInformationUnstructured)),
-		Memo:    t.RemittanceInformationUnstructured,
-		Amount:  ynabber.MilliunitsFromAmount(amount),
-	}, nil
+	return r.defaultMapper(a, t)
 }

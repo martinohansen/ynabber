@@ -40,10 +40,10 @@ func payeeStripNonAlphanumeric(payee string) (x string) {
 	return strings.TrimSpace(x)
 }
 
-func (r Reader) toYnabber(a ynabber.Account, t nordigen.Transaction) (ynabber.Transaction, error) {
-	transaction, err := r.Mapper().Map(a, t)
+func (r Reader) toYnabber(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
+	transaction, err := r.Mapper(a, t)
 	if err != nil {
-		return ynabber.Transaction{}, err
+		return nil, err
 	}
 
 	// Execute strip method on payee if defined in config
@@ -63,8 +63,13 @@ func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([
 		}
 
 		// Append transaction
-		r.logger.Debug("mapped transaction", "from", v, "to", transaction)
-		y = append(y, transaction)
+		if transaction != nil {
+			r.logger.Debug("mapped transaction", "from", v, "to", transaction)
+			y = append(y, *transaction)
+		} else {
+			r.logger.Debug("skipping", "transaction", v)
+		}
+
 	}
 	return y, nil
 }

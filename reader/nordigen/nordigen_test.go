@@ -1,6 +1,7 @@
 package nordigen
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ func TestToYnabber(t *testing.T) {
 		bankID  string
 		reader  Reader
 		args    args
-		want    ynabber.Transaction
+		want    *ynabber.Transaction
 		wantErr bool
 	}{
 		{
@@ -33,10 +34,10 @@ func TestToYnabber(t *testing.T) {
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: nordigen.Transaction{
-					InternalTransactionId: "H00000000000000000000",
-					EntryReference:        "",
-					BookingDate:           "2023-02-24",
-					ValueDate:             "2023-02-24",
+					TransactionId:  "H00000000000000000000",
+					EntryReference: "",
+					BookingDate:    "2023-02-24",
+					ValueDate:      "2023-02-24",
 					TransactionAmount: struct {
 						Amount   string "json:\"amount,omitempty\""
 						Currency string "json:\"currency,omitempty\""
@@ -56,7 +57,7 @@ func TestToYnabber(t *testing.T) {
 					BankTransactionCode:                    "",
 					AdditionalInformation:                  "VISA KØB"},
 			},
-			want: ynabber.Transaction{
+			want: &ynabber.Transaction{
 				Account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				ID:      ynabber.ID("H00000000000000000000"),
 				Date:    time.Date(2023, time.February, 24, 0, 0, 0, 0, time.UTC),
@@ -96,7 +97,7 @@ func TestToYnabber(t *testing.T) {
 					BankTransactionCode:                    "PURCHASE",
 					AdditionalInformation:                  "PASCAL AS"},
 			},
-			want: ynabber.Transaction{
+			want: &ynabber.Transaction{
 				Account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				ID:      ynabber.ID("foobar"),
 				Date:    time.Date(2023, time.February, 24, 0, 0, 0, 0, time.UTC),
@@ -120,7 +121,7 @@ func TestToYnabber(t *testing.T) {
 				t.Errorf("error = %+v, wantErr %+v", err, tt.wantErr)
 				return
 			}
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got = \n%+v, want \n%+v", got, tt.want)
 			}
 		})
