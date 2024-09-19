@@ -14,7 +14,7 @@ import (
 // Mapper uses the most specific mapper for the bank in question
 func (r Reader) Mapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
 	switch {
-	case strings.HasPrefix(r.Config.Nordigen.BankID, "NORDEA_"):
+	case r.Config.Nordigen.BankID == "NORDEA_NDEADKKK":
 		return r.nordeaMapper(a, t)
 
 	default:
