@@ -32,8 +32,9 @@ func NewReader(cfg *ynabber.Config) Reader {
 }
 
 func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([]ynabber.Transaction, error) {
-	skipped := 0
+	logger := r.logger.With("account", a.IBAN)
 
+	skipped := 0
 	y := []ynabber.Transaction{}
 	for _, v := range t.Transactions.Booked {
 		transaction, err := r.Mapper(a, v)
@@ -43,15 +44,15 @@ func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([
 
 		// Append transaction
 		if transaction != nil {
-			r.logger.Debug("mapped transaction", "from", v, "to", transaction)
+			logger.Debug("mapped transaction", "from", v, "to", transaction)
 			y = append(y, *transaction)
 		} else {
 			skipped++
-			r.logger.Debug("skipping", "transaction", v)
+			logger.Debug("skipping", "transaction", v)
 		}
 
 	}
-	r.logger.Info("read transactions", "total", len(y)+skipped, "skipped", skipped)
+	logger.Info("read transactions", "total", len(y)+skipped, "skipped", skipped)
 	return y, nil
 }
 
@@ -83,7 +84,6 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 			IBAN: accountMetadata.Iban,
 		}
 
-		logger.Info("reading transactions")
 		transactions, err := r.Client.GetAccountTransactions(string(account.ID))
 		if err != nil {
 			var apiErr *nordigen.APIError
