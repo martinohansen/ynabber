@@ -2,6 +2,7 @@ package nordigen
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,21 @@ func parseDate(t nordigen.Transaction) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("failed to parse string to time: %w", err)
 	}
 	return date, nil
+}
+
+// payeeStripNonAlphanumeric removes all non-alphanumeric characters from payee
+func payeeStripNonAlphanumeric(payee string) (x string) {
+	reg := regexp.MustCompile(`[^\p{L}]+`)
+	x = reg.ReplaceAllString(payee, " ")
+	return strings.TrimSpace(x)
+}
+
+// Strip removes each string in strips from s
+func strip(s string, strips []string) string {
+	for _, strip := range strips {
+		s = strings.ReplaceAll(s, strip, "")
+	}
+	return strings.TrimSpace(s)
 }
 
 // defaultMapper is generic and tries to identify the appropriate mapping
@@ -87,6 +103,11 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 				return nil, fmt.Errorf("unrecognized PayeeSource: %s", source)
 			}
 		}
+	}
+
+	// Remove elements in payee that is defined in config
+	if r.Config.Nordigen.PayeeStrip != nil {
+		payee = strip(payee, r.Config.Nordigen.PayeeStrip)
 	}
 
 	// Set the transaction ID according to config

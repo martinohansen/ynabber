@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
-	"strings"
 
 	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
@@ -33,31 +31,12 @@ func NewReader(cfg *ynabber.Config) Reader {
 	}
 }
 
-// payeeStripNonAlphanumeric removes all non-alphanumeric characters from payee
-func payeeStripNonAlphanumeric(payee string) (x string) {
-	reg := regexp.MustCompile(`[^\p{L}]+`)
-	x = reg.ReplaceAllString(payee, " ")
-	return strings.TrimSpace(x)
-}
-
-func (r Reader) toYnabber(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
-	transaction, err := r.Mapper(a, t)
-	if err != nil {
-		return nil, err
-	}
-
-	// Execute strip method on payee if defined in config
-	if r.Config.Nordigen.PayeeStrip != nil {
-		transaction.Payee = transaction.Payee.Strip(r.Config.Nordigen.PayeeStrip)
-	}
-
-	return transaction, nil
-}
-
 func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([]ynabber.Transaction, error) {
+	skipped := 0
+
 	y := []ynabber.Transaction{}
 	for _, v := range t.Transactions.Booked {
-		transaction, err := r.toYnabber(a, v)
+		transaction, err := r.Mapper(a, v)
 		if err != nil {
 			return nil, err
 		}
@@ -67,10 +46,12 @@ func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([
 			r.logger.Debug("mapped transaction", "from", v, "to", transaction)
 			y = append(y, *transaction)
 		} else {
+			skipped++
 			r.logger.Debug("skipping", "transaction", v)
 		}
 
 	}
+	r.logger.Info("read transactions", "total", len(y)+skipped, "skipped", skipped)
 	return y, nil
 }
 

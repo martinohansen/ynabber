@@ -2,7 +2,6 @@ package ynabber
 
 import (
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -28,15 +27,6 @@ type Account struct {
 type ID string
 
 type Payee string
-
-// Strip removes the elements from s from the payee
-func (p Payee) Strip(s []string) Payee {
-	x := string(p)
-	for _, strip := range s {
-		x = strings.ReplaceAll(x, strip, "")
-	}
-	return Payee(strings.TrimSpace(x))
-}
 
 type Milliunits int64
 
