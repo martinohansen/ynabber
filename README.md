@@ -34,24 +34,21 @@ NORDIGEN_SECRET_KEY=<nordigen secret key>
 EOT
 ```
 
-All valid config options can be found in the [config.go](config.go) file.
+_All valid config options can be found [here](https://pkg.go.dev/github.com/martinohansen/ynabber#Config)_
 
-To read the environment variables from a file and run the binary one can use the
-[declare](https://www.gnu.org/software/bash/manual/bash.html#index-declare)
-command:
+Once the environment variables are set, run the binary:
 
 ```bash
-# Read environment variables from file and run ynabber
-declare $(cat ynabber.env); ynabber
+# Read environment variables from file first
+set -a; . ./ynabber.env; set +a; ynabber
+ynabber
 ```
 
-Or run the container and parse in the variables with
-[Docker](https://docs.docker.com/engine/reference/run/)
+Or run in a container with
+[Docker](https://docs.docker.com/engine/reference/run/):
+
 
 ```bash
-docker run --env-file=ynabber.env ghcr.io/martinohansen/ynabber:latest
-
-# To keep data persistent
 docker run \
     --volume ${PWD}:/data \
     --env 'YNABBER_DATADIR=/data' \
