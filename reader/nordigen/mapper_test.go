@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/frieser/nordigen-go-lib/v2"
+	"github.com/martinohansen/nordigen-go-lib/v2"
 )
 
 func TestParseAmount(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/google/go-cmp/cmp"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/martinohansen/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
 )
 
