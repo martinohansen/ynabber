@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/frieser/nordigen-go-lib/v2"
+	"github.com/martinohansen/nordigen-go-lib/v2"
 )
 
 const RequisitionRedirect = "https://raw.githubusercontent.com/martinohansen/ynabber/main/ok.html"
