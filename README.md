@@ -1,24 +1,33 @@
 # Ynabber
 
-Ynabber sets out to read and write bank transactions from one or more sources
-(known as readers) to one or more destinations (known as writers).
+Ynabber is a tool that reads and writes bank transactions from one or more
+sources (called readers) to one or more destinations (called writers). This
+makes it easier to pull in your bank transactions automatically and push them to
+personal finance apps like YNAB.
 
-For a list of supported see the [readers](#readers) and [writers](#writers)
-subsections.
+See subsection [readers](#readers) and [writers](#writers) for a list of
+supported banks and services.
 
 ## Installation
 
-Install [Go](https://go.dev/) and run `go install` to install binary
+You can use [Go](https://go.dev/) or
+[Docker](https://www.docker.com/get-started/) to install and run Ynabber. Choose
+whichever option you find more convenient.
 
 ```bash
+# Install with Go
 go install github.com/martinohansen/ynabber/cmd/ynabber@latest
+
+# Install with Docker
+docker pull ghcr.io/martinohansen/ynabber:latest
 ```
 
 ## Usage
 
-Ynabber is configured with environment variables. To read from
-[Nordigen](https://nordigen.com/en/) (now known as GoCardless) and write to YNAB
-use these values:
+Ynabber is configured via environment variables. Below is an example setup for
+reading transactions from
+[GoCardless](https://gocardless.com/bank-account-data/) (formerly known as
+Nordigen) and writing them to YNAB.
 
 ```bash
 cat <<EOT >> ynabber.env
@@ -34,19 +43,17 @@ NORDIGEN_SECRET_KEY=<nordigen secret key>
 EOT
 ```
 
-_All valid config options can be found [here](https://pkg.go.dev/github.com/martinohansen/ynabber#Config)_
-
-Once the environment variables are set, run the binary:
+Then run Ynabber:
 
 ```bash
-# Read environment variables from file first
+# Load environment variables from the file
 set -a; . ./ynabber.env; set +a; ynabber
+
+# Then run
 ynabber
 ```
 
-Or run in a container with
-[Docker](https://docs.docker.com/engine/reference/run/):
-
+Or using Docker:
 
 ```bash
 docker run \
@@ -56,32 +63,37 @@ docker run \
     ghcr.io/martinohansen/ynabber:latest
 ```
 
+_All valid config variables can be found [here](https://pkg.go.dev/github.com/martinohansen/ynabber#Config)_
+
 ## Readers
 
-Currently tested readers and verified banks, but any bank supported by Nordigen
-should work.
+Readers are how Ynabber fetches your transactions from the bank. Below are some
+tested examples. Generally, any bank supported by
+[GoCardless](https://gocardless.com/bank-account-data/) (formerly known as
+Nordigen) should work:
 
-| Reader   | Bank            |   |
-|----------|-----------------|---|
-| [Nordigen](/reader/nordigen/)[^1] | ALANDSBANKEN_AABAFI22 | ✅
-| | NORDEA_NDEADKKK | ✅
-| | NORDEA_NDEAFIHH | ✅
-| | NORWEGIAN_FI_NORWNOK1 | ✅
-| | S_PANKKI_SBANFIHH | ✅
+| Reader | Bank | Verified? |
+|:-------|:-----|:---------:|
+| [Nordigen](/reader/nordigen/)[^1] | ALANDSBANKEN_AABAFI22 | ✅ |
+| | NORDEA_NDEADKKK | ✅ |
+| | NORDEA_NDEAFIHH | ✅ |
+| | NORWEGIAN_FI_NORWNOK1 | ✅ |
+| | S_PANKKI_SBANFIHH | ✅ |
 
 [^1]: Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if
 you have problems with a specific bank.
 
 ## Writers
 
-The default writer is YNAB (that's really what this tool is set out to handle)
-but we also have a JSON writer that can be used for testing purposes.
+Writers tell Ynabber where to send the fetched transactions.
 
 | Writer  | Description   |
-|---------|---------------|
-| [YNAB](/writer/ynab/)    | Pushes transactions to YNAB |
-| [JSON](/writer/json/)    | Writes transactions to stdout in JSON format |
+|:--------|:--------------|
+| [YNAB](/writer/ynab/)    | Pushes transactions to a YNAB budget |
+| [JSON](/writer/json/)    | Writes transactions as JSON to stdout (useful for testing) |
 
 ## Contributing
 
-Pull requests are welcome.
+Pull requests are welcome! If you encounter a bug or have an idea for
+improvement, feel free to [open an issue](https://github.com/martinohansen/ynabber/issues/new).
+We’d love your help in making Ynabber better for everyone!
