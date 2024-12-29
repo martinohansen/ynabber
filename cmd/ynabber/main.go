@@ -1,11 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/kelseyhightower/envconfig"
@@ -38,11 +36,11 @@ func main() {
 	setupLogging(cfg.Debug)
 	slog.Info("starting...", "version", versioninfo.Short())
 
-	ynabber := ynabber.Ynabber{}
+	y := ynabber.NewYnabber(&cfg)
 	for _, reader := range cfg.Readers {
 		switch reader {
 		case "nordigen":
-			ynabber.Readers = append(ynabber.Readers, nordigen.NewReader(&cfg))
+			y.Readers = append(y.Readers, nordigen.NewReader(&cfg))
 		default:
 			log.Fatalf("Unknown reader: %s", reader)
 		}
@@ -50,49 +48,14 @@ func main() {
 	for _, writer := range cfg.Writers {
 		switch writer {
 		case "ynab":
-			ynabber.Writers = append(ynabber.Writers, ynab.NewWriter(&cfg))
+			y.Writers = append(y.Writers, ynab.NewWriter(&cfg))
 		case "json":
-			ynabber.Writers = append(ynabber.Writers, json.Writer{})
+			y.Writers = append(y.Writers, json.Writer{})
 		default:
 			log.Fatalf("Unknown writer: %s", writer)
 		}
 	}
 
-	for {
-		start := time.Now()
-		err = run(ynabber)
-		if err != nil {
-			panic(err)
-		} else {
-			slog.Info("run succeeded", "in", time.Since(start))
-			if cfg.Interval > 0 {
-				slog.Info("waiting for next run", "in", cfg.Interval)
-				time.Sleep(cfg.Interval)
-			} else {
-				os.Exit(0)
-			}
-		}
-	}
-}
-
-func run(y ynabber.Ynabber) error {
-	var transactions []ynabber.Transaction
-
-	// Read transactions from all readers
-	for _, reader := range y.Readers {
-		t, err := reader.Bulk()
-		if err != nil {
-			return fmt.Errorf("reading: %w", err)
-		}
-		transactions = append(transactions, t...)
-	}
-
-	// Write transactions to all writers
-	for _, writer := range y.Writers {
-		err := writer.Bulk(transactions)
-		if err != nil {
-			return fmt.Errorf("writing: %w", err)
-		}
-	}
-	return nil
+	// Run Ynabber
+	y.Run()
 }
