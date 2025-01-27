@@ -89,14 +89,10 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 			case "name":
 				for from, to := range w.Config.YNAB.AccountMap {
 					if t.CreditorAccount.Iban == from {
-						return to, nil
+						payee = t.DebtorName
+					} else {
+						payee = t.CreditorName
 					}
-				}
-				// Use either creditor or debtor as the payee
-				if t.CreditorName != "" {
-					payee = t.CreditorName
-				} else if t.DebtorName != "" {
-					payee = t.DebtorName
 				}
 
 			case "additional":
