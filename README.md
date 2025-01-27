@@ -8,6 +8,7 @@ personal finance apps like YNAB.
 See subsection [readers](#readers) and [writers](#writers) for a list of
 supported banks and services.
 
+
 ## Installation
 
 You can use [Go](https://go.dev/) or
