@@ -96,3 +96,57 @@ func TestStrip(t *testing.T) {
 		})
 	}
 }
+
+func TestPayeeFinder(t *testing.T) {
+	type args struct {
+		t       nordigen.Transaction
+		sources []string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		wantPayee string
+		wantErr   bool
+	}{
+		// First source that yields a result should be used
+		{
+			name: "name,unstructured,additional",
+			args: args{
+				t: nordigen.Transaction{
+					CreditorName:                      "",
+					RemittanceInformationUnstructured: "",
+					AdditionalInformation:             "baz",
+				},
+				sources: []string{"name", "unstructured", "additional"},
+			},
+			wantPayee: "baz",
+			wantErr:   false,
+		},
+		// The "+" operator should concat fields
+		{
+			name: "name+unstructured,additional",
+			args: args{
+				t: nordigen.Transaction{
+					CreditorName:                      "foo",
+					RemittanceInformationUnstructured: "bar",
+					AdditionalInformation:             "baz",
+				},
+				sources: []string{"name+unstructured", "additional"},
+			},
+			wantPayee: "foo bar",
+			wantErr:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotPayee, err := payeeFinder(tt.args.t, tt.args.sources)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if gotPayee != tt.wantPayee {
+				t.Errorf("%v, want %v", gotPayee, tt.wantPayee)
+			}
+		})
+	}
+}

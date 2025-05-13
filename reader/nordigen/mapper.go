@@ -53,6 +53,84 @@ func strip(s string, strips []string) string {
 	return strings.TrimSpace(s)
 }
 
+// payeeFinder returns the first non-empty payee from a source which yields a
+// result. Sources can be concatenated using the "+" operator. For example, if
+// both name and unstructured are defined, "name+unstructured" will return the
+// "<name> <unstructured>"
+func payeeFinder(t nordigen.Transaction, sources []string) (payee string, err error) {
+	for _, source := range sources {
+		if payee == "" {
+			if strings.Contains(source, "+") {
+				// Handle concatenation of sources designated by the plus
+				// operator. Concat each part into a single payee string
+				parts := strings.Split(source, "+")
+
+				var values []string
+				for _, part := range parts {
+					value, err := getSourceValue(t, part)
+					if err != nil {
+						return "", err
+					}
+					if value != "" {
+						values = append(values, value)
+					}
+				}
+				if len(values) > 0 {
+					payee = strings.Join(values, " ")
+				}
+
+			} else {
+				// Handle source without concatenation
+				var err error
+				payee, err = getSourceValue(t, source)
+				if err != nil {
+					return "", err
+				}
+			}
+		}
+	}
+	return payee, nil
+}
+
+// getSourceValue yields the value of source from t
+func getSourceValue(t nordigen.Transaction, source string) (string, error) {
+	switch source {
+	case "unstructured":
+		var payee string
+
+		// Use first unstructured string or array that is defied
+		if t.RemittanceInformationUnstructured != "" {
+			payee = t.RemittanceInformationUnstructured
+		} else if t.RemittanceInformationUnstructuredArray != nil {
+			payee = strings.Join(t.RemittanceInformationUnstructuredArray, " ")
+		} else {
+			return "", nil
+		}
+
+		// Unstructured data may need some formatting, some banks
+		// inserts the amount and date which will cause every
+		// transaction to create a new Payee
+		return payeeStripNonAlphanumeric(payee), nil
+
+	case "name":
+		// Use either creditor or debtor as the payee
+		if t.CreditorName != "" {
+			return t.CreditorName, nil
+		} else if t.DebtorName != "" {
+			return t.DebtorName, nil
+		}
+		return "", nil
+
+	case "additional":
+		// Use AdditionalInformation as payee
+		return t.AdditionalInformation, nil
+
+	default:
+		// Return an error if source is not recognized
+		return "", fmt.Errorf("unrecognized source: %s", source)
+	}
+}
+
 // defaultMapper is generic and tries to identify the appropriate mapping
 func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
 	PayeeSource := r.Config.Nordigen.PayeeSource
@@ -67,42 +145,9 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 		return nil, err
 	}
 
-	// Get the Payee from the first data source that returns data in the order
-	// defined by config
-	payee := ""
-	for _, source := range PayeeSource {
-		if payee == "" {
-			switch source {
-			case "unstructured":
-				// Use first unstructured string or array that is defied
-				if t.RemittanceInformationUnstructured != "" {
-					payee = t.RemittanceInformationUnstructured
-				} else if t.RemittanceInformationUnstructuredArray != nil {
-					payee = strings.Join(t.RemittanceInformationUnstructuredArray, " ")
-				}
-
-				// Unstructured data may need some formatting, some banks
-				// inserts the amount and date which will cause every
-				// transaction to create a new Payee
-				payee = payeeStripNonAlphanumeric(payee)
-
-			case "name":
-				// Use either creditor or debtor as the payee
-				if t.CreditorName != "" {
-					payee = t.CreditorName
-				} else if t.DebtorName != "" {
-					payee = t.DebtorName
-				}
-
-			case "additional":
-				// Use AdditionalInformation as payee
-				payee = t.AdditionalInformation
-
-			default:
-				// Return an error if source is not recognized
-				return nil, fmt.Errorf("unrecognized PayeeSource: %s", source)
-			}
-		}
+	payee, err := payeeFinder(t, PayeeSource)
+	if err != nil {
+		return nil, fmt.Errorf("getting payee: %w", err)
 	}
 
 	// Remove elements in payee that is defined in config
