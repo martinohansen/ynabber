@@ -56,6 +56,44 @@ func (cs TransactionStatus) String() string {
 	return string(cs)
 }
 
+// PayeeSources is a slice of PayeeSource groups which can be a single or
+// multiple sources combined. If a group has multiple sources they should be
+// combined into a single payee.
+type PayeeSources [][]PayeeSource
+
+type PayeeSource uint8
+
+const (
+	Name PayeeSource = 1 << iota
+	Unstructured
+	Additional
+)
+
+// Decode value into PayeeSources, each group is separated by a comma and each
+// payee in the group is separated by a plus. I.e "name+unstructured,additional"
+// will yield two groups: [name, unstructured] and [additional]
+func (ps *PayeeSources) Decode(value string) error {
+	parts := strings.Split(value, ",")
+	for _, part := range parts {
+		var group []PayeeSource
+		sources := strings.Split(part, "+")
+		for _, source := range sources {
+			switch strings.TrimSpace(source) {
+			case "name":
+				group = append(group, Name)
+			case "unstructured":
+				group = append(group, Unstructured)
+			case "additional":
+				group = append(group, Additional)
+			default:
+				return fmt.Errorf("unknown value")
+			}
+		}
+		*ps = append(*ps, group)
+	}
+	return nil
+}
+
 // Config is loaded from the environment during execution with cmd/ynabber
 type Config struct {
 	// DataDir is the path for storing files
@@ -94,10 +132,14 @@ type Nordigen struct {
 	// that yields a result will be used. Valid options are: unstructured, name
 	// and additional.
 	//
-	//	* unstructured: uses the `RemittanceInformationUnstructured` field
-	//	* name: uses either the either `debtorName` or `creditorName` field
-	//	* additional: uses the `AdditionalInformation` field
-	PayeeSource []string `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name,additional"`
+	//  * unstructured: uses the `RemittanceInformationUnstructured` field
+	//  * name: uses either the either `debtorName` or `creditorName` field
+	//  * additional: uses the `AdditionalInformation` field
+	//
+	// The sources can be combined with the "+" operator. For example:
+	// "name+additional,unstructured" will combine name and additional into a
+	// single Payee or use unstructured if both are empty.
+	PayeeSource PayeeSources `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name,additional"`
 
 	// PayeeStrip is a list of words to remove from Payee. For example:
 	// "foo,bar"

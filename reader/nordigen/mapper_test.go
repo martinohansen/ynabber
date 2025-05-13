@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/frieser/nordigen-go-lib/v2"
+	"github.com/martinohansen/ynabber"
 )
 
 func TestParseAmount(t *testing.T) {
@@ -100,13 +101,12 @@ func TestStrip(t *testing.T) {
 func TestPayeeFinder(t *testing.T) {
 	type args struct {
 		t       nordigen.Transaction
-		sources []string
+		sources ynabber.PayeeSources
 	}
 	tests := []struct {
-		name      string
-		args      args
-		wantPayee string
-		wantErr   bool
+		name string
+		args args
+		want string
 	}{
 		// First source that yields a result should be used
 		{
@@ -117,10 +117,13 @@ func TestPayeeFinder(t *testing.T) {
 					RemittanceInformationUnstructured: "",
 					AdditionalInformation:             "baz",
 				},
-				sources: []string{"name", "unstructured", "additional"},
+				sources: ynabber.PayeeSources{
+					{ynabber.Name},
+					{ynabber.Unstructured},
+					{ynabber.Additional},
+				},
 			},
-			wantPayee: "baz",
-			wantErr:   false,
+			want: "baz",
 		},
 		// The "+" operator should concat fields
 		{
@@ -131,21 +134,36 @@ func TestPayeeFinder(t *testing.T) {
 					RemittanceInformationUnstructured: "bar",
 					AdditionalInformation:             "baz",
 				},
-				sources: []string{"name+unstructured", "additional"},
+				sources: ynabber.PayeeSources{
+					{ynabber.Name, ynabber.Unstructured},
+					{ynabber.Additional},
+				},
 			},
-			wantPayee: "foo bar",
-			wantErr:   false,
+			want: "foo bar",
+		},
+		// No sources yields a result
+		{
+			name: "empty",
+			args: args{
+				t: nordigen.Transaction{
+					CreditorName:                      "",
+					RemittanceInformationUnstructured: "",
+					AdditionalInformation:             "",
+				},
+				sources: ynabber.PayeeSources{
+					{ynabber.Name},
+					{ynabber.Unstructured},
+					{ynabber.Additional},
+				},
+			},
+			want: "",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotPayee, err := payeeFinder(tt.args.t, tt.args.sources)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if gotPayee != tt.wantPayee {
-				t.Errorf("%v, want %v", gotPayee, tt.wantPayee)
+			got := payeeFinder(tt.args.t, tt.args.sources)
+			if got != tt.want {
+				t.Errorf("%v, want %v", got, tt.want)
 			}
 		})
 	}

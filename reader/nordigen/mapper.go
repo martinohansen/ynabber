@@ -53,82 +53,60 @@ func strip(s string, strips []string) string {
 	return strings.TrimSpace(s)
 }
 
-// payeeFinder returns the first non-empty payee from a source which yields a
-// result. Sources can be concatenated using the "+" operator. For example, if
-// both name and unstructured are defined, "name+unstructured" will return the
-// "<name> <unstructured>"
-func payeeFinder(t nordigen.Transaction, sources []string) (payee string, err error) {
-	for _, source := range sources {
-		if payee == "" {
-			if strings.Contains(source, "+") {
-				// Handle concatenation of sources designated by the plus
-				// operator. Concat each part into a single payee string
-				parts := strings.Split(source, "+")
-
-				var values []string
-				for _, part := range parts {
-					value, err := getSourceValue(t, part)
-					if err != nil {
-						return "", err
-					}
-					if value != "" {
-						values = append(values, value)
-					}
-				}
-				if len(values) > 0 {
-					payee = strings.Join(values, " ")
-				}
-
-			} else {
-				// Handle source without concatenation
-				var err error
-				payee, err = getSourceValue(t, source)
-				if err != nil {
-					return "", err
-				}
+// payeeFinder returns the first group of sources which yields a result. Each
+// source in a group is concatenated with a space. If no sources yields a result
+// an empty string is returned.
+func payeeFinder(t nordigen.Transaction, sources ynabber.PayeeSources) (payee string) {
+	values := make([]string, 0)
+	for _, group := range sources {
+		for _, source := range group {
+			value := getSourceValue(t, source)
+			if value != "" {
+				values = append(values, value)
 			}
 		}
+		if len(values) > 0 {
+			// Return the first group of sources which yields a result
+			return strings.Join(values, " ")
+		}
 	}
-	return payee, nil
+	return "" // No sources yielded a result
 }
 
-// getSourceValue yields the value of source from t
-func getSourceValue(t nordigen.Transaction, source string) (string, error) {
+// getSourceValue returns the value of source from t
+func getSourceValue(t nordigen.Transaction, source ynabber.PayeeSource) string {
 	switch source {
-	case "unstructured":
+	case ynabber.Unstructured:
 		var payee string
 
-		// Use first unstructured string or array that is defied
+		// Use first unstructured string or array that is defined
 		if t.RemittanceInformationUnstructured != "" {
 			payee = t.RemittanceInformationUnstructured
 		} else if t.RemittanceInformationUnstructuredArray != nil {
 			payee = strings.Join(t.RemittanceInformationUnstructuredArray, " ")
 		} else {
-			return "", nil
+			return ""
 		}
 
 		// Unstructured data may need some formatting, some banks
 		// inserts the amount and date which will cause every
 		// transaction to create a new Payee
-		return payeeStripNonAlphanumeric(payee), nil
+		return payeeStripNonAlphanumeric(payee)
 
-	case "name":
+	case ynabber.Name:
 		// Use either creditor or debtor as the payee
 		if t.CreditorName != "" {
-			return t.CreditorName, nil
+			return t.CreditorName
 		} else if t.DebtorName != "" {
-			return t.DebtorName, nil
+			return t.DebtorName
 		}
-		return "", nil
+		return ""
 
-	case "additional":
+	case ynabber.Additional:
 		// Use AdditionalInformation as payee
-		return t.AdditionalInformation, nil
-
-	default:
-		// Return an error if source is not recognized
-		return "", fmt.Errorf("unrecognized source: %s", source)
+		return t.AdditionalInformation
 	}
+	return ""
 }
 
 // defaultMapper is generic and tries to identify the appropriate mapping
@@ -145,10 +123,7 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 		return nil, err
 	}
 
-	payee, err := payeeFinder(t, PayeeSource)
-	if err != nil {
-		return nil, fmt.Errorf("getting payee: %w", err)
-	}
+	payee := payeeFinder(t, PayeeSource)
 
 	// Remove elements in payee that is defined in config
 	if r.Config.Nordigen.PayeeStrip != nil {
