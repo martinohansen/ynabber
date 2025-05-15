@@ -63,7 +63,7 @@ docker run \
     ghcr.io/martinohansen/ynabber:latest
 ```
 
-_All valid config variables can be found [here](https://pkg.go.dev/github.com/martinohansen/ynabber#Config)_
+_See [CONFIGURATION.md](./CONFIGURATION.md) for all valid settings_
 
 ## Readers
 

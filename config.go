@@ -94,6 +94,8 @@ func (ps *PayeeSources) Decode(value string) error {
 	return nil
 }
 
+//go:generate go run ./cmd/gendocs -o CONFIGURATION.md
+
 // Config is loaded from the environment during execution with cmd/ynabber
 type Config struct {
 	// DataDir is the path for storing files
