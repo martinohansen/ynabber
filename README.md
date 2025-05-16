@@ -97,3 +97,5 @@ Writers tell Ynabber where to send the fetched transactions.
 Pull requests are welcome! If you encounter a bug or have an idea for
 improvement, feel free to [open an issue](https://github.com/martinohansen/ynabber/issues/new).
 We’d love your help in making Ynabber better for everyone!
+
+_[bitcoin:bc1qct2au09va7rk5psevmesalkaxtjmdjun9x2r3a](bitcoin:bc1qct2au09va7rk5psevmesalkaxtjmdjun9x2r3a)_
