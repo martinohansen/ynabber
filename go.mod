@@ -4,7 +4,7 @@ go 1.23.0
 
 toolchain go1.23.5
 
-require github.com/frieser/nordigen-go-lib/v2 v2.1.10
+require github.com/frieser/nordigen-go-lib/v2 v2.1.11-0.20250516212621-3869e6febb36
 
 require github.com/kelseyhightower/envconfig v1.4.0
 
