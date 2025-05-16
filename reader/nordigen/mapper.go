@@ -17,6 +17,11 @@ func (r Reader) Mapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Tran
 	case r.Config.BankID == "NORDEA_NDEADKKK":
 		return r.nordeaMapper(a, t)
 
+	// SPAREBANK SR BANK requires the proprietaryBankTransactionCode as the
+	// primary identifier since the other Nordigen ids are unstable.
+	case r.Config.BankID == "SPAREBANK_SR_BANK_SPRONO22":
+		return r.srBankMapper(a, t)
+
 	default:
 		return r.defaultMapper(a, t)
 	}
@@ -137,6 +142,10 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 		id = t.InternalTransactionId
 	case "TransactionId":
 		id = t.TransactionId
+	case "ProprietaryBankTransactionCode":
+		// In the current nordigen-go-lib implementation the proprietary
+		// transaction code is mapped to BankTransactionCode.
+		id = t.BankTransactionCode
 	default:
 		return nil, fmt.Errorf("unrecognized TransactionID: %s", TransactionID)
 	}
@@ -163,4 +172,22 @@ func (r Reader) nordeaMapper(a ynabber.Account, t nordigen.Transaction) (*ynabbe
 	}
 
 	return r.defaultMapper(a, t)
+}
+
+// srBankMapper handles SPAREBANK_SR_BANK_SPRONO22 transactions specifically.
+// The bank changes TransactionId over time, ProprietaryBankTransactionCode does
+// not.
+func (r Reader) srBankMapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
+	transaction, err := r.defaultMapper(a, t)
+	if err != nil {
+		return nil, err
+	}
+	if transaction == nil {
+		return nil, nil
+	}
+
+	// Override the ID with the ProprietaryBankTransactionCode field.
+	transaction.ID = ynabber.ID(t.ProprietaryBankTransactionCode)
+
+	return transaction, nil
 }
