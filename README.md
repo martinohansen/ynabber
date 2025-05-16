@@ -79,6 +79,7 @@ Nordigen) should work:
 | | NORDEA_NDEAFIHH | ✅ |
 | | NORWEGIAN_FI_NORWNOK1 | ✅ |
 | | S_PANKKI_SBANFIHH | ✅ |
+| | SPAREBANK_SR_BANK_SPRONO22 | ✅ |
 
 [^1]: Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if
 you have problems with a specific bank.
