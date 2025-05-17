@@ -6,29 +6,41 @@ import (
 	"log/slog"
 
 	"github.com/frieser/nordigen-go-lib/v2"
+	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 )
 
 const rateLimitExceededStatusCode = 429
 
 type Reader struct {
-	Config *ynabber.Config
+	Config Config
 	Client *nordigen.Client
 	logger *slog.Logger
+
+	// TODO(Martin): Move into Nordigen config struct
+	DataDir string
 }
 
 // NewReader returns a new nordigen reader or panics
-func NewReader(cfg *ynabber.Config) Reader {
-	client, err := nordigen.NewClient(cfg.Nordigen.SecretID, cfg.Nordigen.SecretKey)
+func NewReader(dataDir string) (Reader, error) {
+	cfg := Config{}
+	err := envconfig.Process("", &cfg)
 	if err != nil {
-		panic("Failed to create nordigen client")
+		return Reader{}, fmt.Errorf("processing config: %w", err)
+	}
+
+	client, err := nordigen.NewClient(cfg.SecretID, cfg.SecretKey)
+	if err != nil {
+		return Reader{}, fmt.Errorf("creating nordigen client: %w", err)
 	}
 
 	return Reader{
 		Config: cfg,
 		Client: client,
 		logger: slog.Default().With("reader", "nordigen"),
-	}
+
+		DataDir: dataDir,
+	}, nil
 }
 
 func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([]ynabber.Transaction, error) {

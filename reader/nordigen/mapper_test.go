@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/frieser/nordigen-go-lib/v2"
-	"github.com/martinohansen/ynabber"
 )
 
 func TestParseAmount(t *testing.T) {
@@ -101,7 +100,7 @@ func TestStrip(t *testing.T) {
 func TestPayeeFinder(t *testing.T) {
 	type args struct {
 		t       nordigen.Transaction
-		sources ynabber.PayeeSources
+		sources PayeeSources
 	}
 	tests := []struct {
 		name string
@@ -117,10 +116,10 @@ func TestPayeeFinder(t *testing.T) {
 					RemittanceInformationUnstructured: "",
 					AdditionalInformation:             "baz",
 				},
-				sources: ynabber.PayeeSources{
-					{ynabber.Name},
-					{ynabber.Unstructured},
-					{ynabber.Additional},
+				sources: PayeeSources{
+					{Name},
+					{Unstructured},
+					{Additional},
 				},
 			},
 			want: "baz",
@@ -134,9 +133,9 @@ func TestPayeeFinder(t *testing.T) {
 					RemittanceInformationUnstructured: "bar",
 					AdditionalInformation:             "baz",
 				},
-				sources: ynabber.PayeeSources{
-					{ynabber.Name, ynabber.Unstructured},
-					{ynabber.Additional},
+				sources: PayeeSources{
+					{Name, Unstructured},
+					{Additional},
 				},
 			},
 			want: "foo bar",
@@ -150,10 +149,10 @@ func TestPayeeFinder(t *testing.T) {
 					RemittanceInformationUnstructured: "",
 					AdditionalInformation:             "",
 				},
-				sources: ynabber.PayeeSources{
-					{ynabber.Name},
-					{ynabber.Unstructured},
-					{ynabber.Additional},
+				sources: PayeeSources{
+					{Name},
+					{Unstructured},
+					{Additional},
 				},
 			},
 			want: "",

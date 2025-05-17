@@ -1,3 +1,5 @@
+// This tool parses config structs and envconfig tags to generates user friendly
+// Markdown documentation. Usage: gendocs -file *.go > CONFIGURATION.md
 package main
 
 import (
@@ -11,9 +13,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // strSlice is a helper flag.Value that collects repeated string flags into a
@@ -28,15 +32,6 @@ func (s *strSlice) Set(val string) error {
 	*s = append(*s, val)
 	return nil
 }
-
-// This tool parses the config.go file in the repository root and generates
-// Markdown documentation for each exported struct (Config, Nordigen, YNAB).
-//
-// Usage (via go:generate):
-//
-//     go run ./cmd/gendocs > CONFIGURATION.md
-//
-// It can also be executed manually from the project root.
 
 func main() {
 	var (
@@ -62,11 +57,14 @@ func main() {
 		fatal(fmt.Errorf("no files matched given -file patterns"))
 	}
 
+	// Collect exported structs along with their source package.
+	type structEntry struct {
+		spec *ast.TypeSpec
+		pkg  string
+	}
+	var structEntries []structEntry
+
 	fset := token.NewFileSet()
-
-	// Collect exported struct type specs from all matched files.
-	typeSpecs := map[string]*ast.TypeSpec{}
-
 	for _, path := range files {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
@@ -77,6 +75,9 @@ func main() {
 		if err != nil {
 			fatal(err)
 		}
+
+		// capture current file's package name
+		pkg := fileAst.Name.Name
 
 		for _, decl := range fileAst.Decls {
 			genDecl, ok := decl.(*ast.GenDecl)
@@ -90,35 +91,26 @@ func main() {
 					continue
 				}
 				if _, ok := typeSpec.Type.(*ast.StructType); ok {
-					// If the struct name already exists we prefer the first occurrence.
-					if _, exists := typeSpecs[typeSpec.Name.Name]; !exists {
-						typeSpecs[typeSpec.Name.Name] = typeSpec
-					}
+					structEntries = append(structEntries, structEntry{spec: typeSpec, pkg: pkg})
 				}
 			}
 		}
 	}
 
-	// Deterministic order of sections.
-	names := make([]string, 0, len(typeSpecs))
-	for n := range typeSpecs {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-
+	// Generate sections in the order encountered across files.
 	var out bytes.Buffer
 
-	// Title
+	// Top-level title
 	fmt.Fprintf(&out, "# %s\n\n", title)
 	fmt.Fprintf(&out, "This document is generated from configuration structs in the source code using `go generate`. **Do not edit manually.**\n\n")
 
 	// Generate a section for each struct.
-	for _, name := range names {
-		spec := typeSpecs[name]
+	for _, entry := range structEntries {
+		spec := entry.spec
 		structType := spec.Type.(*ast.StructType)
 
-		// Section heading
-		fmt.Fprintf(&out, "## %s\n\n", name)
+		// Section heading: package name of this struct
+		fmt.Fprintf(&out, "## %s\n\n", cases.Title(language.English).String(entry.pkg))
 
 		// Doc comment for type if present.
 		if spec.Doc != nil {
