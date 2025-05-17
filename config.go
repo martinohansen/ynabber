@@ -94,7 +94,7 @@ func (ps *PayeeSources) Decode(value string) error {
 	return nil
 }
 
-//go:generate go run ./cmd/gendocs -o CONFIGURATION.md
+//go:generate go run ./cmd/gendocs -file config.go -o CONFIGURATION.md
 
 // Config is loaded from the environment during execution with cmd/ynabber
 type Config struct {
@@ -150,7 +150,8 @@ type Nordigen struct {
 	// TransactionID is the field to use as transaction ID. Not all banks use
 	// the same field and some even change the ID over time.
 	//
-	// Valid options are: TransactionId, InternalTransactionId
+	// Valid options are: TransactionId, InternalTransactionId,
+	// ProprietaryBankTransactionCode
 	TransactionID string `envconfig:"NORDIGEN_TRANSACTION_ID" default:"TransactionId"`
 
 	// RequisitionHook is a exec hook thats executed at various stages of the
