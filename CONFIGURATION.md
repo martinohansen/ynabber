@@ -2,7 +2,7 @@
 
 This document is generated from configuration structs in the source code using `go generate`. **Do not edit manually.**
 
-## Config
+## Ynabber
 
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|
@@ -25,7 +25,7 @@ This document is generated from configuration structs in the source code using `
 | NORDIGEN_REQUISITION_HOOK | `string` | - | RequisitionHook is a exec hook thats executed at various stages of the<br>requisition process. The hook is executed with the following arguments:<br><status> <link> |
 | NORDIGEN_REQUISITION_FILE | `string` | - | RequisitionFile overrides the file used to store the requisition. This<br>file is placed inside the YNABBER_DATADIR. |
 
-## YNAB
+## Ynab
 
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|

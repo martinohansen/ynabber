@@ -26,7 +26,7 @@ func getAccountTransactions(t nordigen.Transaction) nordigen.AccountTransactions
 
 func TestToYnabber(t *testing.T) {
 	logger := slog.Default()
-	var defaultConfig ynabber.Config
+	var defaultConfig Config
 	_ = envconfig.Process("", &defaultConfig)
 
 	type args struct {
@@ -45,7 +45,7 @@ func TestToYnabber(t *testing.T) {
 			// Tests a common Nordigen transaction from NORDEA_NDEADKKK with the
 			// default config to highlight any breaking changes.
 			bankID: "NORDEA_NDEADKKK",
-			reader: Reader{Config: &defaultConfig, logger: logger},
+			reader: Reader{Config: defaultConfig, logger: logger},
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: getAccountTransactions(nordigen.Transaction{
@@ -87,7 +87,7 @@ func TestToYnabber(t *testing.T) {
 			// Nordea should remove P transactions
 			name:   "Remove P transactions",
 			bankID: "NORDEA_NDEADKKK",
-			reader: Reader{Config: &defaultConfig, logger: logger},
+			reader: Reader{Config: defaultConfig, logger: logger},
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: getAccountTransactions(nordigen.Transaction{
@@ -111,7 +111,7 @@ func TestToYnabber(t *testing.T) {
 		{
 			// Test transaction from SEB_KORT_AB_NO_SKHSFI21
 			bankID: "SEB_KORT_AB_NO_SKHSFI21",
-			reader: Reader{Config: &defaultConfig, logger: logger},
+			reader: Reader{Config: defaultConfig, logger: logger},
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: getAccountTransactions(nordigen.Transaction{
@@ -160,7 +160,7 @@ func TestToYnabber(t *testing.T) {
 
 			// Set the BankID to the test case but keep the rest of the config
 			// as is
-			tt.reader.Config.Nordigen.BankID = tt.bankID
+			tt.reader.Config.BankID = tt.bankID
 
 			got, err := tt.reader.toYnabbers(tt.args.account, tt.args.t)
 			if (err != nil) != tt.wantErr {

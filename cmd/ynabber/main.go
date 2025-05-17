@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -25,12 +25,17 @@ func setupLogging(debug bool) {
 	slog.SetDefault(logger)
 }
 
+func Exit(msg string) {
+	fmt.Println(msg)
+	os.Exit(1)
+}
+
 func main() {
 	// Read config from env
 	var cfg ynabber.Config
 	err := envconfig.Process("", &cfg)
 	if err != nil {
-		log.Fatal(err.Error())
+		Exit(err.Error())
 	}
 
 	setupLogging(cfg.Debug)
@@ -40,19 +45,27 @@ func main() {
 	for _, reader := range cfg.Readers {
 		switch reader {
 		case "nordigen":
-			y.Readers = append(y.Readers, nordigen.NewReader(&cfg))
+			nordigenReader, err := nordigen.NewReader(cfg.DataDir)
+			if err != nil {
+				Exit(fmt.Sprintf("Failed to create nordigen reader: %v", err))
+			}
+			y.Readers = append(y.Readers, nordigenReader)
 		default:
-			log.Fatalf("Unknown reader: %s", reader)
+			Exit(fmt.Sprintf("Unknown reader: %s", reader))
 		}
 	}
 	for _, writer := range cfg.Writers {
 		switch writer {
 		case "ynab":
-			y.Writers = append(y.Writers, ynab.NewWriter(&cfg))
+			ynabWriter, err := ynab.NewWriter()
+			if err != nil {
+				Exit(fmt.Sprintf("Failed to create ynab writer: %v", err))
+			}
+			y.Writers = append(y.Writers, ynabWriter)
 		case "json":
 			y.Writers = append(y.Writers, json.Writer{})
 		default:
-			log.Fatalf("Unknown writer: %s", writer)
+			Exit(fmt.Sprintf("Unknown writer: %s", writer))
 		}
 	}
 

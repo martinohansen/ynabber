@@ -20,13 +20,13 @@ const RequisitionRedirect = "https://raw.githubusercontent.com/martinohansen/yna
 func (r Reader) requisitionStore() string {
 	// Use BankID or RequisitionFile as filename
 	var file string
-	if r.Config.Nordigen.RequisitionFile == "" {
-		file = r.Config.Nordigen.BankID
+	if r.Config.RequisitionFile == "" {
+		file = r.Config.BankID
 	} else {
-		file = r.Config.Nordigen.RequisitionFile
+		file = r.Config.RequisitionFile
 	}
 
-	return path.Clean(fmt.Sprintf("%s/%s.json", r.Config.DataDir, file))
+	return path.Clean(fmt.Sprintf("%s/%s.json", r.DataDir, file))
 }
 
 // Requisition tries to get requisition from disk, if it fails it will create a
@@ -80,7 +80,7 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 		Redirect:      RequisitionRedirect,
 		Reference:     strconv.Itoa(int(time.Now().Unix())),
 		Agreement:     "",
-		InstitutionId: r.Config.Nordigen.BankID,
+		InstitutionId: r.Config.BankID,
 	})
 	if err != nil {
 		return nordigen.Requisition{}, fmt.Errorf("CreateRequisition: %w", err)
@@ -109,8 +109,8 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 
 // requisitionHook executes the hook with the status and link as arguments
 func (r Reader) requisitionHook(req nordigen.Requisition) {
-	if r.Config.Nordigen.RequisitionHook != "" {
-		cmd := exec.Command(r.Config.Nordigen.RequisitionHook, req.Status, req.Link)
+	if r.Config.RequisitionHook != "" {
+		cmd := exec.Command(r.Config.RequisitionHook, req.Status, req.Link)
 		_, err := cmd.Output()
 		if err != nil {
 			log.Printf("failed to run requisition hook: %s", err)
