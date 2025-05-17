@@ -1,4 +1,4 @@
-package ynabber
+package ynab
 
 import (
 	"testing"

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 )
 
@@ -37,19 +38,25 @@ type Transactions struct {
 }
 
 type Writer struct {
-	Config *ynabber.Config
+	Config Config
 	logger *slog.Logger
 }
 
 // NewWriter returns a new YNAB writer
-func NewWriter(cfg *ynabber.Config) Writer {
+func NewWriter() (Writer, error) {
+	cfg := Config{}
+	err := envconfig.Process("", &cfg)
+	if err != nil {
+		return Writer{}, fmt.Errorf("processing config: %w", err)
+	}
+
 	return Writer{
 		Config: cfg,
 		logger: slog.Default().With(
 			"writer", "ynab",
-			"budget_id", cfg.YNAB.BudgetID,
+			"budget_id", cfg.BudgetID,
 		),
-	}
+	}, nil
 }
 
 // accountParser takes IBAN and returns the matching YNAB account ID in
@@ -79,7 +86,7 @@ func makeID(t ynabber.Transaction) string {
 }
 
 func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
-	accountID, err := accountParser(source.Account.IBAN, w.Config.YNAB.AccountMap)
+	accountID, err := accountParser(source.Account.IBAN, w.Config.AccountMap)
 	if err != nil {
 		return Transaction{}, err
 	}
@@ -102,8 +109,8 @@ func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
 
 	// If SwapFlow is defined check if the account is configured to swap inflow
 	// to outflow. If so swap it by using the Negate method.
-	if w.Config.YNAB.SwapFlow != nil {
-		for _, account := range w.Config.YNAB.SwapFlow {
+	if w.Config.SwapFlow != nil {
+		for _, account := range w.Config.SwapFlow {
 			if account == source.Account.IBAN {
 				source.Amount = source.Amount.Negate()
 			}
@@ -117,7 +124,7 @@ func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
 		Amount:    source.Amount.String(),
 		PayeeName: payee,
 		Memo:      memo,
-		Cleared:   string(w.Config.YNAB.Cleared),
+		Cleared:   string(w.Config.Cleared),
 		Approved:  false,
 	}
 	w.logger.Debug("mapped transaction", "from", source, "to", transaction)
@@ -129,8 +136,8 @@ func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
 func (w Writer) checkTransactionDateValidity(date time.Time) bool {
 	now := time.Now()
 	fiveYearsAgo := now.AddDate(-5, 0, 0)
-	fromDate := time.Time(w.Config.YNAB.FromDate)
-	delay := w.Config.YNAB.Delay
+	fromDate := time.Time(w.Config.FromDate)
+	delay := w.Config.Delay
 
 	return date.After(fiveYearsAgo) && date.After(fromDate) && date.Before(now.Add(-delay))
 }
@@ -166,7 +173,7 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 		return nil
 	}
 
-	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", w.Config.YNAB.BudgetID)
+	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", w.Config.BudgetID)
 
 	payload, err := json.Marshal(y)
 	if err != nil {
@@ -180,7 +187,7 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 		return err
 	}
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", w.Config.YNAB.Token))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", w.Config.Token))
 
 	res, err := client.Do(req)
 	if err != nil {

@@ -1,6 +1,8 @@
 module github.com/martinohansen/ynabber
 
-go 1.23
+go 1.23.0
+
+toolchain go1.23.5
 
 require github.com/frieser/nordigen-go-lib/v2 v2.1.10
 
@@ -8,4 +10,7 @@ require github.com/kelseyhightower/envconfig v1.4.0
 
 require github.com/carlmjohnson/versioninfo v0.22.5
 
-require github.com/google/go-cmp v0.6.0
+require (
+	github.com/google/go-cmp v0.6.0
+	golang.org/x/text v0.25.0
+)

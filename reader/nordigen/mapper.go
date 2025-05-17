@@ -14,7 +14,7 @@ import (
 // Mapper uses the most specific mapper for the bank in question
 func (r Reader) Mapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
 	switch {
-	case r.Config.Nordigen.BankID == "NORDEA_NDEADKKK":
+	case r.Config.BankID == "NORDEA_NDEADKKK":
 		return r.nordeaMapper(a, t)
 
 	default:
@@ -56,7 +56,7 @@ func strip(s string, strips []string) string {
 // payeeFinder returns the first group of sources which yields a result. Each
 // source in a group is concatenated with a space. If no sources yields a result
 // an empty string is returned.
-func payeeFinder(t nordigen.Transaction, sources ynabber.PayeeSources) (payee string) {
+func payeeFinder(t nordigen.Transaction, sources PayeeSources) (payee string) {
 	values := make([]string, 0)
 	for _, group := range sources {
 		for _, source := range group {
@@ -74,9 +74,9 @@ func payeeFinder(t nordigen.Transaction, sources ynabber.PayeeSources) (payee st
 }
 
 // getSourceValue returns the value of source from t
-func getSourceValue(t nordigen.Transaction, source ynabber.PayeeSource) string {
+func getSourceValue(t nordigen.Transaction, source PayeeSource) string {
 	switch source {
-	case ynabber.Unstructured:
+	case Unstructured:
 		var payee string
 
 		// Use first unstructured string or array that is defined
@@ -93,7 +93,7 @@ func getSourceValue(t nordigen.Transaction, source ynabber.PayeeSource) string {
 		// transaction to create a new Payee
 		return payeeStripNonAlphanumeric(payee)
 
-	case ynabber.Name:
+	case Name:
 		// Use either creditor or debtor as the payee
 		if t.CreditorName != "" {
 			return t.CreditorName
@@ -102,7 +102,7 @@ func getSourceValue(t nordigen.Transaction, source ynabber.PayeeSource) string {
 		}
 		return ""
 
-	case ynabber.Additional:
+	case Additional:
 		// Use AdditionalInformation as payee
 		return t.AdditionalInformation
 	}
@@ -111,8 +111,8 @@ func getSourceValue(t nordigen.Transaction, source ynabber.PayeeSource) string {
 
 // defaultMapper is generic and tries to identify the appropriate mapping
 func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
-	PayeeSource := r.Config.Nordigen.PayeeSource
-	TransactionID := r.Config.Nordigen.TransactionID
+	PayeeSource := r.Config.PayeeSource
+	TransactionID := r.Config.TransactionID
 
 	amount, err := parseAmount(t)
 	if err != nil {
@@ -126,8 +126,8 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 	payee := payeeFinder(t, PayeeSource)
 
 	// Remove elements in payee that is defined in config
-	if r.Config.Nordigen.PayeeStrip != nil {
-		payee = strip(payee, r.Config.Nordigen.PayeeStrip)
+	if r.Config.PayeeStrip != nil {
+		payee = strip(payee, r.Config.PayeeStrip)
 	}
 
 	// Set the transaction ID according to config

@@ -1,6 +1,7 @@
 package ynab
 
 import (
+	"log/slog"
 	"reflect"
 	"testing"
 	"time"
@@ -14,14 +15,14 @@ func TestMakeID(t *testing.T) {
 	var maxLength = 32
 
 	// Read config from env
-	var defaultConfig ynabber.Config
+	var defaultConfig Config
 	err := envconfig.Process("", &defaultConfig)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 
 	type args struct {
-		cfg ynabber.Config
+		cfg Config
 		t   ynabber.Transaction
 	}
 	tests := []struct {
@@ -32,7 +33,7 @@ func TestMakeID(t *testing.T) {
 		{
 			name: "v2",
 			args: args{
-				ynabber.Config{},
+				Config{},
 				ynabber.Transaction{Date: time.Date(2022, 12, 24, 0, 0, 0, 0, time.UTC)},
 			},
 			want: "YBBR:5ca3430298b7fb93d2f4fe1e302",
@@ -90,8 +91,10 @@ func TestAccountParser(t *testing.T) {
 }
 
 func TestYnabberToYNAB(t *testing.T) {
+	logger := slog.Default()
+
 	type args struct {
-		cfg ynabber.Config
+		cfg Config
 		t   ynabber.Transaction
 	}
 	tests := []struct {
@@ -103,10 +106,8 @@ func TestYnabberToYNAB(t *testing.T) {
 		{
 			name: "Default",
 			args: args{
-				cfg: ynabber.Config{
-					YNAB: ynabber.YNAB{
-						AccountMap: map[string]string{"foobar": "abc"},
-					},
+				cfg: Config{
+					AccountMap: map[string]string{"foobar": "abc"},
 				},
 				t: ynabber.Transaction{
 					Account: ynabber.Account{IBAN: "foobar"},
@@ -125,11 +126,9 @@ func TestYnabberToYNAB(t *testing.T) {
 		{
 			name: "SwapFlow",
 			args: args{
-				cfg: ynabber.Config{
-					YNAB: ynabber.YNAB{
-						SwapFlow:   []string{"foobar"},
-						AccountMap: map[string]string{"foobar": "abc"},
-					},
+				cfg: Config{
+					SwapFlow:   []string{"foobar"},
+					AccountMap: map[string]string{"foobar": "abc"},
 				},
 				t: ynabber.Transaction{
 					Account: ynabber.Account{IBAN: "foobar"},
@@ -148,7 +147,10 @@ func TestYnabberToYNAB(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			writer := NewWriter(&tt.args.cfg)
+			writer := Writer{
+				Config: tt.args.cfg,
+				logger: logger,
+			}
 			got, err := writer.toYNAB(tt.args.t)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
@@ -163,7 +165,7 @@ func TestYnabberToYNAB(t *testing.T) {
 
 func TestValidTransaction(t *testing.T) {
 	yesterday := time.Now().AddDate(-1, 0, 0)
-	writer := Writer{Config: &ynabber.Config{}, logger: nil}
+	writer := Writer{Config: Config{}, logger: nil}
 
 	tests := []struct {
 		name     string
@@ -207,8 +209,8 @@ func TestValidTransaction(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			writer.Config.YNAB.FromDate = ynabber.Date(tt.fromDate)
-			writer.Config.YNAB.Delay = tt.delay
+			writer.Config.FromDate = Date(tt.fromDate)
+			writer.Config.Delay = tt.delay
 
 			if got := writer.checkTransactionDateValidity(tt.date); got != tt.want {
 				t.Errorf("got = %v, want %v", got, tt.want)
