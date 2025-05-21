@@ -3,6 +3,7 @@ package ynabber
 import (
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -95,8 +96,12 @@ func (y *Ynabber) Run() {
 		}(writer, channels[c])
 	}
 
+	var wg sync.WaitGroup
 	for _, r := range y.Readers {
+		wg.Add(1) // Increment the counter for each goroutine
 		go func(reader Reader) {
+			defer wg.Done() // Decrement the counter when the goroutine completes
+
 			for {
 				start := time.Now()
 				batch, err := reader.Bulk()
@@ -121,6 +126,7 @@ func (y *Ynabber) Run() {
 			}
 		}(r)
 	}
-
-	select {}
+	wg.Wait() // Wait until all readers exit(interval=0) or end due to other reasons
+	y.logger.Info("all readers done")
+	close(batches) // Close the batches channel to signal completion
 }
