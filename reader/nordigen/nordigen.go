@@ -100,8 +100,12 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		if err != nil {
 			var apiErr *nordigen.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == rateLimitExceededStatusCode {
-				logger.Warn("rate limit exceeded, skipping account")
-				continue
+				if r.Config.RateLimitIsError {
+					return nil, fmt.Errorf("rate limit exceeded")
+				} else {
+					logger.Warn("rate limit exceeded, skipping account")
+					continue
+				}
 			}
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}

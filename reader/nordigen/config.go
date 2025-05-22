@@ -75,6 +75,11 @@ type Config struct {
 	// ProprietaryBankTransactionCode
 	TransactionID string `envconfig:"NORDIGEN_TRANSACTION_ID" default:"TransactionId"`
 
+	// Is running into Gocardless ratelimit considered an error?
+	// Error may be useful in some scenarios such as one time runs.
+	// By default rate limit is not an error and reading will be retried after the sleep interval.
+	RateLimitIsError bool `envconfig:"NORDIGEN_RATELIMITERROR" default:"false"`
+
 	// RequisitionHook is a exec hook thats executed at various stages of the
 	// requisition process. The hook is executed with the following arguments:
 	// <status> <link>
