@@ -5,10 +5,9 @@ import (
 	"strings"
 )
 
-// PayeeSources is a slice of PayeeSource groups which can be a single or
-// multiple sources combined. If a group has multiple sources they should be
-// combined into a single payee.
-type PayeeSources [][]PayeeSource
+// PayeeGroups is a slice of PayeeSources which can be one or more sources. If a
+// group has multiple sources they should be combined into a single payee.
+type PayeeGroups [][]PayeeSource
 
 type PayeeSource uint8
 
@@ -21,24 +20,23 @@ const (
 // Decode value into PayeeSources, each group is separated by a comma and each
 // payee in the group is separated by a plus. I.e "name+unstructured,additional"
 // will yield two groups: [name, unstructured] and [additional]
-func (ps *PayeeSources) Decode(value string) error {
-	parts := strings.Split(value, ",")
-	for _, part := range parts {
-		var group []PayeeSource
-		sources := strings.Split(part, "+")
-		for _, source := range sources {
+func (pg *PayeeGroups) Decode(value string) error {
+	groups := strings.Split(value, ",")
+	for _, group := range groups {
+		var sources []PayeeSource
+		for _, source := range strings.Split(group, "+") {
 			switch strings.TrimSpace(source) {
 			case "name":
-				group = append(group, Name)
+				sources = append(sources, Name)
 			case "unstructured":
-				group = append(group, Unstructured)
+				sources = append(sources, Unstructured)
 			case "additional":
-				group = append(group, Additional)
+				sources = append(sources, Additional)
 			default:
 				return fmt.Errorf("unknown value")
 			}
 		}
-		*ps = append(*ps, group)
+		*pg = append(*pg, sources)
 	}
 	return nil
 }
@@ -64,7 +62,7 @@ type Config struct {
 	// The sources can be combined with the "+" operator. For example:
 	// "name+additional,unstructured" will combine name and additional into a
 	// single Payee or use unstructured if both are empty.
-	PayeeSource PayeeSources `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name,additional"`
+	PayeeSource PayeeGroups `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name,additional"`
 
 	// PayeeStrip is a list of words to remove from Payee. For example:
 	// "foo,bar"

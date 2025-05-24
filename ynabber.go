@@ -39,8 +39,6 @@ type Account struct {
 
 type ID string
 
-type Payee string
-
 type Milliunits int64
 
 // Negate changes the sign of m to the opposite
@@ -53,7 +51,7 @@ type Transaction struct {
 	ID      ID      `json:"id"`
 	// Date is the date of the transaction in UTC time
 	Date   time.Time  `json:"date"`
-	Payee  Payee      `json:"payee"`
+	Payee  string     `json:"payee"`
 	Memo   string     `json:"memo"`
 	Amount Milliunits `json:"amount"`
 }
