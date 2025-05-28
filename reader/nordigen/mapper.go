@@ -3,6 +3,7 @@ package nordigen
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
@@ -75,12 +76,16 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 		return nil, fmt.Errorf("unrecognized TransactionID: %s", TransactionID)
 	}
 
+	memo := payee.raw
+	if trimmed := strings.TrimSpace(t.RemittanceInformationUnstructured); trimmed != "" {
+		memo = trimmed
+	}
 	return &ynabber.Transaction{
 		Account: a,
 		ID:      ynabber.ID(id),
 		Date:    date,
 		Payee:   payee.value,
-		Memo:    payee.raw,
+		Memo:    memo,
 		Amount:  ynabber.MilliunitsFromAmount(amount),
 	}, nil
 }
