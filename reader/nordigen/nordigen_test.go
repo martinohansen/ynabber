@@ -28,6 +28,8 @@ func TestToYnabber(t *testing.T) {
 	logger := slog.Default()
 	var defaultConfig Config
 	_ = envconfig.Process("", &defaultConfig)
+	alternateConfig1 := defaultConfig
+	alternateConfig1.PayeeSource = PayeeGroups{{Name}}
 
 	type args struct {
 		account ynabber.Account
@@ -145,6 +147,7 @@ func TestToYnabber(t *testing.T) {
 		},
 		{
 			// Test transaction from SEB_KORT_AB_NO_SKHSFI21
+			name:   "SEB_KORT_AB_NO_SKHSFI21",
 			bankID: "SEB_KORT_AB_NO_SKHSFI21",
 			reader: Reader{Config: defaultConfig, logger: logger},
 			args: args{
@@ -181,6 +184,88 @@ func TestToYnabber(t *testing.T) {
 				Payee:   "PASCAL AS",
 				Memo:    "PASCAL AS",
 				Amount:  ynabber.Milliunits(10000)},
+			},
+			wantErr: false,
+		},
+		{
+			// Test transaction from S_PANKKI_SBANFIHH - a typical debit card transaction
+			name:   "S_PANKKI_SBANFIHH Debit card",
+			bankID: "S_PANKKI_SBANFIHH",
+			reader: Reader{Config: alternateConfig1, logger: logger},
+			args: args{
+				account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				t: getAccountTransactions(nordigen.Transaction{
+					TransactionId: "foobar",
+					BookingDate:   "2025-05-28",
+					ValueDate:     "2025-05-28",
+					TransactionAmount: struct {
+						Amount   string "json:\"amount,omitempty\""
+						Currency string "json:\"currency,omitempty\""
+					}{Amount: "-80", Currency: "EUR"},
+					CreditorName: "Retail shop",
+					CreditorAccount: struct {
+						Iban string "json:\"iban,omitempty\""
+					}{Iban: ""},
+					UltimateCreditor: "",
+					DebtorName:       "",
+					DebtorAccount: struct {
+						Iban string "json:\"iban,omitempty\""
+					}{Iban: ""},
+					UltimateDebtor:                         "",
+					RemittanceInformationUnstructured:      "",
+					RemittanceInformationUnstructuredArray: []string{""},
+					BankTransactionCode:                    "CCRD-POSD",
+					AdditionalInformation:                  ""},
+				),
+			},
+			want: []ynabber.Transaction{{
+				Account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				ID:      ynabber.ID("foobar"),
+				Date:    time.Date(2025, time.May, 28, 0, 0, 0, 0, time.UTC),
+				Payee:   "Retail shop",
+				Memo:    "Retail shop",
+				Amount:  -ynabber.Milliunits(80000)},
+			},
+			wantErr: false,
+		},
+		{
+			// Test transaction from S_PANKKI_SBANFIHH - an incoming transaction with message
+			name:   "S_PANKKI_SBANFIHH Received with message",
+			bankID: "S_PANKKI_SBANFIHH",
+			reader: Reader{Config: alternateConfig1, logger: logger},
+			args: args{
+				account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				t: getAccountTransactions(nordigen.Transaction{
+					TransactionId: "foobar",
+					BookingDate:   "2025-05-28",
+					ValueDate:     "2025-05-28",
+					TransactionAmount: struct {
+						Amount   string "json:\"amount,omitempty\""
+						Currency string "json:\"currency,omitempty\""
+					}{Amount: "80", Currency: "EUR"},
+					CreditorName: "",
+					CreditorAccount: struct {
+						Iban string "json:\"iban,omitempty\""
+					}{Iban: ""},
+					UltimateCreditor: "",
+					DebtorName:       "JOHN DOE",
+					DebtorAccount: struct {
+						Iban string "json:\"iban,omitempty\""
+					}{Iban: ""},
+					UltimateDebtor:                         "",
+					RemittanceInformationUnstructured:      "Hello there",
+					RemittanceInformationUnstructuredArray: []string{""},
+					BankTransactionCode:                    "RCDT-ESCT",
+					AdditionalInformation:                  ""},
+				),
+			},
+			want: []ynabber.Transaction{{
+				Account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				ID:      ynabber.ID("foobar"),
+				Date:    time.Date(2025, time.May, 28, 0, 0, 0, 0, time.UTC),
+				Payee:   "JOHN DOE",
+				Memo:    "Hello there",
+				Amount:  ynabber.Milliunits(80000)},
 			},
 			wantErr: false,
 		},
