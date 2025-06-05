@@ -2,6 +2,7 @@ package ynabber
 
 import (
 	"log/slog"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -89,6 +90,7 @@ func (y *Ynabber) Run() {
 				err := writer.Bulk(batch)
 				if err != nil {
 					y.logger.Error("writing", "error", err, "writer", writer)
+					os.Exit(1)
 				}
 			}
 		}(writer, channels[c])
@@ -105,7 +107,7 @@ func (y *Ynabber) Run() {
 				batch, err := reader.Bulk()
 				if err != nil {
 					y.logger.Error("reading", "error", err, "reader", reader)
-					continue
+					os.Exit(1)
 				}
 				batches <- batch
 				y.logger.Info("run succeeded", "in", time.Since(start))
