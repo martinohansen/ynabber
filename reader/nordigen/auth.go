@@ -86,7 +86,10 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 		return nordigen.Requisition{}, fmt.Errorf("CreateRequisition: %w", err)
 	}
 
-	r.requisitionHook(requisition)
+	hookStatus := r.requisitionHook(requisition)
+	if hookStatus != 0 {
+		return nordigen.Requisition{}, fmt.Errorf("requisition hook failed with code %d", hookStatus)
+	}
 	log.Printf("Initiate requisition by going to: %s", requisition.Link)
 
 	// Keep waiting for the user to accept the requisition
@@ -107,13 +110,22 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 	return requisition, nil
 }
 
-// requisitionHook executes the hook with the status and link as arguments
-func (r Reader) requisitionHook(req nordigen.Requisition) {
+// requisitionHook executes the hook and returns its exit code
+func (r Reader) requisitionHook(req nordigen.Requisition) int {
 	if r.Config.RequisitionHook != "" {
 		cmd := exec.Command(r.Config.RequisitionHook, req.Status, req.Link)
-		_, err := cmd.Output()
+		// Inherit stdout and stderr from parent process
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+		// Run the command and check for errors
+		err := cmd.Run()
 		if err != nil {
-			log.Printf("failed to run requisition hook: %s", err)
+			log.Printf("error running requisition hook: %s\n", err.Error())
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				return exitErr.ExitCode()
+			}
+			return -1 // Return -1 for errors to start the command
 		}
 	}
+	return 0 // Success
 }
