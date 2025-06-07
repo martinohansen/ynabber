@@ -42,6 +42,11 @@ type Writer struct {
 	logger *slog.Logger
 }
 
+// String returns the name of the writer
+func (w Writer) String() string {
+	return "ynab"
+}
+
 // NewWriter returns a new YNAB writer
 func NewWriter() (Writer, error) {
 	cfg := Config{}
