@@ -1,4 +1,4 @@
-package ynabber
+package nordigen
 
 import (
 	"errors"
