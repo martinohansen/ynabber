@@ -15,12 +15,15 @@ import (
 
 func setupLogging(debug bool) {
 	programLevel := slog.LevelInfo
+	addSource := false
 	if debug {
 		programLevel = slog.LevelDebug
+		addSource = true
 	}
 	logger := slog.New(slog.NewTextHandler(
 		os.Stderr, &slog.HandlerOptions{
-			Level: programLevel,
+			Level:     programLevel,
+			AddSource: addSource,
 		}))
 	slog.SetDefault(logger)
 }
@@ -70,5 +73,7 @@ func main() {
 	}
 
 	// Run Ynabber
-	y.Run()
+	if err := y.Run(); err != nil {
+		Exit(fmt.Sprintf("Unexpected error: %v", err))
+	}
 }

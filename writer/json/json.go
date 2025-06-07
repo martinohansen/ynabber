@@ -9,6 +9,10 @@ import (
 
 type Writer struct{}
 
+func (w Writer) String() string {
+	return "json"
+}
+
 func (w Writer) Bulk(tx []ynabber.Transaction) error {
 	b, err := json.MarshalIndent(tx, "", "  ")
 	if err != nil {

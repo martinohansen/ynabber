@@ -21,6 +21,10 @@ type Reader struct {
 	DataDir string
 }
 
+func (r Reader) String() string {
+	return "nordigen"
+}
+
 // NewReader returns a new nordigen reader or panics
 func NewReader(dataDir string) (Reader, error) {
 	cfg := Config{}
@@ -100,10 +104,10 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		if err != nil {
 			var apiErr *nordigen.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == rateLimitExceededStatusCode {
-				logger.Warn("rate limit exceeded, skipping account")
-				continue
+				// TODO(Martin): Implement rate limit handling
+				return t, fmt.Errorf("getting transactions: %w", &ynabber.RateLimitError{})
 			}
-			return nil, fmt.Errorf("failed to get transactions: %w", err)
+			return t, fmt.Errorf("failed to get transactions: %w", err)
 		}
 
 		x, err := r.toYnabbers(account, transactions)

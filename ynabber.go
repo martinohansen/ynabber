@@ -1,6 +1,7 @@
 package ynabber
 
 import (
+	"errors"
 	"log/slog"
 	"strconv"
 	"sync"
@@ -25,10 +26,12 @@ func NewYnabber(config *Config) *Ynabber {
 
 type Reader interface {
 	Bulk() ([]Transaction, error)
+	String() string
 }
 
 type Writer interface {
 	Bulk([]Transaction) error
+	String() string
 }
 
 type Account struct {
@@ -67,8 +70,11 @@ func MilliunitsFromAmount(amount float64) Milliunits {
 
 // Run starts Ynabber by reading transactions from all readers into a channel to
 // fan out to all writers
-func (y *Ynabber) Run() {
+func (y *Ynabber) Run() error {
+	// Move transactions from reader to writer in batches on this channel.
+	// Multiple readers and writer can be used
 	batches := make(chan []Transaction)
+	defer close(batches)
 
 	// Create a channel for each writer and fan out transactions to each one
 	channels := make([]chan []Transaction, len(y.Writers))
@@ -83,11 +89,14 @@ func (y *Ynabber) Run() {
 		}
 	}()
 
+	// Create a channel to collect errors from readers and writers
+	errCh := make(chan error, len(y.Readers)+len(y.Writers))
+	defer close(errCh)
+
 	for c, writer := range y.Writers {
 		go func(writer Writer, batches <-chan []Transaction) {
 			for batch := range batches {
-				err := writer.Bulk(batch)
-				if err != nil {
+				if err := writer.Bulk(batch); err != nil {
 					y.logger.Error("writing", "error", err, "writer", writer)
 				}
 			}
@@ -96,17 +105,40 @@ func (y *Ynabber) Run() {
 
 	var wg sync.WaitGroup
 	for _, r := range y.Readers {
-		wg.Add(1) // Increment the counter for each goroutine
+
+		wg.Add(1)
 		go func(reader Reader) {
-			defer wg.Done() // Decrement the counter when the goroutine completes
+			defer wg.Done()
 
 			for {
 				start := time.Now()
 				batch, err := reader.Bulk()
 				if err != nil {
 					y.logger.Error("reading", "error", err, "reader", reader)
-					continue
+
+					var rl *RateLimitError
+					if errors.As(err, &rl) && y.config.Interval != 0 {
+						// If rate limited and not in one-shot mode wait for the
+						// longest between the configured interval and the retry
+						// timer to avoid retrying too quickly and exiting for
+						// transient errors.
+						wait := y.config.Interval
+						if rl.RetryAfter > 0 && rl.RetryAfter > wait {
+							wait = rl.RetryAfter
+							y.logger.Info("retrying after", "duration", wait)
+						} else {
+							y.logger.Info("waiting for next run", "in", wait)
+						}
+						time.Sleep(wait)
+						continue
+					}
+
+					// Unrecoverable error, send it down the channel
+					errCh <- err
+					return
+
 				}
+
 				batches <- batch
 				y.logger.Info("run succeeded", "in", time.Since(start))
 
@@ -125,6 +157,18 @@ func (y *Ynabber) Run() {
 		}(r)
 	}
 	wg.Wait() // Wait until all readers exit(interval=0) or end due to other reasons
-	y.logger.Info("all readers done")
-	close(batches) // Close the batches channel to signal completion
+
+	// Close all writer channels to signal completion
+	for _, c := range channels {
+		close(c)
+	}
+
+	// Check for any errors that occurred during processing
+	select {
+	case err := <-errCh:
+		return err
+	default:
+		y.logger.Info("all readers done")
+		return nil
+	}
 }
