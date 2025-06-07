@@ -10,7 +10,6 @@ Ynabber moves transactions from reader to writer in a fan-out fashion. Every wri
 |:---------------------|:-----|:--------|:------------|
 | YNABBER_DATADIR | `string` | `.` | DataDir is the path for storing files |
 | YNABBER_DEBUG | `bool` | `false` | Debug prints more log statements |
-| YNABBER_INTERVAL | `time.Duration` | `6h` | Interval is how often to execute the read/write loop, 0=run only once |
 | YNABBER_READERS | `[]string` | `nordigen` | Readers is a list of sources to read transactions from. Currently only<br>Nordigen is supported. |
 | YNABBER_WRITERS | `[]string` | `ynab` | Writers is a list of destinations to write transactions to. |
 
@@ -23,11 +22,12 @@ Nordigen reads bank transactions through the Nordigen/GoCardless API. It connect
 | NORDIGEN_BANKID | `string` | - | BankID is used to create requisition |
 | NORDIGEN_SECRET_ID | `string` | - | SecretID is used to create requisition |
 | NORDIGEN_SECRET_KEY | `string` | - | SecretKey is used to create requisition |
-| NORDIGEN_PAYEE_SOURCE | `PayeeSources` | `unstructured,name,additional` | PayeeSource is a list of sources for Payee candidates, the first method<br>that yields a result will be used. Valid options are: unstructured, name<br>and additional.<br><br>* unstructured: uses the `RemittanceInformationUnstructured` field<br>* name: uses either the either `debtorName` or `creditorName` field<br>* additional: uses the `AdditionalInformation` field<br><br>The sources can be combined with the "+" operator. For example:<br>"name+additional,unstructured" will combine name and additional into a<br>single Payee or use unstructured if both are empty. |
+| NORDIGEN_PAYEE_SOURCE | `PayeeGroups` | `unstructured,name,additional` | PayeeSource is a list of sources for Payee candidates, the first method<br>that yields a result will be used. Valid options are: unstructured, name<br>and additional.<br><br>* unstructured: uses the `RemittanceInformationUnstructured` field<br>* name: uses either the either `debtorName` or `creditorName` field<br>* additional: uses the `AdditionalInformation` field<br><br>The sources can be combined with the "+" operator. For example:<br>"name+additional,unstructured" will combine name and additional into a<br>single Payee or use unstructured if both are empty. |
 | NORDIGEN_PAYEE_STRIP | `[]string` | - | PayeeStrip is a list of words to remove from Payee. For example:<br>"foo,bar" |
 | NORDIGEN_TRANSACTION_ID | `string` | `TransactionId` | TransactionID is the field to use as transaction ID. Not all banks use<br>the same field and some even change the ID over time.<br><br>Valid options are: TransactionId, InternalTransactionId,<br>ProprietaryBankTransactionCode |
 | NORDIGEN_REQUISITION_HOOK | `string` | - | RequisitionHook is a exec hook thats executed at various stages of the<br>requisition process. The hook is executed with the following arguments:<br><status> <link>. Any non-zero exit code will halt the process. |
 | NORDIGEN_REQUISITION_FILE | `string` | - | RequisitionFile overrides the file used to store the requisition. This<br>file is placed inside the YNABBER_DATADIR. |
+| NORDIGEN_INTERVAL | `time.Duration` | `6h` | Interval is how often to fetch transactions, 0=run only once |
 
 ## Ynab
 

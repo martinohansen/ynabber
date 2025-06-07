@@ -2,10 +2,6 @@
 // writer will receive all transactions from all readers.
 package ynabber
 
-import (
-	"time"
-)
-
 //go:generate go run ./cmd/gendocs -file config.go -file reader/*/config.go -file writer/*/config.go -o CONFIGURATION.md
 
 type Config struct {
@@ -14,9 +10,6 @@ type Config struct {
 
 	// Debug prints more log statements
 	Debug bool `envconfig:"YNABBER_DEBUG" default:"false"`
-
-	// Interval is how often to execute the read/write loop, 0=run only once
-	Interval time.Duration `envconfig:"YNABBER_INTERVAL" default:"6h"`
 
 	// Readers is a list of sources to read transactions from. Currently only
 	// Nordigen is supported.

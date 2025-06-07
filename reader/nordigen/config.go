@@ -6,6 +6,7 @@ package nordigen
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // PayeeGroups is a slice of PayeeSources which can be one or more sources. If a
@@ -86,4 +87,7 @@ type Config struct {
 	// RequisitionFile overrides the file used to store the requisition. This
 	// file is placed inside the YNABBER_DATADIR.
 	RequisitionFile string `envconfig:"NORDIGEN_REQUISITION_FILE"`
+
+	// Interval is how often to fetch transactions, 0=run only once
+	Interval time.Duration `envconfig:"NORDIGEN_INTERVAL" default:"6h"`
 }
