@@ -8,6 +8,7 @@ import (
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
+	"github.com/martinohansen/ynabber/reader/generator"
 	"github.com/martinohansen/ynabber/reader/nordigen"
 	"github.com/martinohansen/ynabber/writer/json"
 	"github.com/martinohansen/ynabber/writer/ynab"
@@ -53,6 +54,12 @@ func main() {
 				Exit(fmt.Sprintf("Failed to create nordigen reader: %v", err))
 			}
 			y.Readers = append(y.Readers, nordigenReader)
+		case "generator":
+			generatorReader, err := generator.NewReader()
+			if err != nil {
+				Exit(fmt.Sprintf("Failed to create generator reader: %v", err))
+			}
+			y.Readers = append(y.Readers, generatorReader)
 		default:
 			Exit(fmt.Sprintf("Unknown reader: %s", reader))
 		}
