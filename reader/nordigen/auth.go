@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -34,7 +33,7 @@ func (r Reader) requisitionStore() string {
 func (r Reader) Requisition() (nordigen.Requisition, error) {
 	requisitionFile, err := os.ReadFile(r.requisitionStore())
 	if errors.Is(err, os.ErrNotExist) {
-		log.Print("Requisition is not found")
+		r.logger.Info("requisition is not found")
 		return r.createRequisition()
 	} else if err != nil {
 		return nordigen.Requisition{}, fmt.Errorf("ReadFile: %w", err)
@@ -43,21 +42,21 @@ func (r Reader) Requisition() (nordigen.Requisition, error) {
 	var requisition nordigen.Requisition
 	err = json.Unmarshal(requisitionFile, &requisition)
 	if err != nil {
-		log.Print("Failed to parse requisition file")
+		r.logger.Error("parsing requisition file", "error", err)
 		return r.createRequisition()
 	}
 
 	switch requisition.Status {
 	case "EX":
 		// Create a new requisition if expired
-		log.Printf("Requisition is expired")
+		r.logger.Info("requisition is expired")
 		return r.createRequisition()
 	case "LN":
 		// Return requisition if it's still valid
 		return requisition, nil
 	default:
 		// Handle unknown status by recreating requisition
-		log.Printf("Unsupported requisition status: %s", requisition.Status)
+		r.logger.Info("unsupported requisition status", "status", requisition.Status)
 		return r.createRequisition()
 	}
 }
@@ -86,11 +85,10 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 		return nordigen.Requisition{}, fmt.Errorf("CreateRequisition: %w", err)
 	}
 
-	hookStatus := r.requisitionHook(requisition)
-	if hookStatus != 0 {
-		return nordigen.Requisition{}, fmt.Errorf("requisition hook failed with code %d", hookStatus)
+	if err := r.requisitionHook(requisition); err != nil {
+		return nordigen.Requisition{}, fmt.Errorf("running requisition hook: %w", err)
 	}
-	log.Printf("Initiate requisition by going to: %s", requisition.Link)
+	r.logger.Info("initiate requisition by going to", "link", requisition.Link)
 
 	// Keep waiting for the user to accept the requisition
 	for requisition.Status != "LN" {
@@ -104,28 +102,22 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 	// Store requisition on disk
 	err = r.saveRequisition(requisition)
 	if err != nil {
-		log.Printf("Failed to write requisition to disk: %s", err)
+		r.logger.Error("writing requisition to disk", "error", err)
 	}
 
 	return requisition, nil
 }
 
 // requisitionHook executes the hook and returns its exit code
-func (r Reader) requisitionHook(req nordigen.Requisition) int {
+func (r Reader) requisitionHook(req nordigen.Requisition) error {
 	if r.Config.RequisitionHook != "" {
 		cmd := exec.Command(r.Config.RequisitionHook, req.Status, req.Link)
-		// Inherit stdout and stderr from parent process
-		cmd.Stdout = nil
-		cmd.Stderr = nil
-		// Run the command and check for errors
-		err := cmd.Run()
+		output, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Printf("error running requisition hook: %s\n", err.Error())
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				return exitErr.ExitCode()
-			}
-			return -1 // Return -1 for errors to start the command
+			return fmt.Errorf("executing hook: %w, output: %s", err, output)
 		}
+		r.logger.Info("requisition hook output", "output", string(output))
+		return nil
 	}
-	return 0 // Success
+	return nil
 }

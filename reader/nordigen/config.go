@@ -77,7 +77,7 @@ type Config struct {
 
 	// RequisitionHook is a exec hook thats executed at various stages of the
 	// requisition process. The hook is executed with the following arguments:
-	// <status> <link>
+	// <status> <link>. Any non-zero exit code will halt the process.
 	RequisitionHook string `envconfig:"NORDIGEN_REQUISITION_HOOK"`
 
 	// RequisitionFile overrides the file used to store the requisition. This
