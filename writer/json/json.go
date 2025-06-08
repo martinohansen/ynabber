@@ -4,6 +4,7 @@
 package json
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -25,11 +26,17 @@ func (w Writer) Bulk(tx []ynabber.Transaction) error {
 	return nil
 }
 
-func (w Writer) Runner(in <-chan []ynabber.Transaction, errCh chan<- error) {
-	for batch := range in {
-		if err := w.Bulk(batch); err != nil {
-			if errCh != nil {
-				errCh <- err
+func (w Writer) Runner(ctx context.Context, in <-chan []ynabber.Transaction) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case batch, ok := <-in:
+			if !ok {
+				return nil // Channel closed, normal termination
+			}
+			if err := w.Bulk(batch); err != nil {
+				return err
 			}
 		}
 	}

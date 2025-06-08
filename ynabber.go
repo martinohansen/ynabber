@@ -1,8 +1,10 @@
 package ynabber
 
 import (
+	"context"
 	"log/slog"
-	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type Ynabber struct {
@@ -22,69 +24,77 @@ func NewYnabber(config *Config) *Ynabber {
 }
 
 type Reader interface {
-	Bulk() ([]Transaction, error)
-	Runner(out chan<- []Transaction, errCh chan<- error)
+	Runner(ctx context.Context, out chan<- []Transaction) error
 	String() string
 }
 
 type Writer interface {
-	Bulk([]Transaction) error
-	Runner(in <-chan []Transaction, errCh chan<- error)
+	Runner(ctx context.Context, in <-chan []Transaction) error
 	String() string
 }
 
 // Run starts Ynabber by reading transactions from all readers into a channel to
-// fan out to all writers
+// fan out to all writers. Returns immediately on first error from any reader or
+// writer.
 func (y *Ynabber) Run() error {
+	g, ctx := errgroup.WithContext(context.Background())
+
 	// Move transactions from reader to writer in batches on this channel.
 	// Multiple readers and writer can be used
 	batches := make(chan []Transaction)
-	defer close(batches)
 
 	// Create a channel for each writer and fan out transactions to each one
 	channels := make([]chan []Transaction, len(y.Writers))
 	for c := range channels {
 		channels[c] = make(chan []Transaction)
 	}
-	go func() {
-		for batch := range batches {
+
+	// Fan out transactions to all writer channels
+	g.Go(func() error {
+		defer func() {
+			close(batches)
 			for _, c := range channels {
-				c <- batch
+				close(c)
+			}
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case batch, ok := <-batches:
+				if !ok {
+					return nil
+				}
+				for _, c := range channels {
+					select {
+					case c <- batch:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
 			}
 		}
-	}()
+	})
 
-	// Create a channel to collect errors from readers and writers
-	errCh := make(chan error, len(y.Readers)+len(y.Writers))
-	defer close(errCh)
-
+	// Start all writers
 	for c, writer := range y.Writers {
-		go func(w Writer, batches <-chan []Transaction) {
-			w.Runner(batches, errCh)
-		}(writer, channels[c])
+		g.Go(func() error {
+			return writer.Runner(ctx, channels[c])
+		})
 	}
 
-	var wg sync.WaitGroup
-	for _, r := range y.Readers {
-		wg.Add(1)
-		go func(reader Reader) {
-			defer wg.Done()
-			reader.Runner(batches, errCh)
-		}(r)
-	}
-	wg.Wait() // Wait until all readers exit (interval=0) or end due to other reasons
-
-	// Close all writer channels to signal completion
-	for _, c := range channels {
-		close(c)
+	// Start all readers
+	for _, reader := range y.Readers {
+		g.Go(func() error {
+			return reader.Runner(ctx, batches)
+		})
 	}
 
-	// Check for any errors that occurred during processing
-	select {
-	case err := <-errCh:
+	// Wait for all goroutines to complete or first error
+	if err := g.Wait(); err != nil && err != context.Canceled {
 		return err
-	default:
-		y.logger.Info("all readers done")
-		return nil
 	}
+
+	y.logger.Info("all readers and writers completed successfully")
+	return nil
 }
