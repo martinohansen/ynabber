@@ -19,15 +19,15 @@ Nordigen reads bank transactions through the Nordigen/GoCardless API. It connect
 
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|
-| NORDIGEN_BANKID | `string` | - | BankID is used to create requisition |
-| NORDIGEN_SECRET_ID | `string` | - | SecretID is used to create requisition |
-| NORDIGEN_SECRET_KEY | `string` | - | SecretKey is used to create requisition |
-| NORDIGEN_PAYEE_SOURCE | `PayeeGroups` | `unstructured,name,additional` | PayeeSource is a list of sources for Payee candidates, the first method<br>that yields a result will be used. Valid options are: unstructured, name<br>and additional.<br><br>* unstructured: uses the `RemittanceInformationUnstructured` field<br>* name: uses either the either `debtorName` or `creditorName` field<br>* additional: uses the `AdditionalInformation` field<br><br>The sources can be combined with the "+" operator. For example:<br>"name+additional,unstructured" will combine name and additional into a<br>single Payee or use unstructured if both are empty. |
-| NORDIGEN_PAYEE_STRIP | `[]string` | - | PayeeStrip is a list of words to remove from Payee. For example:<br>"foo,bar" |
-| NORDIGEN_TRANSACTION_ID | `string` | `TransactionId` | TransactionID is the field to use as transaction ID. Not all banks use<br>the same field and some even change the ID over time.<br><br>Valid options are: TransactionId, InternalTransactionId,<br>ProprietaryBankTransactionCode |
-| NORDIGEN_REQUISITION_HOOK | `string` | - | RequisitionHook is a exec hook thats executed at various stages of the<br>requisition process. The hook is executed with the following arguments:<br><status> <link>. Any non-zero exit code will halt the process. |
-| NORDIGEN_REQUISITION_FILE | `string` | - | RequisitionFile overrides the file used to store the requisition. This<br>file is placed inside the YNABBER_DATADIR. |
-| NORDIGEN_INTERVAL | `time.Duration` | `6h` | Interval is how often to fetch transactions, 0=run only once |
+| NORDIGEN_BANKID | `string` | - | BankID identifies the bank for creating requisitions |
+| NORDIGEN_SECRET_ID | `string` | - | SecretID is the client ID for API authentication |
+| NORDIGEN_SECRET_KEY | `string` | - | SecretKey is the client secret for API authentication |
+| NORDIGEN_PAYEE_SOURCE | `PayeeGroups` | `unstructured,name,additional` | PayeeSource defines the sources and order for extracting payee<br>information. Multiple sources can be combined with "+" to merge their<br>values. Groups are separated by "," and tried in order until a non-empty<br>result is found.<br><br>Available sources:<br>* unstructured: uses the RemittanceInformationUnstructured field<br>* name: uses either the debtorName or creditorName field<br>* additional: uses the AdditionalInformation field<br><br>Example: "name+additional,unstructured" will first try to combine name<br>and additional fields, falling back to unstructured if both are empty. |
+| NORDIGEN_PAYEE_STRIP | `[]string` | - | PayeeStrip contains words to remove from payee names.<br>Example: "foo,bar" removes "foo" and "bar" from all payee names. |
+| NORDIGEN_TRANSACTION_ID | `string` | `TransactionId` | TransactionID specifies which field to use as the unique transaction<br>identifier. Banks may use different fields, and some change the ID format<br>over time.<br><br>Valid options: TransactionId, InternalTransactionId,<br>ProprietaryBankTransactionCode |
+| NORDIGEN_REQUISITION_HOOK | `string` | - | RequisitionHook is an executable that runs at various stages of the<br>requisition process. It receives arguments: &lt;status&gt; &lt;link&gt;<br>Non-zero exit codes will stop the process. |
+| NORDIGEN_REQUISITION_FILE | `string` | - | RequisitionFile specifies the filename for storing requisition data.<br>The file is stored in the directory defined by YNABBER_DATADIR. |
+| NORDIGEN_INTERVAL | `time.Duration` | `6h` | Interval determines how often to fetch new transactions.<br>Set to 0 to run only once instead of continuously. |
 
 ## Ynab
 
@@ -35,11 +35,11 @@ YNAB writes transactions You Need a Budget (YNAB) using their API. It handles tr
 
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|
-| YNAB_BUDGETID | `string` | - | BudgetID for the budget you want to import transactions into. You can<br>find the ID in the URL of YNAB: https://app.youneedabudget.com/<budget_id>/budget |
-| YNAB_TOKEN | `string` | - | Token is your personal access token as obtained from the YNAB developer<br>settings section |
-| YNAB_ACCOUNTMAP | `AccountMap` | - | AccountMap of IBAN to YNAB account IDs in JSON. For example:<br>'{"<IBAN>": "<YNAB Account ID>"}' |
-| YNAB_FROM_DATE | `Date` | - | FromDate only import transactions from this date and onward. For<br>example: 2006-01-02 |
-| YNAB_DELAY | `time.Duration` | `0` | Delay sending transaction to YNAB by this duration. This can be necessary<br>if the bank changes transaction IDs after some time. Default is 0 (no<br>delay). |
-| YNAB_CLEARED | `TransactionStatus` | `uncleared` | Set cleared status, possible values: cleared, uncleared, reconciled .<br>Default is uncleared for historical reasons but recommend setting this<br>to cleared because ynabber transactions are cleared by bank.<br>They'd still be unapproved until approved in YNAB. |
-| YNAB_SWAPFLOW | `[]string` | - | SwapFlow changes inflow to outflow and vice versa for any account with a<br>IBAN number in the list. This maybe be relevant for credit card accounts.<br><br>Example: "DK9520000123456789,NO8330001234567" |
+| YNAB_BUDGETID | `string` | - | BudgetID for the budget you want to import transactions into. You can<br>find the ID in the URL of YNAB: https://app.youneedabudget.com/&lt;budget_id&gt;/budget |
+| YNAB_TOKEN | `string` | - | Token is your personal access token obtained from the YNAB developer<br>settings section |
+| YNAB_ACCOUNTMAP | `AccountMap` | - | AccountMap maps IBANs to YNAB account IDs in JSON format. For example:<br>'{"&lt;IBAN&gt;": "&lt;YNAB Account ID&gt;"}' |
+| YNAB_FROM_DATE | `Date` | - | FromDate only imports transactions from this date onward. For<br>example: 2006-01-02 |
+| YNAB_DELAY | `time.Duration` | `0` | Delay sending transactions to YNAB by this duration. This can be<br>necessary if the bank changes transaction IDs after some time. Default is<br>0 (no delay). |
+| YNAB_CLEARED | `TransactionStatus` | `cleared` | Cleared sets the transaction status. Possible values: cleared, uncleared,<br>reconciled. |
+| YNAB_SWAPFLOW | `[]string` | - | SwapFlow reverses inflow to outflow and vice versa for any account with<br>an IBAN number in the list. This may be relevant for credit card<br>accounts.<br><br>Example: "DK9520000123456789,NO8330001234567" |
 

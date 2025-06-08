@@ -46,48 +46,51 @@ func (pg *PayeeGroups) Decode(value string) error {
 }
 
 type Config struct {
-	// BankID is used to create requisition
+	// BankID identifies the bank for creating requisitions
 	BankID string `envconfig:"NORDIGEN_BANKID"`
 
-	// SecretID is used to create requisition
+	// SecretID is the client ID for API authentication
 	SecretID string `envconfig:"NORDIGEN_SECRET_ID"`
 
-	// SecretKey is used to create requisition
+	// SecretKey is the client secret for API authentication
 	SecretKey string `envconfig:"NORDIGEN_SECRET_KEY"`
 
-	// PayeeSource is a list of sources for Payee candidates, the first method
-	// that yields a result will be used. Valid options are: unstructured, name
-	// and additional.
+	// PayeeSource defines the sources and order for extracting payee
+	// information. Multiple sources can be combined with "+" to merge their
+	// values. Groups are separated by "," and tried in order until a non-empty
+	// result is found.
 	//
-	//  * unstructured: uses the `RemittanceInformationUnstructured` field
-	//  * name: uses either the either `debtorName` or `creditorName` field
-	//  * additional: uses the `AdditionalInformation` field
+	// Available sources:
+	//  * unstructured: uses the RemittanceInformationUnstructured field
+	//  * name: uses either the debtorName or creditorName field
+	//  * additional: uses the AdditionalInformation field
 	//
-	// The sources can be combined with the "+" operator. For example:
-	// "name+additional,unstructured" will combine name and additional into a
-	// single Payee or use unstructured if both are empty.
+	// Example: "name+additional,unstructured" will first try to combine name
+	// and additional fields, falling back to unstructured if both are empty.
 	PayeeSource PayeeGroups `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name,additional"`
 
-	// PayeeStrip is a list of words to remove from Payee. For example:
-	// "foo,bar"
+	// PayeeStrip contains words to remove from payee names.
+	// Example: "foo,bar" removes "foo" and "bar" from all payee names.
 	PayeeStrip []string `envconfig:"NORDIGEN_PAYEE_STRIP"`
 
-	// TransactionID is the field to use as transaction ID. Not all banks use
-	// the same field and some even change the ID over time.
+	// TransactionID specifies which field to use as the unique transaction
+	// identifier. Banks may use different fields, and some change the ID format
+	// over time.
 	//
-	// Valid options are: TransactionId, InternalTransactionId,
+	// Valid options: TransactionId, InternalTransactionId,
 	// ProprietaryBankTransactionCode
 	TransactionID string `envconfig:"NORDIGEN_TRANSACTION_ID" default:"TransactionId"`
 
-	// RequisitionHook is a exec hook thats executed at various stages of the
-	// requisition process. The hook is executed with the following arguments:
-	// <status> <link>. Any non-zero exit code will halt the process.
+	// RequisitionHook is an executable that runs at various stages of the
+	// requisition process. It receives arguments: <status> <link>
+	// Non-zero exit codes will stop the process.
 	RequisitionHook string `envconfig:"NORDIGEN_REQUISITION_HOOK"`
 
-	// RequisitionFile overrides the file used to store the requisition. This
-	// file is placed inside the YNABBER_DATADIR.
+	// RequisitionFile specifies the filename for storing requisition data.
+	// The file is stored in the directory defined by YNABBER_DATADIR.
 	RequisitionFile string `envconfig:"NORDIGEN_REQUISITION_FILE"`
 
-	// Interval is how often to fetch transactions, 0=run only once
+	// Interval determines how often to fetch new transactions.
+	// Set to 0 to run only once instead of continuously.
 	Interval time.Duration `envconfig:"NORDIGEN_INTERVAL" default:"6h"`
 }

@@ -59,9 +59,9 @@ func main() {
 
 	// Collect exported structs along with their source package and package doc.
 	type structEntry struct {
-		spec    *ast.TypeSpec
-		pkg     string
-		pkgDoc  string
+		spec   *ast.TypeSpec
+		pkg    string
+		pkgDoc string
 	}
 	var structEntries []structEntry
 
@@ -164,8 +164,15 @@ func main() {
 
 			// Description – gather from Doc or Comment associated to field.
 			desc := extractDoc(field)
-			// Escape vertical bar used for markdown tables.
+			// Escape characters that interfere with markdown tables and HTML
+			// rendering.
 			desc = strings.ReplaceAll(desc, "|", "\\|")
+			desc = strings.ReplaceAll(desc, "<", "&lt;")
+			desc = strings.ReplaceAll(desc, ">", "&gt;")
+
+			// Replace <br> with actual line breaks for better readability in
+			// markdown tables.
+			desc = strings.ReplaceAll(desc, "&lt;br&gt;", "<br>")
 
 			fmt.Fprintf(&out, "| %s | `%s` | %s | %s |\n", envTag, typeStr, defTag, desc)
 		}
