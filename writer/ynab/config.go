@@ -1,3 +1,6 @@
+// YNAB writes transactions You Need a Budget (YNAB) using their API. It handles
+// transaction and account mapping, validation, deduplication, inflow/outflow
+// swapping, and transaction filtering.
 package ynab
 
 import (

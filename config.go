@@ -1,3 +1,5 @@
+// Ynabber moves transactions from reader to writer in a fan-out fashion. Every
+// writer will receive all transactions from all readers.
 package ynabber
 
 import (
