@@ -217,3 +217,17 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	}
 	return nil
 }
+
+// Runner reads batches of transactions from in and writes them using Bulk.
+func (w Writer) Runner(in <-chan []ynabber.Transaction, errCh chan<- error) {
+	for batch := range in {
+		if err := w.Bulk(batch); err != nil {
+			if w.logger != nil {
+				w.logger.Error("bulk writing transactions", "error", err)
+			}
+			if errCh != nil {
+				errCh <- err
+			}
+		}
+	}
+}

@@ -29,6 +29,7 @@ type Reader interface {
 
 type Writer interface {
 	Bulk([]Transaction) error
+	Runner(in <-chan []Transaction, errCh chan<- error)
 	String() string
 }
 
@@ -58,12 +59,8 @@ func (y *Ynabber) Run() error {
 	defer close(errCh)
 
 	for c, writer := range y.Writers {
-		go func(writer Writer, batches <-chan []Transaction) {
-			for batch := range batches {
-				if err := writer.Bulk(batch); err != nil {
-					y.logger.Error("writing", "error", err, "writer", writer)
-				}
-			}
+		go func(w Writer, batches <-chan []Transaction) {
+			w.Runner(batches, errCh)
 		}(writer, channels[c])
 	}
 

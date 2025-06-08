@@ -24,3 +24,13 @@ func (w Writer) Bulk(tx []ynabber.Transaction) error {
 	fmt.Println(string(b))
 	return nil
 }
+
+func (w Writer) Runner(in <-chan []ynabber.Transaction, errCh chan<- error) {
+	for batch := range in {
+		if err := w.Bulk(batch); err != nil {
+			if errCh != nil {
+				errCh <- err
+			}
+		}
+	}
+}
