@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -90,19 +91,34 @@ func (r Reader) Bulk() ([]ynabber.Transaction, error) {
 }
 
 // Runner continuously generates transactions and sends them to out
-func (r Reader) Runner(out chan<- []ynabber.Transaction, errCh chan<- error) {
+func (r Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) error {
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		batch, err := r.Bulk()
 		if err != nil {
 			r.logger.Error("generating transaction", "error", err)
-			errCh <- err
-			return
+			return err
 		}
 
 		r.logger.Info("generated transaction(s)", "count", len(batch))
-		out <- batch
+
+		select {
+		case out <- batch:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 
 		r.logger.Info("waiting for next run", "in", r.Config.Interval)
-		time.Sleep(r.Config.Interval)
+
+		select {
+		case <-time.After(r.Config.Interval):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }

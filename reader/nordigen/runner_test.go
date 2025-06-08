@@ -1,6 +1,7 @@
 package nordigen
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"testing"
@@ -43,7 +44,7 @@ func TestReaderRetryHandler(t *testing.T) {
 				logger: logger,
 			}
 
-			gotErr := reader.retryHandler(tt.inputErr)
+			gotErr := reader.retryHandler(context.Background(), tt.inputErr)
 			if (gotErr == nil) != (tt.wantErr == nil) {
 				t.Errorf("'%v', want '%v'", gotErr, tt.wantErr)
 			} else if gotErr != nil && tt.wantErr != nil && gotErr.Error() != tt.wantErr.Error() {

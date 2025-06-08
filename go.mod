@@ -14,3 +14,5 @@ require (
 	github.com/google/go-cmp v0.6.0
 	golang.org/x/text v0.25.0
 )
+
+require golang.org/x/sync v0.15.0
