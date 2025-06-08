@@ -4,6 +4,8 @@ This document is generated from configuration structs in the source code using `
 
 ## Ynabber
 
+Ynabber moves transactions from reader to writer in a fan-out fashion. Every writer will receive all transactions from all readers.
+
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|
 | YNABBER_DATADIR | `string` | `.` | DataDir is the path for storing files |
@@ -14,6 +16,8 @@ This document is generated from configuration structs in the source code using `
 
 ## Nordigen
 
+Nordigen reads bank transactions through the Nordigen/GoCardless API. It connects to various European banks using PSD2 open banking standards to retrieve account information and transaction data.
+
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|
 | NORDIGEN_BANKID | `string` | - | BankID is used to create requisition |
@@ -22,10 +26,12 @@ This document is generated from configuration structs in the source code using `
 | NORDIGEN_PAYEE_SOURCE | `PayeeSources` | `unstructured,name,additional` | PayeeSource is a list of sources for Payee candidates, the first method<br>that yields a result will be used. Valid options are: unstructured, name<br>and additional.<br><br>* unstructured: uses the `RemittanceInformationUnstructured` field<br>* name: uses either the either `debtorName` or `creditorName` field<br>* additional: uses the `AdditionalInformation` field<br><br>The sources can be combined with the "+" operator. For example:<br>"name+additional,unstructured" will combine name and additional into a<br>single Payee or use unstructured if both are empty. |
 | NORDIGEN_PAYEE_STRIP | `[]string` | - | PayeeStrip is a list of words to remove from Payee. For example:<br>"foo,bar" |
 | NORDIGEN_TRANSACTION_ID | `string` | `TransactionId` | TransactionID is the field to use as transaction ID. Not all banks use<br>the same field and some even change the ID over time.<br><br>Valid options are: TransactionId, InternalTransactionId,<br>ProprietaryBankTransactionCode |
-| NORDIGEN_REQUISITION_HOOK | `string` | - | RequisitionHook is a script/executable that is run when creating or renewing a requisition. Non-zero exit code of the hook indicates an error and requisition is not created. The hook is executed with two arguments: status and link. <br><br>CAVEAT FOR DOCKER USERS: The usual caveats of using this option with dockerized version apply namely: the path this points to must also be available inside the container(perhaps a volume mount), the same shells and other needed tidbits need to be inside the container and there may be differences in environment and permissision issues inside the contaienr. It is best to create a new docker image and use ynabber docker as basis, if you need a hook in dockerized setting. |
+| NORDIGEN_REQUISITION_HOOK | `string` | - | RequisitionHook is a exec hook thats executed at various stages of the<br>requisition process. The hook is executed with the following arguments:<br><status> <link>. Any non-zero exit code will halt the process. |
 | NORDIGEN_REQUISITION_FILE | `string` | - | RequisitionFile overrides the file used to store the requisition. This<br>file is placed inside the YNABBER_DATADIR. |
 
 ## Ynab
+
+YNAB writes transactions You Need a Budget (YNAB) using their API. It handles transaction and account mapping, validation, deduplication, inflow/outflow swapping, and transaction filtering.
 
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|
@@ -36,3 +42,4 @@ This document is generated from configuration structs in the source code using `
 | YNAB_DELAY | `time.Duration` | `0` | Delay sending transaction to YNAB by this duration. This can be necessary<br>if the bank changes transaction IDs after some time. Default is 0 (no<br>delay). |
 | YNAB_CLEARED | `TransactionStatus` | `uncleared` | Set cleared status, possible values: cleared, uncleared, reconciled .<br>Default is uncleared for historical reasons but recommend setting this<br>to cleared because ynabber transactions are cleared by bank.<br>They'd still be unapproved until approved in YNAB. |
 | YNAB_SWAPFLOW | `[]string` | - | SwapFlow changes inflow to outflow and vice versa for any account with a<br>IBAN number in the list. This maybe be relevant for credit card accounts.<br><br>Example: "DK9520000123456789,NO8330001234567" |
+

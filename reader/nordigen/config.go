@@ -1,3 +1,6 @@
+// Nordigen reads bank transactions through the Nordigen/GoCardless API. It
+// connects to various European banks using PSD2 open banking standards to
+// retrieve account information and transaction data.
 package nordigen
 
 import (

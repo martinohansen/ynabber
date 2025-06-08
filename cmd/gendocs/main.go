@@ -57,10 +57,11 @@ func main() {
 		fatal(fmt.Errorf("no files matched given -file patterns"))
 	}
 
-	// Collect exported structs along with their source package.
+	// Collect exported structs along with their source package and package doc.
 	type structEntry struct {
-		spec *ast.TypeSpec
-		pkg  string
+		spec    *ast.TypeSpec
+		pkg     string
+		pkgDoc  string
 	}
 	var structEntries []structEntry
 
@@ -76,8 +77,20 @@ func main() {
 			fatal(err)
 		}
 
-		// capture current file's package name
+		// capture current file's package name and doc
 		pkg := fileAst.Name.Name
+		pkgDoc := ""
+		if fileAst.Doc != nil {
+			var docParts []string
+			for _, c := range fileAst.Doc.List {
+				trimmed := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
+				trimmed = strings.Trim(trimmed, "/*")
+				if trimmed != "" {
+					docParts = append(docParts, trimmed)
+				}
+			}
+			pkgDoc = strings.Join(docParts, " ")
+		}
 
 		for _, decl := range fileAst.Decls {
 			genDecl, ok := decl.(*ast.GenDecl)
@@ -91,7 +104,7 @@ func main() {
 					continue
 				}
 				if _, ok := typeSpec.Type.(*ast.StructType); ok {
-					structEntries = append(structEntries, structEntry{spec: typeSpec, pkg: pkg})
+					structEntries = append(structEntries, structEntry{spec: typeSpec, pkg: pkg, pkgDoc: pkgDoc})
 				}
 			}
 		}
@@ -111,6 +124,12 @@ func main() {
 
 		// Section heading: package name of this struct
 		fmt.Fprintf(&out, "## %s\n\n", cases.Title(language.English).String(entry.pkg))
+
+		// Package documentation if present.
+		if entry.pkgDoc != "" {
+			fmt.Fprintln(&out, entry.pkgDoc)
+			fmt.Fprintln(&out)
+		}
 
 		// Doc comment for type if present.
 		if spec.Doc != nil {

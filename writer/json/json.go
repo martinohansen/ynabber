@@ -1,3 +1,6 @@
+// Package json implements a writer that outputs transactions as JSON to stdout.
+// This writer is useful for debugging, testing, and integration with other systems
+// that can consume JSON-formatted transaction data.
 package json
 
 import (
