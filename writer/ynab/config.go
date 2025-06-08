@@ -64,31 +64,30 @@ type Config struct {
 	// find the ID in the URL of YNAB: https://app.youneedabudget.com/<budget_id>/budget
 	BudgetID string `envconfig:"YNAB_BUDGETID"`
 
-	// Token is your personal access token as obtained from the YNAB developer
+	// Token is your personal access token obtained from the YNAB developer
 	// settings section
 	Token string `envconfig:"YNAB_TOKEN"`
 
-	// AccountMap of IBAN to YNAB account IDs in JSON. For example:
+	// AccountMap maps IBANs to YNAB account IDs in JSON format. For example:
 	// '{"<IBAN>": "<YNAB Account ID>"}'
 	AccountMap AccountMap `envconfig:"YNAB_ACCOUNTMAP"`
 
-	// FromDate only import transactions from this date and onward. For
+	// FromDate only imports transactions from this date onward. For
 	// example: 2006-01-02
 	FromDate Date `envconfig:"YNAB_FROM_DATE"`
 
-	// Delay sending transaction to YNAB by this duration. This can be necessary
-	// if the bank changes transaction IDs after some time. Default is 0 (no
-	// delay).
+	// Delay sending transactions to YNAB by this duration. This can be
+	// necessary if the bank changes transaction IDs after some time. Default is
+	// 0 (no delay).
 	Delay time.Duration `envconfig:"YNAB_DELAY" default:"0"`
 
-	// Set cleared status, possible values: cleared, uncleared, reconciled .
-	// Default is uncleared for historical reasons but recommend setting this
-	// to cleared because ynabber transactions are cleared by bank.
-	// They'd still be unapproved until approved in YNAB.
-	Cleared TransactionStatus `envconfig:"YNAB_CLEARED" default:"uncleared"`
+	// Cleared sets the transaction status. Possible values: cleared, uncleared,
+	// reconciled.
+	Cleared TransactionStatus `envconfig:"YNAB_CLEARED" default:"cleared"`
 
-	// SwapFlow changes inflow to outflow and vice versa for any account with a
-	// IBAN number in the list. This maybe be relevant for credit card accounts.
+	// SwapFlow reverses inflow to outflow and vice versa for any account with
+	// an IBAN number in the list. This may be relevant for credit card
+	// accounts.
 	//
 	// Example: "DK9520000123456789,NO8330001234567"
 	SwapFlow []string `envconfig:"YNAB_SWAPFLOW"`
