@@ -3,6 +3,7 @@ package ynabber
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -49,10 +50,19 @@ func (y *Ynabber) Run() error {
 		channels[c] = make(chan []Transaction)
 	}
 
+	// Track when all readers are done
+	var readerWg sync.WaitGroup
+	readerWg.Add(len(y.Readers))
+
+	// Close batches channel when all readers are done
+	go func() {
+		readerWg.Wait()
+		close(batches)
+	}()
+
 	// Fan out transactions to all writer channels
 	g.Go(func() error {
 		defer func() {
-			close(batches)
 			for _, c := range channels {
 				close(c)
 			}
@@ -86,6 +96,7 @@ func (y *Ynabber) Run() error {
 	// Start all readers
 	for _, reader := range y.Readers {
 		g.Go(func() error {
+			defer readerWg.Done()
 			return reader.Runner(ctx, batches)
 		})
 	}
