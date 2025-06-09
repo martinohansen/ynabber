@@ -6,19 +6,47 @@ permissions:
   contents: read
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: linux
+            goarch: arm
+            goarm: 7
+          - goos: linux
+            goarch: arm
+            goarm: 6
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.24
 
-    - name: Set up Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: 1.21
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: go build -v ./...
 
-    - name: Build
-      run: go build -v ./...
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      matrix:
+        go-version: [1.23, 1.24]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
 
-    - name: Test
-      run: go test -v ./...
+      - name: Test
+        run: go test -v ./...
