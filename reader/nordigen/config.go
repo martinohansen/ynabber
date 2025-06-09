@@ -5,6 +5,7 @@ package nordigen
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -13,7 +14,32 @@ import (
 // group has multiple sources they should be combined into a single payee.
 type PayeeGroups [][]PayeeSource
 
+func (pg PayeeGroups) String() string {
+	var groups []string
+	for _, group := range pg {
+		var sources []string
+		for _, source := range group {
+			sources = append(sources, source.String())
+		}
+		groups = append(groups, strings.Join(sources, "+"))
+	}
+	return strings.Join(groups, ",")
+}
+
 type PayeeSource uint8
+
+func (ps PayeeSource) String() string {
+	switch ps {
+	case Name:
+		return "name"
+	case Unstructured:
+		return "unstructured"
+	case Additional:
+		return "additional"
+	default:
+		return fmt.Sprintf("unknown(%d)", ps)
+	}
+}
 
 const (
 	Name PayeeSource = 1 << iota
@@ -93,4 +119,19 @@ type Config struct {
 	// Interval determines how often to fetch new transactions.
 	// Set to 0 to run only once instead of continuously.
 	Interval time.Duration `envconfig:"NORDIGEN_INTERVAL" default:"6h"`
+}
+
+// LogValue returns config with sensitive information redacted
+func (c *Config) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("bank_id", c.BankID),
+		slog.String("secret_id", "******"),
+		slog.String("secret_key", "******"),
+		slog.String("payee_source", c.PayeeSource.String()),
+		slog.String("payee_strip", strings.Join(c.PayeeStrip, ",")),
+		slog.String("transaction_id", c.TransactionID),
+		slog.String("requisition_hook", c.RequisitionHook),
+		slog.String("requisition_file", c.RequisitionFile),
+		slog.Duration("interval", c.Interval),
+	)
 }

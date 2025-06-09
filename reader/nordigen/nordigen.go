@@ -27,11 +27,14 @@ func (r Reader) String() string {
 
 // NewReader returns a new nordigen reader or panics
 func NewReader(dataDir string) (Reader, error) {
+	logger := slog.Default().With("reader", "nordigen")
+
 	cfg := Config{}
 	err := envconfig.Process("", &cfg)
 	if err != nil {
 		return Reader{}, fmt.Errorf("processing config: %w", err)
 	}
+	logger.Debug("config loaded", "config", &cfg)
 
 	client, err := nordigen.NewClient(cfg.SecretID, cfg.SecretKey)
 	if err != nil {
@@ -39,11 +42,10 @@ func NewReader(dataDir string) (Reader, error) {
 	}
 
 	return Reader{
-		Config: cfg,
-		Client: client,
-		logger: slog.Default().With("reader", "nordigen"),
-
+		Client:  client,
+		Config:  cfg,
 		DataDir: dataDir,
+		logger:  logger,
 	}, nil
 }
 
