@@ -3,7 +3,7 @@ name: Go
 on: push
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -29,11 +29,27 @@ jobs:
           go-version: 1.24
 
       - name: Build
+        id: build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
-        run: go build -v ./...
+        run: |
+          OS_ARCH="${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [ -n "${{ matrix.goarm }}" ]; then
+            OS_ARCH="${OS_ARCH}-v${{ matrix.goarm }}"
+          fi
+          BINARY_NAME="ynabber-${OS_ARCH}"
+          go build -o "$BINARY_NAME" ./cmd/ynabber/
+
+          echo "binary=$BINARY_NAME" >> $GITHUB_OUTPUT
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.binary }}
+          path: ${{ steps.build.outputs.binary }}
+          retention-days: 7
 
   test:
     runs-on: ubuntu-latest
@@ -50,3 +66,20 @@ jobs:
 
       - name: Test
         run: go test -v ./...
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: github.ref_type == 'tag'
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*/ynabber-*
