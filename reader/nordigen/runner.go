@@ -20,7 +20,7 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 			wait = rl.RetryAfter
 		}
 		r.logger.Info("rate limited, retrying later", "wait", wait)
-		
+
 		select {
 		case <-time.After(wait):
 			return nil
