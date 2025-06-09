@@ -1,76 +1,72 @@
 # Ynabber
 
-Ynabber is a tool that reads and writes bank transactions from one or more
-sources (called readers) to one or more destinations (called writers). This
-makes it easier to pull in your bank transactions automatically and push them to
-personal finance apps like YNAB.
+Ynabber reads bank transactions from one or more sources (readers) and writes
+them to one or more destinations (writers). Use it to pull in your bank
+transactions automatically and push them to personal finance apps like YNAB.
 
-See subsection [readers](#readers) and [writers](#writers) for a list of
-supported banks and services.
+See [readers](#readers) and [writers](#writers) below for supported banks and
+services.
 
 ## Installation
 
-You can use [Go](https://go.dev/) or
-[Docker](https://www.docker.com/get-started/) to install and run Ynabber. Choose
-whichever option you find more convenient.
+Install with either [Go](https://go.dev/) or
+[Docker](https://www.docker.com/get-started/). Choose what fits your setup.
 
-```bash
-# Install with Go
+```sh
 go install github.com/martinohansen/ynabber/cmd/ynabber@latest
 
-# Install with Docker
+# Docker
 docker pull ghcr.io/martinohansen/ynabber:latest
 ```
 
 ## Usage
 
-Ynabber is configured via environment variables. Below is an example setup for
+Ynabber is configured via environment variables. Here’s an example setup for
 reading transactions from
-[GoCardless](https://gocardless.com/bank-account-data/) (formerly known as
-Nordigen) and writing them to YNAB.
+[GoCardless](https://gocardless.com/bank-account-data/) (formerly Nordigen) and
+writing them to YNAB:
 
-```bash
-cat <<EOT >> ynabber.env
+```sh
+cat <<EOT > ynabber.env
 # YNAB
 YNAB_BUDGETID=<budget_id>
-YNAB_TOKEN=<account token>
-YNAB_ACCOUNTMAP={"<IBAN>": "<YNAB account ID>"}
+YNAB_TOKEN=<account_token>
+YNAB_ACCOUNTMAP={"<IBAN>": "<YNAB_account_ID>"}
 
-# Nordigen
-NORDIGEN_BANKID=<nordigen bank ID>
-NORDIGEN_SECRET_ID=<nordigen secret ID>
-NORDIGEN_SECRET_KEY=<nordigen secret key>
+# Nordigen / GoCardless
+NORDIGEN_BANKID=<nordigen_bank_ID>
+NORDIGEN_SECRET_ID=<nordigen_secret_ID>
+NORDIGEN_SECRET_KEY=<nordigen_secret_key>
 EOT
 ```
 
-Then run Ynabber:
+To run Ynabber with these settings:
 
-```bash
-# Load environment variables from the file
-set -a; . ./ynabber.env; set +a; ynabber
-
-# Then run
+```sh
+# Load env vars from file and run
+set -a
+. ./ynabber.env
+set +a
 ynabber
 ```
 
 Or using Docker:
 
-```bash
+```sh
 docker run \
-    --volume ${PWD}:/data \
+    --volume "${PWD}:/data" \
     --env 'YNABBER_DATADIR=/data' \
     --env-file=ynabber.env \
     ghcr.io/martinohansen/ynabber:latest
 ```
 
-_See [CONFIGURATION.md](./CONFIGURATION.md) for all valid settings_
+See [CONFIGURATION.md](./CONFIGURATION.md) for all available settings.
 
 ## Readers
 
-Readers are how Ynabber fetches your transactions from the bank. Below are some
-tested examples. Generally, any bank supported by
-[GoCardless](https://gocardless.com/bank-account-data/) (formerly known as
-Nordigen) should work:
+Readers fetch transactions from your bank. Any bank supported by
+[GoCardless](https://gocardless.com/bank-account-data/) should work. Examples
+below:
 
 | Reader | Bank | Verified? |
 |:-------|:-----|:---------:|
@@ -81,12 +77,11 @@ Nordigen) should work:
 | | S_PANKKI_SBANFIHH | ✅ |
 | | SPAREBANK_SR_BANK_SPRONO22 | ✅ |
 
-[^1]: Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if
-you have problems with a specific bank.
+[^1]: Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if you have problems with a specific bank.
 
 ## Writers
 
-Writers tell Ynabber where to send the fetched transactions.
+Writers are destinations for fetched transactions.
 
 | Writer  | Description   |
 |:--------|:--------------|
@@ -95,8 +90,8 @@ Writers tell Ynabber where to send the fetched transactions.
 
 ## Contributing
 
-Pull requests are welcome! If you encounter a bug or have an idea for
-improvement, feel free to [open an issue](https://github.com/martinohansen/ynabber/issues/new).
-We’d love your help in making Ynabber better for everyone!
+Pull requests welcome. Found a bug or have ideas? [Open an
+issue]((https://github.com/martinohansen/ynabber/issues/new)). Help make Ynabber
+better for everyone.
 
 _[bitcoin:bc1qct2au09va7rk5psevmesalkaxtjmdjun9x2r3a](bitcoin:bc1qct2au09va7rk5psevmesalkaxtjmdjun9x2r3a)_
