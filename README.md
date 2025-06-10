@@ -13,6 +13,7 @@ Install with either [Go](https://go.dev/) or
 [Docker](https://www.docker.com/get-started/). Choose what fits your setup.
 
 ```sh
+# Go
 go install github.com/martinohansen/ynabber/cmd/ynabber@latest
 
 # Docker
