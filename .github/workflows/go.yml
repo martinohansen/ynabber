@@ -61,7 +61,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: build
     strategy:
       matrix:
         go-version: [1.23, 1.24]
