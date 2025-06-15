@@ -13,7 +13,7 @@ import (
 	"github.com/frieser/nordigen-go-lib/v2"
 )
 
-const RequisitionRedirect = "https://raw.githubusercontent.com/martinohansen/ynabber/main/ok.html"
+const RequisitionRedirect = "https://martinohansen.github.io/ynabber/ok.html"
 
 // requisitionStore returns a clean path to the requisition file
 func (r Reader) requisitionStore() string {
