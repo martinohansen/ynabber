@@ -15,6 +15,7 @@ import (
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
+	"github.com/martinohansen/ynabber/internal/log"
 )
 
 const maxMemoSize int = 200  // Max size of memo field in YNAB API
@@ -196,7 +197,7 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", w.Config.Token))
 
-	w.logger.Debug("http request", "method", req.Method, "url", req.URL.String(), "body", string(payload))
+	log.Trace(w.logger, "http request", "method", req.Method, "url", req.URL.String(), "body", string(payload))
 	res, err := client.Do(req)
 	if err != nil {
 		return err
@@ -206,7 +207,7 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	if err != nil {
 		return fmt.Errorf("reading response body: %w", err)
 	}
-	w.logger.Debug("http response", "status", res.Status, "body", string(resPayload))
+	log.Trace(w.logger, "http response", "status", res.Status, "body", string(resPayload))
 
 	if res.StatusCode != http.StatusCreated {
 		return fmt.Errorf("failed to send request: %s", res.Status)
