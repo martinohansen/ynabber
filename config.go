@@ -8,8 +8,8 @@ type Config struct {
 	// DataDir is the path for storing files
 	DataDir string `envconfig:"YNABBER_DATADIR" default:"."`
 
-	// Debug prints more log statements
-	Debug bool `envconfig:"YNABBER_DEBUG" default:"false"`
+	// LogLevel sets the logging level (error, warn, info, debug, trace)
+	LogLevel string `envconfig:"YNABBER_LOG_LEVEL" default:"info"`
 
 	// Readers is a list of sources to read transactions from. Currently only
 	// Nordigen is supported.

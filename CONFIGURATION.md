@@ -9,7 +9,7 @@ Ynabber moves transactions from reader to writer in a fan-out fashion. Every wri
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|
 | YNABBER_DATADIR | `string` | `.` | DataDir is the path for storing files |
-| YNABBER_DEBUG | `bool` | `false` | Debug prints more log statements |
+| YNABBER_LOG_LEVEL | `string` | `info` | LogLevel sets the logging level (error, warn, info, debug, trace) |
 | YNABBER_READERS | `[]string` | `nordigen` | Readers is a list of sources to read transactions from. Currently only<br>Nordigen is supported. |
 | YNABBER_WRITERS | `[]string` | `ynab` | Writers is a list of destinations to write transactions to. |
 

@@ -8,24 +8,23 @@ import (
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
+	"github.com/martinohansen/ynabber/internal/log"
 	"github.com/martinohansen/ynabber/reader/generator"
 	"github.com/martinohansen/ynabber/reader/nordigen"
 	"github.com/martinohansen/ynabber/writer/json"
 	"github.com/martinohansen/ynabber/writer/ynab"
 )
 
-func setupLogging(debug bool) {
-	programLevel := slog.LevelInfo
-	addSource := false
-	if debug {
-		programLevel = slog.LevelDebug
-		addSource = true
+func setupLogging(logLevel string) {
+	programLevel, err := log.ParseLevel(logLevel)
+	if err != nil {
+		Exit(fmt.Sprintf("Error parsing log level: %s", err))
 	}
-	logger := slog.New(slog.NewTextHandler(
-		os.Stderr, &slog.HandlerOptions{
-			Level:     programLevel,
-			AddSource: addSource,
-		}))
+
+	// Add source information for debug or lower
+	addSource := programLevel <= slog.LevelDebug
+
+	logger := log.NewLoggerWithTrace(programLevel, addSource)
 	slog.SetDefault(logger)
 }
 
@@ -42,7 +41,7 @@ func main() {
 		Exit(err.Error())
 	}
 
-	setupLogging(cfg.Debug)
+	setupLogging(cfg.LogLevel)
 	slog.Info("starting...", "version", versioninfo.Short())
 
 	y := ynabber.NewYnabber(&cfg)
