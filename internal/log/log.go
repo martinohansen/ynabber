@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -24,7 +25,7 @@ func ParseLevel(s string) (slog.Level, error) {
 }
 
 // NewLoggerWithTrace creates a logger with trace support
-func NewLoggerWithTrace(minLevel slog.Level, addSource bool) *slog.Logger {
+func NewLoggerWithTrace(minLevel slog.Level, addSource bool, format string) (*slog.Logger, error) {
 	opts := &slog.HandlerOptions{
 		Level:     minLevel,
 		AddSource: addSource,
@@ -41,8 +42,17 @@ func NewLoggerWithTrace(minLevel slog.Level, addSource bool) *slog.Logger {
 		},
 	}
 
-	handler := slog.NewTextHandler(os.Stderr, opts)
-	return slog.New(handler)
+	var handler slog.Handler
+	switch strings.ToLower(format) {
+	case "json":
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	case "text":
+		handler = slog.NewTextHandler(os.Stderr, opts)
+	default:
+		return nil, fmt.Errorf("unknown format: %s", format)
+	}
+
+	return slog.New(handler), nil
 }
 
 // Trace logs a message at trace level using the provided logger.

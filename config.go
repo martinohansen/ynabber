@@ -11,6 +11,9 @@ type Config struct {
 	// LogLevel sets the logging level (error, warn, info, debug, trace)
 	LogLevel string `envconfig:"YNABBER_LOG_LEVEL" default:"info"`
 
+	// LogFormat sets the logging format (text, json)
+	LogFormat string `envconfig:"YNABBER_LOG_FORMAT" default:"text"`
+
 	// Readers is a list of sources to read transactions from. Currently only
 	// Nordigen is supported.
 	Readers []string `envconfig:"YNABBER_READERS" default:"nordigen"`

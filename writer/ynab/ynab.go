@@ -197,7 +197,7 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", w.Config.Token))
 
-	log.Trace(w.logger, "http request", "method", req.Method, "url", req.URL.String(), "body", string(payload))
+	log.Trace(w.logger, "http request", "method", req.Method, "url", req.URL.String(), "body", payload)
 	res, err := client.Do(req)
 	if err != nil {
 		return err
@@ -207,7 +207,7 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 	if err != nil {
 		return fmt.Errorf("reading response body: %w", err)
 	}
-	log.Trace(w.logger, "http response", "status", res.Status, "body", string(resPayload))
+	log.Trace(w.logger, "http response", "status", res.Status, "body", resPayload)
 
 	if res.StatusCode != http.StatusCreated {
 		return fmt.Errorf("failed to send request: %s", res.Status)

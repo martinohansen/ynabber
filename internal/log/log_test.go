@@ -5,18 +5,32 @@ import (
 	"testing"
 )
 
+type Foo struct {
+	Bar Baz `json:"bar"`
+}
+
+type Baz struct {
+	Baz string `json:"baz"`
+}
+
 func TestAllLogLevels(t *testing.T) {
-	// Create a logger with trace level to show all messages
-	logger := NewLoggerWithTrace(LevelTrace, true)
-	slog.SetDefault(logger)
+	var foo = Foo{Bar: Baz{Baz: "🎉"}} // Dummy nested json doc
 
-	// Test all log levels
-	slog.Error("This is an ERROR message")
-	slog.Warn("This is a WARN message")
-	slog.Info("This is an INFO message")
-	slog.Debug("This is a DEBUG message")
-	Trace(logger, "This is a TRACE message")
+	for _, format := range []string{"text", "json"} {
+		logger, err := NewLoggerWithTrace(LevelTrace, true, format)
+		if err != nil {
+			t.Fatalf("creating logger: %v", err)
+		}
+		slog.SetDefault(logger)
 
+		// Test all log levels
+		slog.Error("This is an ERROR message", "foo", foo)
+		slog.Warn("This is a WARN message", "foo", foo)
+		slog.Info("This is an INFO message", "foo", foo)
+		slog.Debug("This is a DEBUG message", "foo", foo)
+		Trace(logger, "This is a TRACE message", "foo", foo)
+
+	}
 	t.Log("All log levels have been printed above")
 }
 

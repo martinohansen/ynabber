@@ -15,7 +15,7 @@ import (
 	"github.com/martinohansen/ynabber/writer/ynab"
 )
 
-func setupLogging(logLevel string) {
+func setupLogging(logLevel, logFormat string) {
 	programLevel, err := log.ParseLevel(logLevel)
 	if err != nil {
 		Exit(fmt.Sprintf("Error parsing log level: %s", err))
@@ -24,7 +24,10 @@ func setupLogging(logLevel string) {
 	// Add source information for debug or lower
 	addSource := programLevel <= slog.LevelDebug
 
-	logger := log.NewLoggerWithTrace(programLevel, addSource)
+	logger, err := log.NewLoggerWithTrace(programLevel, addSource, logFormat)
+	if err != nil {
+		Exit(fmt.Sprintf("Error creating logger: %s", err))
+	}
 	slog.SetDefault(logger)
 }
 
@@ -41,7 +44,7 @@ func main() {
 		Exit(err.Error())
 	}
 
-	setupLogging(cfg.LogLevel)
+	setupLogging(cfg.LogLevel, cfg.LogFormat)
 	slog.Info("starting...", "version", versioninfo.Short())
 
 	y := ynabber.NewYnabber(&cfg)
