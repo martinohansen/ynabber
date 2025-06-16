@@ -8,6 +8,7 @@ import (
 	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
+	"github.com/martinohansen/ynabber/internal/log"
 )
 
 const rateLimitExceededStatusCode = 429
@@ -103,6 +104,7 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		}
 
 		transactions, err := r.Client.GetAccountTransactions(string(account.ID))
+		log.Trace(r.logger, "account transactions", "account", account, "transactions", transactions)
 		if err != nil {
 			var apiErr *nordigen.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == rateLimitExceededStatusCode {
