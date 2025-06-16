@@ -1,7 +1,6 @@
 package nordigen
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -10,8 +9,6 @@ import (
 	"github.com/martinohansen/ynabber"
 	"github.com/martinohansen/ynabber/internal/log"
 )
-
-const rateLimitExceededStatusCode = 429
 
 type Reader struct {
 	Config Config
@@ -78,14 +75,14 @@ func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([
 func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 	req, err := r.Requisition()
 	if err != nil {
-		return nil, fmt.Errorf("failed to authorize: %w", err)
+		return nil, fmt.Errorf("getting requisition: %w", err)
 	}
 
 	r.logger.Info("loaded requisition", "accounts", len(req.Accounts))
 	for _, account := range req.Accounts {
 		accountMetadata, err := r.Client.GetAccountMetadata(account)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get account metadata: %w", err)
+			return nil, fmt.Errorf("getting account metadata: %w", err)
 		}
 		logger := r.logger.With("iban", accountMetadata.Iban)
 
@@ -106,17 +103,12 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		transactions, err := r.Client.GetAccountTransactions(string(account.ID))
 		log.Trace(r.logger, "account transactions", "account", account, "transactions", transactions)
 		if err != nil {
-			var apiErr *nordigen.APIError
-			if errors.As(err, &apiErr) && apiErr.StatusCode == rateLimitExceededStatusCode {
-				// TODO(Martin): Implement rate limit handling
-				return t, fmt.Errorf("getting transactions: %w", &RateLimitError{})
-			}
-			return t, fmt.Errorf("failed to get transactions: %w", err)
+			return t, fmt.Errorf("getting transactions: %w", err)
 		}
 
 		x, err := r.toYnabbers(account, transactions)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert transaction: %w", err)
+			return nil, fmt.Errorf("converting transaction: %w", err)
 		}
 		t = append(t, x...)
 	}
