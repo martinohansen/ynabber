@@ -8,14 +8,22 @@ import (
 	"strings"
 )
 
-// LevelTrace is a custom log level for trace logging like request and responses
-// from external APIs.
-const LevelTrace = slog.Level(-8)
+const (
+	// LevelTrace for trace logging like request and responses from external
+	// APIs.
+	LevelTrace = slog.Level(-8)
+
+	// LevelFatal for errors that should print and exit with a non-zero code.
+	LevelFatal = slog.Level(16)
+)
 
 func ParseLevel(s string) (slog.Level, error) {
-	// Handle our custom trace level first
+	// Handle custom levels
 	if strings.ToLower(s) == "trace" {
 		return LevelTrace, nil
+	}
+	if strings.ToLower(s) == "fatal" {
+		return LevelFatal, nil
 	}
 
 	// Use slog's built-in parsing for standard levels
@@ -36,6 +44,8 @@ func NewLoggerWithTrace(minLevel slog.Level, addSource bool, format string) (*sl
 				switch {
 				case level == LevelTrace:
 					a.Value = slog.StringValue("TRACE")
+				case level == LevelFatal:
+					a.Value = slog.StringValue("FATAL")
 				}
 			}
 			return a
@@ -58,4 +68,10 @@ func NewLoggerWithTrace(minLevel slog.Level, addSource bool, format string) (*sl
 // Trace logs a message at trace level using the provided logger.
 func Trace(logger *slog.Logger, msg string, args ...any) {
 	logger.Log(context.Background(), LevelTrace, msg, args...)
+}
+
+// Fatal logs a message at fatal level and exits
+func Fatal(logger *slog.Logger, msg string, args ...any) {
+	logger.Log(context.Background(), LevelFatal, msg, args...)
+	os.Exit(1)
 }
