@@ -6,10 +6,19 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/frieser/nordigen-go-lib/v2"
 )
 
 func TestReaderRetryHandler(t *testing.T) {
 	logger := slog.Default()
+
+	rl := &nordigen.RateLimitError{
+		APIError: &nordigen.APIError{StatusCode: 429},
+		// slightly annoying that this requires us to wait for 1 second until
+		// the test case is cached 🤷‍♂️
+		RateLimit: nordigen.RateLimit{Reset: 1},
+	}
 
 	tests := []struct {
 		name     string
@@ -26,13 +35,13 @@ func TestReaderRetryHandler(t *testing.T) {
 		{
 			name:     "no retry in one-shot mode",
 			config:   Config{Interval: 0},
-			inputErr: &RateLimitError{RetryAfter: time.Second},
-			wantErr:  &RateLimitError{RetryAfter: time.Second},
+			inputErr: rl,
+			wantErr:  rl,
 		},
 		{
 			name:     "retry if interval is set",
 			config:   Config{Interval: time.Millisecond * 100},
-			inputErr: &RateLimitError{},
+			inputErr: rl,
 			wantErr:  nil,
 		},
 	}

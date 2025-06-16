@@ -5,20 +5,17 @@ import (
 	"errors"
 	"time"
 
+	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/martinohansen/ynabber"
 )
 
-// retryHandler returns err as is unless its retirable in which case it will
-// wait until the greater of interval or err can be safely retried.
+// retryHandler handles rate limit errors by waiting for the reset timer or
+// returns err imimediately if it cannot handle the error.
 func (r Reader) retryHandler(ctx context.Context, err error) error {
-	var rl *RateLimitError
+	var rl *nordigen.RateLimitError
 	if errors.As(err, &rl) && r.Config.Interval != 0 {
-		// If rate limited and not in one-shot mode wait for the greater of
-		// RetryAfter or Interval before retrying.
-		wait := r.Config.Interval
-		if rl.RetryAfter > wait {
-			wait = rl.RetryAfter
-		}
+		// Handle rate limit error by waiting until the reset timer expires
+		wait := time.Duration(rl.RateLimit.Reset+1) * time.Second
 		r.logger.Info("rate limited, retrying later", "wait", wait)
 
 		select {
