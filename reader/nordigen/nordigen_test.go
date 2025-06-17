@@ -26,10 +26,11 @@ func getAccountTransactions(t nordigen.Transaction) nordigen.AccountTransactions
 
 func TestToYnabber(t *testing.T) {
 	logger := slog.Default()
-	var defaultConfig Config
-	_ = envconfig.Process("", &defaultConfig)
-	alternateConfig1 := defaultConfig
-	alternateConfig1.PayeeSource = PayeeGroups{{Name}}
+	var configDefault Config
+	_ = envconfig.Process("", &configDefault)
+
+	configPayeeSourceName := configDefault
+	configPayeeSourceName.PayeeSource = PayeeGroups{{Name}}
 
 	type args struct {
 		account ynabber.Account
@@ -46,7 +47,7 @@ func TestToYnabber(t *testing.T) {
 		{
 			// Test SPAREBANK_SR_BANK_SPRONO22
 			bankID: "SPAREBANK_SR_BANK_SPRONO22",
-			reader: Reader{Config: defaultConfig, logger: logger},
+			reader: Reader{Config: configDefault, logger: logger},
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: getAccountTransactions(nordigen.Transaction{
@@ -82,7 +83,7 @@ func TestToYnabber(t *testing.T) {
 			// Tests a common Nordigen transaction from NORDEA_NDEADKKK with the
 			// default config to highlight any breaking changes.
 			bankID: "NORDEA_NDEADKKK",
-			reader: Reader{Config: defaultConfig, logger: logger},
+			reader: Reader{Config: configDefault, logger: logger},
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: getAccountTransactions(nordigen.Transaction{
@@ -124,7 +125,7 @@ func TestToYnabber(t *testing.T) {
 			// Nordea should remove P transactions
 			name:   "Remove P transactions",
 			bankID: "NORDEA_NDEADKKK",
-			reader: Reader{Config: defaultConfig, logger: logger},
+			reader: Reader{Config: configDefault, logger: logger},
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: getAccountTransactions(nordigen.Transaction{
@@ -146,10 +147,39 @@ func TestToYnabber(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:   "new CBP transaction from Nordea",
+			bankID: "NORDEA_NDEADKKK",
+			reader: Reader{Config: configDefault, logger: logger},
+			args: args{
+				account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				t: getAccountTransactions(nordigen.Transaction{
+					TransactionId: "CBP-209886344408903.130001",
+					BookingDate:   "2025-06-17",
+					ValueDate:     "2025-06-17",
+					TransactionAmount: struct {
+						Amount   string "json:\"amount,omitempty\""
+						Currency string "json:\"currency,omitempty\""
+					}{Amount: "-55.0", Currency: "DKK"},
+					RemittanceInformationStructured: "LOOMISP*Harry s ApS\nDKK 55,00\nDen 13.06",
+					AdditionalInformation:           "Visa køb",
+					InternalTransactionId:           "156bbbc942e6b349b80ec6e617609f96",
+				}),
+			},
+			want: []ynabber.Transaction{{
+				Account: ynabber.Account{Name: "foo", IBAN: "bar"},
+				ID:      ynabber.ID("CBP-209886344408903.130001"),
+				Date:    time.Date(2025, time.June, 17, 0, 0, 0, 0, time.UTC),
+				Payee:   "LOOMISP Harry s ApS DKK Den",
+				Memo:    "LOOMISP*Harry s ApS\nDKK 55,00\nDen 13.06",
+				Amount:  ynabber.Milliunits(-55000)},
+			},
+			wantErr: false,
+		},
+		{
 			// Test transaction from SEB_KORT_AB_NO_SKHSFI21
 			name:   "SEB_KORT_AB_NO_SKHSFI21",
 			bankID: "SEB_KORT_AB_NO_SKHSFI21",
-			reader: Reader{Config: defaultConfig, logger: logger},
+			reader: Reader{Config: configDefault, logger: logger},
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: getAccountTransactions(nordigen.Transaction{
@@ -191,7 +221,7 @@ func TestToYnabber(t *testing.T) {
 			// Test transaction from S_PANKKI_SBANFIHH - a typical debit card transaction
 			name:   "S_PANKKI_SBANFIHH Debit card",
 			bankID: "S_PANKKI_SBANFIHH",
-			reader: Reader{Config: alternateConfig1, logger: logger},
+			reader: Reader{Config: configPayeeSourceName, logger: logger},
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: getAccountTransactions(nordigen.Transaction{
@@ -232,7 +262,7 @@ func TestToYnabber(t *testing.T) {
 			// Test transaction from S_PANKKI_SBANFIHH - an incoming transaction with message
 			name:   "S_PANKKI_SBANFIHH Received with message",
 			bankID: "S_PANKKI_SBANFIHH",
-			reader: Reader{Config: alternateConfig1, logger: logger},
+			reader: Reader{Config: configPayeeSourceName, logger: logger},
 			args: args{
 				account: ynabber.Account{Name: "foo", IBAN: "bar"},
 				t: getAccountTransactions(nordigen.Transaction{

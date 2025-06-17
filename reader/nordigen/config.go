@@ -32,8 +32,8 @@ func (ps PayeeSource) String() string {
 	switch ps {
 	case Name:
 		return "name"
-	case Unstructured:
-		return "unstructured"
+	case Remittance:
+		return "remittance"
 	case Additional:
 		return "additional"
 	default:
@@ -43,7 +43,7 @@ func (ps PayeeSource) String() string {
 
 const (
 	Name PayeeSource = 1 << iota
-	Unstructured
+	Remittance
 	Additional
 )
 
@@ -58,8 +58,9 @@ func (pg *PayeeGroups) Decode(value string) error {
 			switch strings.TrimSpace(source) {
 			case "name":
 				sources = append(sources, Name)
-			case "unstructured":
-				sources = append(sources, Unstructured)
+			case "unstructured", "remittance":
+				// support unstructured for backwards compatibility
+				sources = append(sources, Remittance)
 			case "additional":
 				sources = append(sources, Additional)
 			default:
@@ -87,13 +88,13 @@ type Config struct {
 	// result is found.
 	//
 	// Available sources:
-	//  * unstructured: uses the RemittanceInformationUnstructured field
+	//  * remittance: uses the remittanceInformation fields
 	//  * name: uses either the debtorName or creditorName field
-	//  * additional: uses the AdditionalInformation field
+	//  * additional: uses the additionalInformation field
 	//
-	// Example: "name+additional,unstructured" will first try to combine name
-	// and additional fields, falling back to unstructured if both are empty.
-	PayeeSource PayeeGroups `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"unstructured,name,additional"`
+	// Example: "name+additional,remittance" will first try to combine name and
+	// additional fields, falling back to remittance if both are empty.
+	PayeeSource PayeeGroups `envconfig:"NORDIGEN_PAYEE_SOURCE" default:"remittance,name,additional"`
 
 	// PayeeStrip contains words to remove from payee names.
 	// Example: "foo,bar" removes "foo" and "bar" from all payee names.
