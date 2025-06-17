@@ -75,7 +75,7 @@ func TestNewPayee(t *testing.T) {
 				},
 				groups: PayeeGroups{
 					{Name},
-					{Unstructured},
+					{Remittance},
 					{Additional},
 				},
 			},
@@ -94,7 +94,7 @@ func TestNewPayee(t *testing.T) {
 					AdditionalInformation:             "baz",
 				},
 				groups: PayeeGroups{
-					{Name, Unstructured},
+					{Name, Remittance},
 					{Additional},
 				},
 			},
@@ -111,7 +111,7 @@ func TestNewPayee(t *testing.T) {
 					RemittanceInformationUnstructured: "Visa køb DKK 54,90 REMA1000 APP 426 F Den 21.05",
 				},
 				groups: PayeeGroups{
-					{Unstructured},
+					{Remittance},
 				},
 			},
 			want: Payee{
@@ -130,7 +130,7 @@ func TestNewPayee(t *testing.T) {
 				},
 				groups: PayeeGroups{
 					{Name},
-					{Unstructured},
+					{Remittance},
 					{Additional},
 				},
 			},

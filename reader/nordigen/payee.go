@@ -36,9 +36,11 @@ func newPayee(t nordigen.Transaction, groups PayeeGroups) Payee {
 			}
 
 			switch source {
-			case Unstructured:
+			case Remittance:
+				// Strip non-alphanumeric characters and new lines from
+				// remittance payee values. These have been notoriously messy.
 				payees = append(payees, Payee{
-					value: stripNonAlphanumeric(value),
+					value: strings.ReplaceAll(stripNonAlphanumeric(value), "\n", " "),
 					raw:   value,
 				})
 			default:
@@ -63,11 +65,18 @@ func newPayee(t nordigen.Transaction, groups PayeeGroups) Payee {
 // payeeValue returns the value of the given source
 func payeeValue(t nordigen.Transaction, source PayeeSource) string {
 	switch source {
-	case Unstructured:
-		// Use first unstructured string or array that is defined
+	case Remittance:
+		// The remittance info can be in one or more of four fields, i've not
+		// seen it in all of them yet but it has varied between which field over
+		// time for my bank. Prefer structured over unstructured and array last
+		// in each case.
+		if t.RemittanceInformationStructured != "" {
+			return t.RemittanceInformationStructured
+		} else if t.RemittanceInformationStructuredArray != nil {
+			return strings.Join(t.RemittanceInformationStructuredArray, " ")
+		}
 		if t.RemittanceInformationUnstructured != "" {
 			return t.RemittanceInformationUnstructured
-
 		} else if t.RemittanceInformationUnstructuredArray != nil {
 			return strings.Join(t.RemittanceInformationUnstructuredArray, " ")
 		}
