@@ -30,6 +30,23 @@ Nordigen reads bank transactions through the Nordigen/GoCardless API. It connect
 | NORDIGEN_REQUISITION_FILE | `string` | - | RequisitionFile specifies the filename for storing requisition data.<br>The file is stored in the directory defined by YNABBER_DATADIR. |
 | NORDIGEN_INTERVAL | `time.Duration` | `6h` | Interval determines how often to fetch new transactions.<br>Set to 0 to run only once instead of continuously. |
 
+## Actual
+
+Package actual provides a writer implementation that sends transactions to an Actual Budget HTTP API instance.
+
+| Environment variable | Type | Default | Description |
+|:---------------------|:-----|:--------|:------------|
+| ACTUAL_BASE_URL | `string` | - | BaseURL points to the running actual-http-api service, e.g. https://actual.example.com |
+| ACTUAL_API_KEY | `string` | - | APIKey is an optional shared secret that will be sent via the x-api-key header. |
+| ACTUAL_BUDGET_ID | `string` | - | BudgetID is the Actual Sync ID for the budget to update. |
+| ACTUAL_ACCOUNTMAP | `AccountMap` | - | AccountMap maps IBAN numbers to Actual account identifiers. |
+| ACTUAL_ENCRYPTION_PASSWORD | `string` | - | EncryptionPassword optionally unlocks end-to-end encrypted budgets. |
+| ACTUAL_FROM_DATE | `Date` | - | FromDate skips transactions older than this date when provided. |
+| ACTUAL_DELAY | `time.Duration` | `0` | Delay prevents sending very recent transactions that might still change. |
+| ACTUAL_RUN_TRANSFERS | `bool` | `false` | RunTransfers instructs Actual to automatically create transfers. |
+| ACTUAL_LEARN_CATEGORIES | `bool` | `false` | LearnCategories updates rules based on the incoming category field. |
+| ACTUAL_CLEARED | `bool` | `false` | Cleared toggles the cleared flag for newly created transactions. |
+
 ## Ynab
 
 YNAB writes transactions You Need a Budget (YNAB) using their API. It handles transaction and account mapping, validation, deduplication, inflow/outflow swapping, and transaction filtering.
