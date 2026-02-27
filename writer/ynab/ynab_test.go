@@ -3,6 +3,7 @@ package ynab
 import (
 	"log/slog"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -214,6 +215,155 @@ func TestValidTransaction(t *testing.T) {
 
 			if got := writer.checkTransactionDateValidity(tt.date); got != tt.want {
 				t.Errorf("got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestToYNABPayeeAndMemo covers payee/memo truncation and whitespace
+// normalisation in Writer.toYNAB.
+func TestToYNABPayeeAndMemo(t *testing.T) {
+	const testIBAN = "TEST-IBAN-001"
+	const testAccountID = "ynab-account-id-001"
+
+	writer := Writer{
+		Config: Config{
+			AccountMap: map[string]string{testIBAN: testAccountID},
+		},
+		logger: slog.Default(),
+	}
+
+	// 201 'a' characters — one beyond the 200-char limit.
+	longString := strings.Repeat("a", 201)
+	// 205 chars of "word " repeated — verifies truncation works after
+	// whitespace normalisation has already collapsed runs of spaces.
+	longWords := strings.Repeat("word ", 41) // 41 × 5 = 205 chars
+
+	baseTransaction := ynabber.Transaction{
+		Account: ynabber.Account{IBAN: testIBAN},
+		Amount:  1000,
+		Date:    time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+	}
+
+	type args struct {
+		payee string
+		memo  string
+		iban  string // leave empty to use testIBAN
+	}
+	tests := []struct {
+		name          string
+		args          args
+		wantErr       bool
+		checkPayeeLen bool   // assert len(PayeeName) <= maxPayeeSize
+		checkMemoLen  bool   // assert len(Memo) <= maxMemoSize
+		wantPayee     string // exact match when non-empty
+		wantMemo      string // exact match when non-empty
+	}{
+		{
+			// A payee that exceeds 200 chars must be silently truncated.
+			// The implementation slices [0:(maxPayeeSize-1)], yielding 199 chars.
+			name: "payee truncation: payee longer than 200 chars is truncated",
+			args: args{
+				payee: longString, // 201 chars
+				memo:  "normal memo",
+			},
+			wantErr:       false,
+			checkPayeeLen: true,
+		},
+		{
+			// A memo that exceeds 200 chars must be silently truncated.
+			// The implementation slices [0:(maxMemoSize-1)], yielding 199 chars.
+			name: "memo truncation: memo longer than 200 chars is truncated",
+			args: args{
+				payee: "normal payee",
+				memo:  longString, // 201 chars
+			},
+			wantErr:      false,
+			checkMemoLen: true,
+		},
+		{
+			// Multi-word payee over the limit — verifies truncation after normalisation.
+			name: "payee truncation: long multi-word payee is truncated after normalisation",
+			args: args{
+				payee: longWords, // 205 chars of "word " repeated
+				memo:  "normal memo",
+			},
+			wantErr:       false,
+			checkPayeeLen: true,
+		},
+		{
+			// Consecutive spaces inside a payee must be collapsed to one space.
+			name: "whitespace normalisation: consecutive spaces in payee are collapsed",
+			args: args{
+				payee: "Hello  World", // two spaces
+				memo:  "normal memo",
+			},
+			wantErr:   false,
+			wantPayee: "Hello World",
+		},
+		{
+			// Tabs mixed with spaces in a payee must also be collapsed.
+			name: "whitespace normalisation: tabs and spaces in payee are collapsed",
+			args: args{
+				payee: "Foo\t\t Bar   Baz",
+				memo:  "normal memo",
+			},
+			wantErr:   false,
+			wantPayee: "Foo Bar Baz",
+		},
+		{
+			// Leading and trailing whitespace must be stripped entirely.
+			name: "whitespace normalisation: leading and trailing spaces in payee are trimmed",
+			args: args{
+				payee: "  trimmed  ",
+				memo:  "normal memo",
+			},
+			wantErr:   false,
+			wantPayee: "trimmed",
+		},
+		{
+			// Unknown IBAN has no entry in AccountMap → error expected.
+			name: "error: unknown IBAN returns error",
+			args: args{
+				payee: "any payee",
+				memo:  "any memo",
+				iban:  "UNKNOWN-IBAN",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tx := baseTransaction
+			tx.Payee = tt.args.payee
+			tx.Memo = tt.args.memo
+			if tt.args.iban != "" {
+				tx.Account.IBAN = tt.args.iban
+			}
+
+			got, err := writer.toYNAB(tx)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("toYNAB() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+
+			if tt.checkPayeeLen && len(got.PayeeName) > maxPayeeSize {
+				t.Errorf("PayeeName length = %d, want <= %d", len(got.PayeeName), maxPayeeSize)
+			}
+
+			if tt.checkMemoLen && len(got.Memo) > maxMemoSize {
+				t.Errorf("Memo length = %d, want <= %d", len(got.Memo), maxMemoSize)
+			}
+
+			if tt.wantPayee != "" && got.PayeeName != tt.wantPayee {
+				t.Errorf("PayeeName = %q, want %q", got.PayeeName, tt.wantPayee)
+			}
+
+			if tt.wantMemo != "" && got.Memo != tt.wantMemo {
+				t.Errorf("Memo = %q, want %q", got.Memo, tt.wantMemo)
 			}
 		})
 	}
