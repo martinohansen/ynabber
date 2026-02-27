@@ -20,6 +20,8 @@ import (
 
 const maxMemoSize int = 200  // Max size of memo field in YNAB API
 const maxPayeeSize int = 100 // Max size of payee field in YNAB API
+// maxResponseBodyBytes caps how much of the YNAB API response body we buffer.
+const maxResponseBodyBytes = 10 * 1024 * 1024
 
 var space = regexp.MustCompile(`\s+`) // Matches all whitespace characters
 
@@ -67,24 +69,49 @@ func NewWriter() (Writer, error) {
 	}, nil
 }
 
-// accountParser takes IBAN and returns the matching YNAB account ID in
-// accountMap
-func accountParser(iban string, accountMap map[string]string) (string, error) {
-	for from, to := range accountMap {
-		if iban == from {
-			return to, nil
+// accountParser takes an Account and returns the matching YNAB account ID in
+// accountMap. It tries to match by ID first (for enablebanking account_uid),
+// then by IBAN (for nordigen or enablebanking with IBAN).
+func accountParser(account ynabber.Account, accountMap map[string]string) (string, error) {
+	// Try matching by Account ID first (for enablebanking account_uid)
+	if account.ID != "" {
+		if ynabID, ok := accountMap[string(account.ID)]; ok {
+			return ynabID, nil
 		}
 	}
-	return "", fmt.Errorf("no account for: %s in map: %s", iban, accountMap)
+
+	// Fall back to matching by IBAN (for nordigen or enablebanking with IBAN)
+	if account.IBAN != "" {
+		if ynabID, ok := accountMap[account.IBAN]; ok {
+			return ynabID, nil
+		}
+	}
+
+	// If neither ID nor IBAN matched, return error with hint about both options
+	identifier := string(account.ID)
+	if identifier == "" {
+		identifier = account.IBAN
+	}
+	return "", fmt.Errorf("no matching YNAB account for ID=%s IBAN=%s in map: %v", account.ID, account.IBAN, accountMap)
 }
 
 // makeID returns a unique YNAB import ID to avoid duplicate transactions.
+// IBAN is preferred when available to preserve backward compatibility with
+// existing Nordigen import IDs. Account ID is used only when IBAN is absent
+// (e.g. account types that EnableBanking does not expose an IBAN for).
 func makeID(t ynabber.Transaction) string {
 	date := t.Date.Format("2006-01-02")
 	amount := t.Amount.String()
 
+	// Prefer IBAN for stable, backward-compatible import IDs. Both Nordigen
+	// and EnableBanking populate IBAN for standard account types.
+	accountIdentifier := t.Account.IBAN
+	if accountIdentifier == "" {
+		accountIdentifier = string(t.Account.ID)
+	}
+
 	s := [][]byte{
-		[]byte(t.Account.IBAN),
+		[]byte(accountIdentifier),
 		[]byte(t.ID),
 		[]byte(date),
 		[]byte(amount),
@@ -94,7 +121,7 @@ func makeID(t ynabber.Transaction) string {
 }
 
 func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
-	accountID, err := accountParser(source.Account.IBAN, w.Config.AccountMap)
+	accountID, err := accountParser(source.Account, w.Config.AccountMap)
 	if err != nil {
 		return Transaction{}, err
 	}
@@ -117,9 +144,10 @@ func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
 
 	// If SwapFlow is defined check if the account is configured to swap inflow
 	// to outflow. If so swap it by using the Negate method.
+	// SwapFlow can match by Account ID (enablebanking) or IBAN (nordigen)
 	if w.Config.SwapFlow != nil {
 		for _, account := range w.Config.SwapFlow {
-			if account == source.Account.IBAN {
+			if account == source.Account.IBAN || account == string(source.Account.ID) {
 				source.Amount = source.Amount.Negate()
 			}
 		}
@@ -203,7 +231,7 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 		return err
 	}
 	defer res.Body.Close()
-	resPayload, err := io.ReadAll(res.Body)
+	resPayload, err := io.ReadAll(io.LimitReader(res.Body, maxResponseBodyBytes))
 	if err != nil {
 		return fmt.Errorf("reading response body: %w", err)
 	}

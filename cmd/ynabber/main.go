@@ -9,6 +9,7 @@ import (
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 	"github.com/martinohansen/ynabber/internal/log"
+	"github.com/martinohansen/ynabber/reader/enablebanking"
 	"github.com/martinohansen/ynabber/reader/generator"
 	"github.com/martinohansen/ynabber/reader/nordigen"
 	"github.com/martinohansen/ynabber/writer/json"
@@ -59,6 +60,12 @@ func main() {
 				log.Fatal(logger, "creating nordigen reader", "error", err)
 			}
 			y.Readers = append(y.Readers, nordigenReader)
+		case "enablebanking":
+			enableBankingReader, err := enablebanking.NewReader(logger, cfg.DataDir)
+			if err != nil {
+				log.Fatal(logger, "creating enablebanking reader", "error", err)
+			}
+			y.Readers = append(y.Readers, enableBankingReader)
 		case "generator":
 			generatorReader, err := generator.NewReader()
 			if err != nil {

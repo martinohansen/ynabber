@@ -32,7 +32,8 @@ cat <<EOT > ynabber.env
 # YNAB
 YNAB_BUDGETID=<budget_id>
 YNAB_TOKEN=<account_token>
-YNAB_ACCOUNTMAP={"<IBAN>": "<YNAB_account_ID>"}
+# AccountMap can use IBAN or Account ID (enablebanking account_uid)
+YNAB_ACCOUNTMAP={"<IBAN_or_account_id>": "<YNAB_account_ID>"}
 
 # Nordigen / GoCardless
 NORDIGEN_BANKID=<nordigen_bank_ID>
@@ -61,24 +62,33 @@ docker run \
     ghcr.io/martinohansen/ynabber:latest
 ```
 
+> **Note for EnableBanking users:** The initial OAuth authorization requires
+> interactive terminal input. Run the container with `-it` for the first run
+> (see [reader/enablebanking/README.md](./reader/enablebanking/README.md#running-in-docker)).
+> Subsequent runs are fully non-interactive.
+
 See [CONFIGURATION.md](./CONFIGURATION.md) for all available settings.
 
 ## Readers
 
-Readers fetch transactions from your bank. Any bank supported by
-[GoCardless](https://gocardless.com/bank-account-data/) should work. Examples
-below:
+Readers fetch transactions from your bank using PSD2 Open Banking standards.
 
-| Reader | Bank | Verified? |
-|:-------|:-----|:---------:|
-| [Nordigen](/reader/nordigen/)[^1] | ALANDSBANKEN_AABAFI22 | ✅ |
-| | NORDEA_NDEADKKK | ✅ |
-| | NORDEA_NDEAFIHH | ✅ |
-| | NORWEGIAN_FI_NORWNOK1 | ✅ |
-| | S_PANKKI_SBANFIHH | ✅ |
-| | SPAREBANK_SR_BANK_SPRONO22 | ✅ |
+| Reader | Documentation | Verified Banks |
+|:-------|:--------------|:---------------:|
+| [Nordigen](/reader/nordigen/)[^1] | [Setup Guide](/reader/nordigen/README.md) | ALANDSBANKEN, NORDEA, S_PANKKI, SPAREBANK |
+| [EnableBanking](/reader/enablebanking/)[^2] | [Setup Guide](/reader/enablebanking/README.md) | DNB, Sbanken, SAS Eurobonus Mastercard, and others |
 
-[^1]: Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if you have problems with a specific bank.
+[^1]: Connected through GoCardless. Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if you have problems with a specific bank.
+[^2]: Connected through EnableBanking Open Banking API. Supports any bank implementing PSD2.
+
+### EnableBanking Setup (Short Version)
+
+1. Register at [EnableBanking](https://enablebanking.com/) and create an application.
+2. Use EnableBanking's app setup to generate and download the PEM key (recommended), or generate an RSA PKCS8 private key (PEM) and upload the public key to your app.
+3. Link bank accounts in the EnableBanking dashboard.
+4. Set `ENABLEBANKING_APP_ID`, `ENABLEBANKING_COUNTRY`, `ENABLEBANKING_ASPSP`, `ENABLEBANKING_REDIRECT_URL`, and `ENABLEBANKING_PEM_FILE`.
+
+See the full guide in [reader/enablebanking/README.md](reader/enablebanking/README.md).
 
 ## Writers
 
