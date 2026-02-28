@@ -19,7 +19,7 @@ import (
 )
 
 const maxMemoSize int = 200  // Max size of memo field in YNAB API
-const maxPayeeSize int = 100 // Max size of payee field in YNAB API
+const maxPayeeSize int = 200 // Max size of payee_name field in YNAB API (maxLength: 200)
 // maxResponseBodyBytes caps how much of the YNAB API response body we buffer.
 const maxResponseBodyBytes = 10 * 1024 * 1024
 
@@ -178,7 +178,7 @@ func (w Writer) checkTransactionDateValidity(date time.Time) bool {
 	return date.After(fiveYearsAgo) && date.After(fromDate) && date.Before(now.Add(-delay))
 }
 
-func (w Writer) Bulk(t []ynabber.Transaction) error {
+func (w Writer) Bulk(ctx context.Context, t []ynabber.Transaction) error {
 	// skipped and failed counters
 	skipped := 0
 	failed := 0
@@ -216,9 +216,9 @@ func (w Writer) Bulk(t []ynabber.Transaction) error {
 		return err
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payload))
 	if err != nil {
 		return err
 	}
@@ -265,7 +265,7 @@ func (w Writer) Runner(ctx context.Context, in <-chan []ynabber.Transaction) err
 			if !ok {
 				return nil // Channel closed, normal termination
 			}
-			if err := w.Bulk(batch); err != nil {
+			if err := w.Bulk(ctx, batch); err != nil {
 				if w.logger != nil {
 					w.logger.Error("bulk writing transactions", "error", err)
 				}
