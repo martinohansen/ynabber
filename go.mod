@@ -2,6 +2,8 @@ module github.com/martinohansen/ynabber
 
 go 1.25
 
+toolchain go1.25.7
+
 require (
 	github.com/carlmjohnson/versioninfo v0.22.5
 	github.com/frieser/nordigen-go-lib/v2 v2.2.1
