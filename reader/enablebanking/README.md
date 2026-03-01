@@ -23,7 +23,7 @@ retrieve account information and transaction data.
    - **Redirect URL**: This is where users will be redirected after authorizing with their bank. You must use this exact URL in your `ENABLEBANKING_REDIRECT_URL` environment variable
    - Example:
      ```
-     https://raw.githubusercontent.com/linkmic/ynabber/refs/heads/main/ok.html
+     https://martinohansen.github.io/ynabber/ok.html
      ```
      Or for local testing:
      ```
