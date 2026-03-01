@@ -11,6 +11,8 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH && \
 
 # Final stage
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates && \
+    adduser -D -u 1000 ynabber
 COPY --from=builder /go/bin/app /app
+USER ynabber
 ENTRYPOINT ["/app"]

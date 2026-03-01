@@ -14,8 +14,7 @@ type Config struct {
 	// LogFormat sets the logging format (text, json)
 	LogFormat string `envconfig:"YNABBER_LOG_FORMAT" default:"text"`
 
-	// Readers is a list of sources to read transactions from. Currently only
-	// Nordigen is supported.
+	// Readers is a list of sources to read transactions from.
 	Readers []string `envconfig:"YNABBER_READERS" default:"nordigen"`
 
 	// Writers is a list of destinations to write transactions to.
