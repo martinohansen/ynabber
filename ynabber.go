@@ -2,25 +2,52 @@ package ynabber
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
+
+	"github.com/martinohansen/ynabber/internal/web"
 )
 
 type Ynabber struct {
 	Readers []Reader
 	Writers []Writer
 
-	config *Config
-	logger slog.Logger
+	config    *Config
+	logger    slog.Logger
+	webServer *web.Server
 }
 
-// NewYnabber creates a new Ynabber instance
+// WebServer returns the built-in status server, or nil if disabled.
+// Readers and writers can call Register on it to appear on the dashboard.
+func (y *Ynabber) WebServer() *web.Server { return y.webServer }
 func NewYnabber(config *Config) *Ynabber {
-	return &Ynabber{
+	y := &Ynabber{
 		config: config,
 		logger: *slog.Default(),
+	}
+	if config.Port > 0 {
+		y.webServer = web.NewServer(config.Port, config.Host, slog.Default())
+		y.webServer.Register(&sysInfo{cfg: config})
+	}
+	return y
+}
+
+// sysInfo exposes global ynabber configuration on the dashboard.
+type sysInfo struct{ cfg *Config }
+
+func (s *sysInfo) Name() string { return "ynabber" }
+func (s *sysInfo) Status() web.ComponentStatus {
+	return web.ComponentStatus{
+		Healthy: true,
+		Fields: []web.StatusField{
+			{Label: "readers", Value: fmt.Sprintf("%v", s.cfg.Readers)},
+			{Label: "writers", Value: fmt.Sprintf("%v", s.cfg.Writers)},
+			{Label: "data dir", Value: s.cfg.DataDir},
+			{Label: "listen", Value: fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)},
+		},
 	}
 }
 
@@ -39,6 +66,13 @@ type Writer interface {
 // writer.
 func (y *Ynabber) Run() error {
 	g, ctx := errgroup.WithContext(context.Background())
+
+	if y.webServer != nil {
+		if err := y.webServer.Start(ctx); err != nil {
+			return err
+		}
+		y.logger.Info("web server started", "port", y.webServer.Port())
+	}
 
 	// Move transactions from reader to writer in batches on this channel.
 	// Multiple readers and writer can be used

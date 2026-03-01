@@ -64,6 +64,9 @@ func main() {
 			if err != nil {
 				log.Fatal(logger, "creating generator reader", "error", err)
 			}
+			if y.WebServer() != nil {
+				y.WebServer().RegisterReader(generatorReader)
+			}
 			y.Readers = append(y.Readers, generatorReader)
 		default:
 			log.Fatal(logger, "unknown reader", "name", reader)
@@ -78,7 +81,11 @@ func main() {
 			}
 			y.Writers = append(y.Writers, ynabWriter)
 		case "json":
-			y.Writers = append(y.Writers, json.Writer{})
+			jsonWriter := &json.Writer{}
+			if y.WebServer() != nil {
+				y.WebServer().RegisterWriter(jsonWriter)
+			}
+			y.Writers = append(y.Writers, jsonWriter)
 		default:
 			log.Fatal(logger, "unknown writer", "name", writer)
 		}
