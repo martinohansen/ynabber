@@ -208,8 +208,11 @@ func (a Auth) createNewSession(ctx context.Context) (Session, error) {
 		return Session{}, fmt.Errorf("initiating authorization: %w", err)
 	}
 
-	// Display authorization instructions
-	a.displayAuthorizationInstructions(authURL)
+	a.logger.Info("authorization required — open the URL in a browser, then paste the full redirect URL at the prompt",
+		"aspsp", a.Config.ASPSP,
+		"country", a.Config.Country,
+		"url", authURL,
+	)
 
 	// Prompt user to paste the full redirect URL; code and state are extracted
 	// and validated inside the function.
@@ -363,22 +366,6 @@ func (a Auth) initiateAuthorization(ctx context.Context, jwtToken string) (strin
 	return authResp.URL, stateUUID, nil
 }
 
-// displayAuthorizationInstructions displays the authorization URL and instructions to the user
-func (a Auth) displayAuthorizationInstructions(authURL string) {
-	separator := strings.Repeat("=", 60)
-	a.logger.Info("authorization required", "aspsp", a.Config.ASPSP, "country", a.Config.Country)
-	a.logger.Info(separator)
-	a.logger.Info("please visit the following URL to authorize", "url", authURL)
-	a.logger.Info("after authorizing you will be redirected to a URL that looks like")
-	a.logger.Info("  " + a.Config.RedirectURL + "?code=<code>&state=<state>")
-	a.logger.Info("copy that FULL redirect URL and paste it below")
-	a.logger.Info(separator)
-	a.logger.Info("running in Docker? attach with: docker attach <container-name>")
-	a.logger.Info("  then paste the URL (Ctrl+V) and press Enter")
-	a.logger.Info("  once done, detach without stopping with: Ctrl+P then Ctrl+Q")
-	a.logger.Info(separator)
-}
-
 // promptForRedirectURL asks the operator to paste the full redirect URL after
 // completing the authorization flow, then extracts and validates the code and
 // state query parameters. Validating the state guards against a code from a
@@ -388,8 +375,7 @@ func (a Auth) displayAuthorizationInstructions(authURL string) {
 // terminal), the function waits and retries — allowing the operator to attach
 // to the running container and provide input rather than crashing immediately.
 func (a Auth) promptForRedirectURL(expectedState string) (string, error) {
-	fmt.Fprintln(os.Stderr, "Paste the full redirect URL here, then press Enter:")
-	fmt.Fprint(os.Stderr, "> ")
+	fmt.Fprint(os.Stderr, "Paste the full redirect URL, then press Enter:\n> ")
 	for {
 		reader := bufio.NewReader(os.Stdin)
 		line, err := reader.ReadString('\n')

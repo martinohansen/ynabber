@@ -176,19 +176,6 @@ func TestSaveAndLoadSession(t *testing.T) {
 	}
 }
 
-// TestDisplayAuthorizationInstructions tests that instructions are displayed without error
-func TestDisplayAuthorizationInstructions(t *testing.T) {
-	auth := Auth{
-		Config: Config{
-			ASPSP:   "DNB",
-			Country: "NO",
-		},
-		logger: slog.New(slog.NewTextHandler(os.Stderr, nil)),
-	}
-
-	// This should not panic
-	auth.displayAuthorizationInstructions("https://example.com/auth")
-}
 
 // TestClaims tests JWT claims structure
 func TestClaims(t *testing.T) {
