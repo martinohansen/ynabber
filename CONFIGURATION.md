@@ -26,8 +26,8 @@ EnableBanking reads bank transactions through the EnableBanking Open Banking API
 | ENABLEBANKING_REDIRECT_URL | `string` | - | RedirectURL is the URL where the user will be redirected after authorization |
 | ENABLEBANKING_PEM_FILE | `string` | - | PEMFile is the path to the private key file for JWT signing |
 | ENABLEBANKING_SESSION_FILE | `string` | - | SessionFile is the path where the session is stored for reuse |
-| ENABLEBANKING_FROM_DATE | `string` | - | FromDate is the start date for transaction retrieval (YYYY-MM-DD format) |
-| ENABLEBANKING_TO_DATE | `string` | - | ToDate is the end date for transaction retrieval (defaults to today) |
+| ENABLEBANKING_FROM_DATE | `ynabber.Date` | - | FromDate is the start date for transaction retrieval (YYYY-MM-DD format).<br>Parsed once at config load via ynabber.Date's envconfig.Decoder. |
+| ENABLEBANKING_TO_DATE | `ynabber.Date` | - | ToDate is the end date for transaction retrieval (defaults to today).<br>Parsed once at config load via ynabber.Date's envconfig.Decoder. |
 | ENABLEBANKING_INTERVAL | `time.Duration` | - | Interval is the time between fetches (0 means run once and exit) |
 | ENABLEBANKING_PAYEE_STRIP | `[]string` | - | PayeeStrip contains words to remove from payee names.<br>Example: "foo,bar" removes "foo" and "bar" from all payee names. |
 | ENABLEBANKING_DEBUG | `bool` | - | Debug enables raw JSON dumps of every API response to the local<br>"transactions/" directory for troubleshooting.<br><br>WARNING: NEVER enable in production. Dumps contain unredacted account<br>details, session tokens, and full transaction history in plain text. |

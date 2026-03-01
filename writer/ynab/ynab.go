@@ -100,7 +100,7 @@ func accountParser(account ynabber.Account, accountMap map[string]string) (strin
 // existing Nordigen import IDs. Account ID is used only when IBAN is absent
 // (e.g. account types that EnableBanking does not expose an IBAN for).
 func makeID(t ynabber.Transaction) string {
-	date := t.Date.Format("2006-01-02")
+	date := t.Date.Format(ynabber.DateFormat)
 	amount := t.Amount.String()
 
 	// Prefer IBAN for stable, backward-compatible import IDs. Both Nordigen
@@ -126,7 +126,7 @@ func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
 		return Transaction{}, err
 	}
 
-	date := source.Date.Format("2006-01-02")
+	date := source.Date.Format(ynabber.DateFormat)
 
 	// Trim consecutive spaces from memo and truncate if too long
 	memo := strings.TrimSpace(space.ReplaceAllString(source.Memo, " "))

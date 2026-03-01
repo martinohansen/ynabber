@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/martinohansen/ynabber"
 )
 
 // Config holds the configuration for the EnableBanking reader
@@ -30,11 +32,13 @@ type Config struct {
 	// SessionFile is the path where the session is stored for reuse
 	SessionFile string `envconfig:"ENABLEBANKING_SESSION_FILE"`
 
-	// FromDate is the start date for transaction retrieval (YYYY-MM-DD format)
-	FromDate string `envconfig:"ENABLEBANKING_FROM_DATE"`
+	// FromDate is the start date for transaction retrieval (YYYY-MM-DD format).
+	// Parsed once at config load via ynabber.Date's envconfig.Decoder.
+	FromDate ynabber.Date `envconfig:"ENABLEBANKING_FROM_DATE"`
 
-	// ToDate is the end date for transaction retrieval (defaults to today)
-	ToDate string `envconfig:"ENABLEBANKING_TO_DATE"`
+	// ToDate is the end date for transaction retrieval (defaults to today).
+	// Parsed once at config load via ynabber.Date's envconfig.Decoder.
+	ToDate ynabber.Date `envconfig:"ENABLEBANKING_TO_DATE"`
 
 	// Interval is the time between fetches (0 means run once and exit)
 	Interval time.Duration `envconfig:"ENABLEBANKING_INTERVAL"`
@@ -69,23 +73,13 @@ func (c *Config) Validate(dataDir string) error {
 	if c.PEMFile == "" {
 		return fmt.Errorf("ENABLEBANKING_PEM_FILE is required")
 	}
-	if c.FromDate == "" {
+	if time.Time(c.FromDate).IsZero() {
 		return fmt.Errorf("ENABLEBANKING_FROM_DATE is required")
 	}
 
-	// Validate FromDate format
-	if _, err := time.Parse("2006-01-02", c.FromDate); err != nil {
-		return fmt.Errorf("invalid ENABLEBANKING_FROM_DATE format (expected YYYY-MM-DD): %w", err)
-	}
-
-	// Set ToDate to today if not provided
-	if c.ToDate == "" {
-		c.ToDate = time.Now().Format("2006-01-02")
-	} else {
-		// Validate ToDate format if provided
-		if _, err := time.Parse("2006-01-02", c.ToDate); err != nil {
-			return fmt.Errorf("invalid ENABLEBANKING_TO_DATE format (expected YYYY-MM-DD): %w", err)
-		}
+	// Default ToDate to today if not provided.
+	if time.Time(c.ToDate).IsZero() {
+		c.ToDate = ynabber.Date(time.Now().UTC())
 	}
 
 	// Set default session file if not provided
@@ -96,17 +90,14 @@ func (c *Config) Validate(dataDir string) error {
 	return nil
 }
 
-// GetFromDate parses and returns the FromDate as a time.Time
+// GetFromDate returns FromDate as a time.Time. It is always valid after Validate.
 func (c Config) GetFromDate() (time.Time, error) {
-	return time.Parse("2006-01-02", c.FromDate)
+	return time.Time(c.FromDate), nil
 }
 
-// GetToDate parses and returns the ToDate as a time.Time
+// GetToDate returns ToDate as a time.Time. It is always valid after Validate.
 func (c Config) GetToDate() (time.Time, error) {
-	if c.ToDate == "" {
-		return time.Now(), nil
-	}
-	return time.Parse("2006-01-02", c.ToDate)
+	return time.Time(c.ToDate), nil
 }
 
 func defaultSessionFile(aspsp, country string) string {

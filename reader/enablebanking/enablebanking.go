@@ -292,8 +292,8 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 
 	// Fetch transactions for each account
 	var results []ynabber.Transaction
-	fromDate := r.Config.FromDate
-	toDate := r.Config.ToDate
+	fromDate := time.Time(r.Config.FromDate).Format(ynabber.DateFormat)
+	toDate := time.Time(r.Config.ToDate).Format(ynabber.DateFormat)
 
 	for i, account := range session.Accounts {
 		details := accountDetailsMap[account.UID]

@@ -8,21 +8,15 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/martinohansen/ynabber"
 )
 
-const DateFormat = "2006-01-02"
+// DateFormat re-exports ynabber.DateFormat for callers that import this package.
+const DateFormat = ynabber.DateFormat
 
-type Date time.Time
-
-// Decode implements `envconfig.Decoder` for Date to parse string to time.Time
-func (date *Date) Decode(value string) error {
-	time, err := time.Parse(DateFormat, value)
-	if err != nil {
-		return err
-	}
-	*date = Date(time)
-	return nil
-}
+// Date re-exports ynabber.Date so existing code in this package requires no changes.
+type Date = ynabber.Date
 
 type AccountMap map[string]string
 
