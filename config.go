@@ -20,4 +20,11 @@ type Config struct {
 
 	// Writers is a list of destinations to write transactions to.
 	Writers []string `envconfig:"YNABBER_WRITERS" default:"ynab"`
+
+	// Port is the port for the built-in status web server. Set to 0 to disable.
+	Port int `envconfig:"YNABBER_PORT" default:"5500"`
+
+	// Host is the bind address for the built-in status web server.
+	// Use 127.0.0.1 (default) for local-only access, or 0.0.0.0 in containers.
+	Host string `envconfig:"YNABBER_HOST" default:"127.0.0.1"`
 }
