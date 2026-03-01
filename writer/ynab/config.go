@@ -8,15 +8,21 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/martinohansen/ynabber"
 )
 
-// DateFormat re-exports ynabber.DateFormat for callers that import this package.
-const DateFormat = ynabber.DateFormat
+const dateFormat = "2006-01-02"
 
-// Date re-exports ynabber.Date so existing code in this package requires no changes.
-type Date = ynabber.Date
+type Date time.Time
+
+// Decode implements envconfig.Decoder, parsing a YYYY-MM-DD string into Date.
+func (d *Date) Decode(value string) error {
+	t, err := time.Parse(dateFormat, value)
+	if err != nil {
+		return err
+	}
+	*d = Date(t)
+	return nil
+}
 
 type AccountMap map[string]string
 
@@ -62,15 +68,8 @@ type Config struct {
 	// settings section
 	Token string `envconfig:"YNAB_TOKEN"`
 
-	// AccountMap maps account identifiers (ID or IBAN) to YNAB account IDs in JSON format.
-	// It supports both IBAN (for nordigen or enablebanking standard accounts) and Account ID
-	// (for enablebanking's account_uid). IBAN is preferred when the account has one, for
-	// backward compatibility with Nordigen. Account ID is used only when IBAN is absent
-	// (e.g. credit cards that EnableBanking does not expose an IBAN for).
-	// Examples:
-	// - With IBAN: '{"NO1234567890": "<YNAB Account ID>"}'
-	// - With account_uid: '{"account-uid-123": "<YNAB Account ID>"}'
-	// - Mixed: '{"NO1234567890": "<YNAB1>", "account-uid-123": "<YNAB2>"}'
+	// AccountMap maps reader accounts to YNAB accounts. See reader for more
+	// details. For example: '{"<IBAN or ID>": "<YNAB Account ID>"}'
 	AccountMap AccountMap `envconfig:"YNAB_ACCOUNTMAP"`
 
 	// FromDate only imports transactions from this date onward. For
@@ -87,9 +86,6 @@ type Config struct {
 	Cleared TransactionStatus `envconfig:"YNAB_CLEARED" default:"cleared"`
 
 	// SwapFlow reverses inflow to outflow and vice versa for any account
-	// identified by ID (enablebanking's account_uid) or IBAN (nordigen) in the list.
-	// This may be relevant for credit card accounts.
-	//
-	// Example: "DK9520000123456789,NO8330001234567,account-uid-123"
+	// identified by IBAN or ID. Example: "DK9520000123456789,NO8330001234567"
 	SwapFlow []string `envconfig:"YNAB_SWAPFLOW"`
 }

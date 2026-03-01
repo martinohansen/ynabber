@@ -10,6 +10,10 @@ import (
 	"github.com/martinohansen/ynabber"
 )
 
+const (
+	dateFormat = "2006-01-02"
+)
+
 // Mapper uses the most specific mapper for the bank in question
 func (r Reader) Mapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Transaction, error) {
 	switch {
@@ -35,7 +39,7 @@ func parseAmount(t nordigen.Transaction) (float64, error) {
 }
 
 func parseDate(t nordigen.Transaction) (time.Time, error) {
-	date, err := time.Parse(ynabber.DateFormat, t.BookingDate)
+	date, err := time.Parse(dateFormat, t.BookingDate)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to parse string to time: %w", err)
 	}

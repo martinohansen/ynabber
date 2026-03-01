@@ -22,9 +22,10 @@ const (
 	rateLimitRetryMinute = 30
 )
 
-// nextDailyRetryTime returns the next occurrence of rateLimitRetryHour:rateLimitRetryMinute
-// on the calendar day after now. Waiting until then gives the bank's API quota
-// time to reset before we try again.
+// nextDailyRetryTime returns the next occurrence of
+// rateLimitRetryHour:rateLimitRetryMinute on the calendar day after now.
+// Waiting until then gives the bank's API quota time to reset before we try
+// again.
 func nextDailyRetryTime(now time.Time) time.Time {
 	tomorrow := now.AddDate(0, 0, 1)
 	return time.Date(

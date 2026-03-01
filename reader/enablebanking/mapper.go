@@ -54,10 +54,11 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 		payee = strip(payee, r.Config.PayeeStrip)
 	}
 
-	// Truncate payee to 200 characters (YNAB API maximum length)
-	// If payee exceeds this limit, the API ignores the field and it displays as blank in YNAB.
-	if len(payee) > 200 {
-		payee = strings.TrimSpace(payee[:200])
+	// Truncate payee to 200 characters (YNAB API maximum length) If payee
+	// exceeds this limit, the API ignores the field and it displays as blank in
+	// YNAB.
+	if r := []rune(payee); len(r) > 200 {
+		payee = strings.TrimSpace(string(r[:200]))
 	}
 
 	return &ynabber.Transaction{
@@ -116,7 +117,7 @@ func parseDateFlexible(dateStr string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("failed to parse date: empty value")
 	}
 	formats := []string{
-		ynabber.DateFormat,
+		dateFormat,
 		time.RFC3339,
 		"2006-01-02T15:04:05",
 		"2006-01-02 15:04:05",

@@ -5,13 +5,24 @@ package enablebanking
 
 import (
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/martinohansen/ynabber"
 )
+
+const dateFormat = "2006-01-02"
+
+type Date time.Time
+
+// Decode implements envconfig.Decoder, parsing a YYYY-MM-DD string into Date.
+func (d *Date) Decode(value string) error {
+	t, err := time.Parse(dateFormat, value)
+	if err != nil {
+		return err
+	}
+	*d = Date(t)
+	return nil
+}
 
 // Config holds the configuration for the EnableBanking reader
 type Config struct {
@@ -25,7 +36,7 @@ type Config struct {
 	ASPSP string `envconfig:"ENABLEBANKING_ASPSP" required:"true"`
 
 	// RedirectURL is the URL where the user will be redirected after authorization
-	RedirectURL string `envconfig:"ENABLEBANKING_REDIRECT_URL" required:"true"`
+	RedirectURL string `envconfig:"ENABLEBANKING_REDIRECT_URL" default:"https://martinohansen.github.io/ynabber/ok.html"`
 
 	// PEMFile is the path to the private key file for JWT signing
 	PEMFile string `envconfig:"ENABLEBANKING_PEM_FILE" required:"true"`
@@ -34,12 +45,10 @@ type Config struct {
 	SessionFile string `envconfig:"ENABLEBANKING_SESSION_FILE"`
 
 	// FromDate is the start date for transaction retrieval (YYYY-MM-DD format).
-	// Parsed once at config load via ynabber.Date's envconfig.Decoder.
-	FromDate ynabber.Date `envconfig:"ENABLEBANKING_FROM_DATE" required:"true"`
+	FromDate Date `envconfig:"ENABLEBANKING_FROM_DATE" required:"true"`
 
 	// ToDate is the end date for transaction retrieval (defaults to today).
-	// Parsed once at config load via ynabber.Date's envconfig.Decoder.
-	ToDate ynabber.Date `envconfig:"ENABLEBANKING_TO_DATE"`
+	ToDate Date `envconfig:"ENABLEBANKING_TO_DATE"`
 
 	// Interval is the time between fetches (0 means run once and exit)
 	Interval time.Duration `envconfig:"ENABLEBANKING_INTERVAL"`
@@ -47,26 +56,14 @@ type Config struct {
 	// PayeeStrip contains words to remove from payee names.
 	// Example: "foo,bar" removes "foo" and "bar" from all payee names.
 	PayeeStrip []string `envconfig:"ENABLEBANKING_PAYEE_STRIP"`
-
-	// Debug enables raw JSON dumps of every API response to the local
-	// "transactions/" directory for troubleshooting.
-	//
-	// WARNING: NEVER enable in production. Dumps contain unredacted account
-	// details, session tokens, and full transaction history in plain text.
-	Debug bool `envconfig:"ENABLEBANKING_DEBUG"`
 }
 
 // Validate checks config semantics and sets defaults for optional fields.
 // dataDir is the base directory for the session file (from YNABBER_DATADIR).
 func (c *Config) Validate(dataDir string) error {
-	u, err := url.ParseRequestURI(c.RedirectURL)
-	if err != nil || u.Scheme != "https" || u.Host == "" {
-		return fmt.Errorf("ENABLEBANKING_REDIRECT_URL must be a valid HTTPS URL, got %q", c.RedirectURL)
-	}
-
 	// Default ToDate to today if not provided.
 	if time.Time(c.ToDate).IsZero() {
-		c.ToDate = ynabber.Date(time.Now().UTC())
+		c.ToDate = Date(time.Now().UTC())
 	}
 
 	// Set default session file if not provided

@@ -8,12 +8,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
+	"github.com/martinohansen/ynabber/internal/log"
 )
 
 // ErrRateLimit is returned when the API responds with HTTP 429 Too Many Requests.
@@ -223,10 +222,6 @@ func NewReader(logger *slog.Logger, dataDir string) (Reader, error) {
 
 	logger.Debug("config loaded", "aspsp", cfg.ASPSP, "country", cfg.Country)
 
-	if cfg.Debug {
-		logger.Warn("ENABLEBANKING_DEBUG is enabled — raw API responses will be written to disk; NEVER use in production")
-	}
-
 	auth := NewAuth(cfg, logger)
 	client := NewClient(logger)
 
@@ -255,12 +250,7 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 		return nil, fmt.Errorf("no accounts found in session")
 	}
 
-	// Debug: dump session JSON to file
-	if r.Config.Debug {
-		if err := dumpJSON("session.json", session); err != nil {
-			r.logger.Warn("failed to dump session JSON", "error", err)
-		}
-	}
+	log.Trace(r.logger, "session", "data", session)
 
 	r.logger.Info("loaded session", "accounts", len(session.Accounts))
 
@@ -275,12 +265,7 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 
 		accountDetailsMap[account.UID] = details
 
-		// Debug: dump account details JSON to file
-		if r.Config.Debug {
-			if err := dumpJSON(fmt.Sprintf("account_%s_details.json", account.UID), details); err != nil {
-				r.logger.Warn("failed to dump account details JSON", "uid", account.UID, "error", err)
-			}
-		}
+		log.Trace(r.logger, "account_details", "uid", account.UID, "data", details)
 
 		// Log account details for easy identification
 		r.logger.Info("account_details",
@@ -292,8 +277,8 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 
 	// Fetch transactions for each account
 	var results []ynabber.Transaction
-	fromDate := time.Time(r.Config.FromDate).Format(ynabber.DateFormat)
-	toDate := time.Time(r.Config.ToDate).Format(ynabber.DateFormat)
+	fromDate := time.Time(r.Config.FromDate).Format(dateFormat)
+	toDate := time.Time(r.Config.ToDate).Format(dateFormat)
 
 	for i, account := range session.Accounts {
 		details := accountDetailsMap[account.UID]
@@ -317,12 +302,7 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 			continue
 		}
 
-		// Debug: dump transactions JSON to file
-		if r.Config.Debug {
-			if err := dumpJSON(fmt.Sprintf("account_%s_transactions.json", account.UID), txResp); err != nil {
-				accountLogger.Warn("failed to dump transactions JSON", "error", err)
-			}
-		}
+		log.Trace(accountLogger, "transactions", "data", txResp)
 
 		accountLogger.Info("fetched transactions", "booked", len(txResp.Transactions), "pending", len(txResp.Pending))
 
@@ -353,30 +333,5 @@ func loadEnvConfig(cfg *Config) error {
 	if err := envconfig.Process("", cfg); err != nil {
 		return fmt.Errorf("processing config: %w", err)
 	}
-	return nil
-}
-
-// dumpJSON writes data as indented JSON to transactions/<filename>.
-// Only called when ENABLEBANKING_DEBUG=true. Never use in production —
-// output contains unredacted session tokens and full transaction history.
-func dumpJSON(filename string, data interface{}) error {
-	const dir = "transactions"
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return fmt.Errorf("creating debug directory: %w", err)
-	}
-
-	jsonBytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling JSON: %w", err)
-	}
-
-	// filepath.Base strips any directory components from filenames that
-	// originate from API responses (e.g. account UIDs), preventing a
-	// compromised upstream from writing outside the transactions/ directory.
-	dest := filepath.Join(dir, filepath.Base(filename))
-	if err := os.WriteFile(dest, jsonBytes, 0600); err != nil {
-		return fmt.Errorf("writing file: %w", err)
-	}
-
 	return nil
 }

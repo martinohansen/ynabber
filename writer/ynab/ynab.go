@@ -18,10 +18,9 @@ import (
 	"github.com/martinohansen/ynabber/internal/log"
 )
 
-const maxMemoSize int = 200  // Max size of memo field in YNAB API
-const maxPayeeSize int = 200 // Max size of payee_name field in YNAB API (maxLength: 200)
-// maxResponseBodyBytes caps how much of the YNAB API response body we buffer.
-const maxResponseBodyBytes = 10 * 1024 * 1024
+const maxMemoSize int = 200                   // Max size of memo field
+const maxPayeeSize int = 200                  // Max size of payee_name field
+const maxResponseBodyBytes = 10 * 1024 * 1024 // Max response body size to read
 
 var space = regexp.MustCompile(`\s+`) // Matches all whitespace characters
 
@@ -100,7 +99,7 @@ func accountParser(account ynabber.Account, accountMap map[string]string) (strin
 // existing Nordigen import IDs. Account ID is used only when IBAN is absent
 // (e.g. account types that EnableBanking does not expose an IBAN for).
 func makeID(t ynabber.Transaction) string {
-	date := t.Date.Format(ynabber.DateFormat)
+	date := t.Date.Format(dateFormat)
 	amount := t.Amount.String()
 
 	// Prefer IBAN for stable, backward-compatible import IDs. Both Nordigen
@@ -126,20 +125,20 @@ func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
 		return Transaction{}, err
 	}
 
-	date := source.Date.Format(ynabber.DateFormat)
+	date := source.Date.Format(dateFormat)
 
 	// Trim consecutive spaces from memo and truncate if too long
 	memo := strings.TrimSpace(space.ReplaceAllString(source.Memo, " "))
-	if len(memo) > maxMemoSize {
+	if r := []rune(memo); len(r) > maxMemoSize {
 		w.logger.Warn("memo too long", "transaction", source, "max_size", maxMemoSize)
-		memo = memo[0:(maxMemoSize - 1)]
+		memo = string(r[:maxMemoSize])
 	}
 
 	// Trim consecutive spaces from payee and truncate if too long
 	payee := strings.TrimSpace(space.ReplaceAllString(string(source.Payee), " "))
-	if len(payee) > maxPayeeSize {
+	if r := []rune(payee); len(r) > maxPayeeSize {
 		w.logger.Warn("payee too long", "transaction", source, "max_size", maxPayeeSize)
-		payee = payee[0:(maxPayeeSize - 1)]
+		payee = string(r[:maxPayeeSize])
 	}
 
 	// If SwapFlow is defined check if the account is configured to swap inflow
