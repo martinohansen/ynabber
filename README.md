@@ -9,8 +9,10 @@ services.
 
 ## Installation
 
-Install with either [Go](https://go.dev/) or
-[Docker](https://www.docker.com/get-started/). Choose what fits your setup.
+Install with [Go](https://go.dev/),
+[Docker](https://www.docker.com/get-started/), or [download the
+binary](https://github.com/martinohansen/ynabber/releases). Choose whatever fits
+your setup.
 
 ```sh
 # Go
@@ -22,34 +24,38 @@ docker pull ghcr.io/martinohansen/ynabber:latest
 
 ## Usage
 
-Ynabber is configured via environment variables. Here’s an example setup for
-reading transactions from
-[GoCardless](https://gocardless.com/bank-account-data/) (formerly Nordigen) and
-writing them to YNAB:
+Ynabber is configured with environment variables. Quickstart with these
+examples:
 
 ```sh
-cat <<EOT > ynabber.env
 # YNAB
+cat <<EOT > ynabber.env
 YNAB_BUDGETID=<budget_id>
 YNAB_TOKEN=<account_token>
-# AccountMap can use IBAN or Account ID (enablebanking account_uid)
-YNAB_ACCOUNTMAP={"<IBAN_or_account_id>": "<YNAB_account_ID>"}
+EOT
 
-# Nordigen / GoCardless
+# Nordigen/GoCardless
+cat <<EOT >> ynabber.env
+YNAB_ACCOUNTMAP={"<IBAN>": "<YNAB_account_ID>"}
 NORDIGEN_BANKID=<nordigen_bank_ID>
 NORDIGEN_SECRET_ID=<nordigen_secret_ID>
 NORDIGEN_SECRET_KEY=<nordigen_secret_key>
 EOT
+
+# Or EnableBanking
+cat <<EOT >> ynabber.env
+YNAB_ACCOUNTMAP={"<account id>": "<YNAB_account_ID>"}
+ENABLEBANKING_APP_ID=<your_app_id_here>
+ENABLEBANKING_COUNTRY=<country code>
+ENABLEBANKING_ASPSP=<bank identifier>
+ENABLEBANKING_PEM_FILE=<private key pem file>
+EOT
 ```
 
-To run Ynabber with these settings:
+Run Ynabber locally:
 
 ```sh
-# Load env vars from file and run
-set -a
-. ./ynabber.env
-set +a
-ynabber
+env $(ynabber.env | xargs) ynabber
 ```
 
 Or using Docker:
@@ -57,47 +63,52 @@ Or using Docker:
 ```sh
 docker run \
     --volume "${PWD}:/data" \
-    --env 'YNABBER_DATADIR=/data' \
+    --env ‘YNABBER_DATADIR=/data’ \
     --env-file=ynabber.env \
     ghcr.io/martinohansen/ynabber:latest
 ```
 
-> **Note for EnableBanking users:** The initial OAuth authorization requires
-> interactive terminal input. Run the container with `-it` for the first run
-> (see [reader/enablebanking/README.md](./reader/enablebanking/README.md#running-in-docker)).
-> Subsequent runs are fully non-interactive.
+Or as a systemd service:
+
+```sh
+sudo cp ynabber.env /etc/ynabber/ynabber.env
+sudo cat <<EOT > /etc/systemd/system/ynabber.service
+[Unit]
+Description=Ynabber
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/ynabber/ynabber.env
+ExecStart=$(which ynabber)
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOT
+
+sudo systemctl enable --now ynabber
+```
 
 See [CONFIGURATION.md](./CONFIGURATION.md) for all available settings.
 
 ## Readers
 
-Readers fetch transactions from your bank using PSD2 Open Banking standards.
+Readers fetches transactions from your bank(s) and pushes them to writers.
 
-| Reader | Documentation | Verified Banks |
-|:-------|:--------------|:---------------:|
-| [Nordigen](/reader/nordigen/)[^1] | [Setup Guide](/reader/nordigen/README.md) | ALANDSBANKEN, NORDEA, S_PANKKI, SPAREBANK |
-| [EnableBanking](/reader/enablebanking/)[^2] *(Experimental)* | [Setup Guide](/reader/enablebanking/README.md) | DNB, Sbanken, SAS Eurobonus Mastercard, and others |
-
-[^1]: Connected through GoCardless. Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if you have problems with a specific bank.
-[^2]: Connected through EnableBanking Open Banking API. Supports any bank implementing PSD2. See [known limitations](reader/enablebanking/README.md#experimental).
-
-### EnableBanking Setup (Short Version)
-
-1. Register at [EnableBanking](https://enablebanking.com/) and create an application.
-2. Use EnableBanking's app setup to generate and download the PEM key (recommended), or generate an RSA PKCS8 private key (PEM) and upload the public key to your app.
-3. Link bank accounts in the EnableBanking dashboard.
-4. Set `ENABLEBANKING_APP_ID`, `ENABLEBANKING_COUNTRY`, `ENABLEBANKING_ASPSP`, `ENABLEBANKING_REDIRECT_URL`, and `ENABLEBANKING_PEM_FILE`.
-
-See the full guide in [reader/enablebanking/README.md](reader/enablebanking/README.md).
+| Reader | Description |
+|:-------|:------------|
+| [Nordigen](/reader/nordigen/) | Now known as [GoCardless](https://developer.gocardless.com/bank-account-data/overview/), this is for their "Bank Account Data" product |
+| [EnableBanking](/reader/enablebanking/)| Supports lots of financial institutions [across Europe](https://enablebanking.com/docs/markets/) |
 
 ## Writers
 
 Writers are destinations for fetched transactions.
 
-| Writer  | Description   |
-|:--------|:--------------|
-| [YNAB](/writer/ynab/)    | Pushes transactions to a YNAB budget |
-| [JSON](/writer/json/)    | Writes transactions as JSON to stdout (useful for testing) |
+| Writer  | Description |
+|:--------|:------------|
+| [YNAB](/writer/ynab/) | Pushes transactions to a YNAB budget |
+| [JSON](/writer/json/) | Writes transactions as JSON to stdout (useful for testing) |
 
 ## Contributing
 

@@ -5,14 +5,13 @@ import (
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
-	"github.com/martinohansen/ynabber"
 )
 
-// mustDate is a test helper that decodes a YYYY-MM-DD string into ynabber.Date
+// mustDate is a test helper that decodes a YYYY-MM-DD string into Date
 // or fails the test immediately if the string is malformed.
-func mustDate(t *testing.T, s string) ynabber.Date {
+func mustDate(t *testing.T, s string) Date {
 	t.Helper()
-	var d ynabber.Date
+	var d Date
 	if err := d.Decode(s); err != nil {
 		t.Fatalf("mustDate(%q): %v", s, err)
 	}
@@ -20,24 +19,23 @@ func mustDate(t *testing.T, s string) ynabber.Date {
 }
 
 // validBaseConfig returns a Config with all required fields set using typed
-// ynabber.Date values. Individual test cases override specific fields.
+// Date values. Individual test cases override specific fields.
 func validBaseConfig(t *testing.T) Config {
 	t.Helper()
 	return Config{
 		AppID:       "test-app",
 		Country:     "NO",
 		ASPSP:       "DNB",
-		RedirectURL: "https://example.com",
 		PEMFile:     "test.pem",
-		FromDate:    mustDate(t, "2024-01-01"), // typed ynabber.Date, not string
+		FromDate:    mustDate(t, "2024-01-01"), // typed Date, not string
 	}
 }
 
 // ---------------------------------------------------------------------------
-// ynabber.Date.Decode
+// Date.Decode
 // ---------------------------------------------------------------------------
 
-// TestDateDecode_Enablebanking verifies that the shared ynabber.Date decoder
+// TestDateDecode_Enablebanking verifies that the shared Date decoder
 // accepts valid YYYY-MM-DD strings and rejects invalid ones.  This is the
 // decoder that Config will invoke automatically when envconfig processes
 // ENABLEBANKING_FROM_DATE / ENABLEBANKING_TO_DATE.
@@ -92,7 +90,7 @@ func TestDateDecode_Enablebanking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var got ynabber.Date
+			var got Date
 			err := got.Decode(tt.input)
 
 			if (err != nil) != tt.wantErr {
@@ -109,14 +107,14 @@ func TestDateDecode_Enablebanking(t *testing.T) {
 // Config.FromDate field type
 // ---------------------------------------------------------------------------
 
-// TestConfigFromDateIsTypedDate asserts that Config.FromDate is ynabber.Date
+// TestConfigFromDateIsTypedDate asserts that Config.FromDate is Date
 // (i.e. time.Time underneath), not a raw string.  After Validate() the field
 // must hold a correctly parsed time.Time value that callers can use directly
 // without a secondary Parse call.
 func TestConfigFromDateIsTypedDate(t *testing.T) {
 	tests := []struct {
 		name     string
-		fromDate ynabber.Date
+		fromDate Date
 		wantTime time.Time
 	}{
 		{
@@ -162,14 +160,13 @@ func TestConfigFromDateIsTypedDate(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestEnvconfigFromDateDecode verifies that envconfig.Process enforces the
-// required:"true" tag on FromDate and that ynabber.Date.Decode rejects
+// required:"true" tag on FromDate and that Date.Decode rejects
 // malformed date strings before they reach Validate.
 func TestEnvconfigFromDateDecode(t *testing.T) {
 	base := map[string]string{
 		"ENABLEBANKING_APP_ID":       "test-app",
 		"ENABLEBANKING_COUNTRY":      "NO",
 		"ENABLEBANKING_ASPSP":        "DNB",
-		"ENABLEBANKING_REDIRECT_URL": "https://example.com",
 		"ENABLEBANKING_PEM_FILE":     "test.pem",
 	}
 
@@ -203,15 +200,15 @@ func TestEnvconfigFromDateDecode(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Config.Validate — ToDate defaults to today as ynabber.Date
+// Config.Validate — ToDate defaults to today as Date
 // ---------------------------------------------------------------------------
 
 // TestConfigValidateToDateDefaultsToTypedDate asserts that when ToDate is the
-// zero ynabber.Date, Validate sets it to today's date — and that the result is
-// a ynabber.Date (time.Time), not a string that needs re-parsing.
+// zero Date, Validate sets it to today's date — and that the result is
+// a Date (time.Time), not a string that needs re-parsing.
 func TestConfigValidateToDateDefaultsToTypedDate(t *testing.T) {
 	cfg := validBaseConfig(t)
-	cfg.ToDate = ynabber.Date{} // explicitly zero — not provided
+	cfg.ToDate = Date{} // explicitly zero — not provided
 
 	if err := cfg.Validate("."); err != nil {
 		t.Fatalf("Validate() unexpected error: %v", err)
@@ -224,12 +221,12 @@ func TestConfigValidateToDateDefaultsToTypedDate(t *testing.T) {
 
 	now := time.Now()
 	if got.Year() != now.Year() || got.Month() != now.Month() || got.Day() != now.Day() {
-		t.Errorf("GetToDate() = %v, want today (%v)", got, now.Format(ynabber.DateFormat))
+		t.Errorf("GetToDate() = %v, want today (%v)", got, now.Format(dateFormat))
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Config.Validate — explicit ToDate is preserved as ynabber.Date
+// Config.Validate — explicit ToDate is preserved as Date
 // ---------------------------------------------------------------------------
 
 // TestConfigValidateExplicitToDateIsPreserved checks that when ToDate is
@@ -237,7 +234,7 @@ func TestConfigValidateToDateDefaultsToTypedDate(t *testing.T) {
 func TestConfigValidateExplicitToDateIsPreserved(t *testing.T) {
 	tests := []struct {
 		name   string
-		toDate ynabber.Date
+		toDate Date
 		want   time.Time
 	}{
 		{
@@ -277,7 +274,7 @@ func TestConfigValidateExplicitToDateIsPreserved(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestGetFromDateNeverErrors verifies that GetFromDate never returns an error
-// for any non-zero ynabber.Date value — there is no format to re-parse.
+// for any non-zero Date value — there is no format to re-parse.
 func TestGetFromDateNeverErrors(t *testing.T) {
 	dates := []string{"2020-01-01", "2023-06-30", "2024-12-31"}
 

@@ -7,99 +7,7 @@ import (
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
-	"github.com/martinohansen/ynabber"
 )
-
-func TestConfigValidate(t *testing.T) {
-	tests := []struct {
-		name    string
-		config  Config
-		wantErr bool
-	}{
-		{
-			name: "valid https URL",
-			config: Config{
-				AppID:       "test-app",
-				Country:     "NO",
-				ASPSP:       "DNB",
-				RedirectURL: "https://example.com",
-				PEMFile:     "test.pem",
-				FromDate:    mustDate(t, "2024-01-01"),
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid https URL with path",
-			config: Config{
-				AppID:       "test-app",
-				Country:     "NO",
-				ASPSP:       "DNB",
-				RedirectURL: "https://example.com/callback",
-				PEMFile:     "test.pem",
-				FromDate:    mustDate(t, "2024-01-01"),
-			},
-			wantErr: false,
-		},
-		{
-			name: "http scheme rejected",
-			config: Config{
-				AppID:       "test-app",
-				Country:     "NO",
-				ASPSP:       "DNB",
-				RedirectURL: "http://example.com",
-				PEMFile:     "test.pem",
-				FromDate:    mustDate(t, "2024-01-01"),
-			},
-			wantErr: true,
-		},
-		{
-			name: "no scheme rejected",
-			config: Config{
-				AppID:       "test-app",
-				Country:     "NO",
-				ASPSP:       "DNB",
-				RedirectURL: "example.com/callback",
-				PEMFile:     "test.pem",
-				FromDate:    mustDate(t, "2024-01-01"),
-			},
-			wantErr: true,
-		},
-		{
-			name: "plain string rejected",
-			config: Config{
-				AppID:       "test-app",
-				Country:     "NO",
-				ASPSP:       "DNB",
-				RedirectURL: "not-a-url",
-				PEMFile:     "test.pem",
-				FromDate:    mustDate(t, "2024-01-01"),
-			},
-			wantErr: true,
-		},
-		{
-			name: "scheme only rejected",
-			config: Config{
-				AppID:       "test-app",
-				Country:     "NO",
-				ASPSP:       "DNB",
-				RedirectURL: "https://",
-				PEMFile:     "test.pem",
-				FromDate:    mustDate(t, "2024-01-01"),
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := tt.config
-			err := cfg.Validate(".")
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
 
 // TestEnvconfigRequiredFields verifies that each field tagged required:"true"
 // causes envconfig.Process to error when the env var is absent or empty.
@@ -112,7 +20,6 @@ func TestEnvconfigRequiredFields(t *testing.T) {
 		"ENABLEBANKING_APP_ID":       "test-app",
 		"ENABLEBANKING_COUNTRY":      "NO",
 		"ENABLEBANKING_ASPSP":        "DNB",
-		"ENABLEBANKING_REDIRECT_URL": "https://example.com",
 		"ENABLEBANKING_PEM_FILE":     "test.pem",
 		"ENABLEBANKING_FROM_DATE":    "2024-01-01",
 	}
@@ -126,7 +33,6 @@ func TestEnvconfigRequiredFields(t *testing.T) {
 		{name: "missing APP_ID", omit: "ENABLEBANKING_APP_ID", wantErr: true},
 		{name: "missing COUNTRY", omit: "ENABLEBANKING_COUNTRY", wantErr: true},
 		{name: "missing ASPSP", omit: "ENABLEBANKING_ASPSP", wantErr: true},
-		{name: "missing REDIRECT_URL", omit: "ENABLEBANKING_REDIRECT_URL", wantErr: true},
 		{name: "missing PEM_FILE", omit: "ENABLEBANKING_PEM_FILE", wantErr: true},
 		{name: "missing FROM_DATE", omit: "ENABLEBANKING_FROM_DATE", wantErr: true},
 	}
@@ -177,7 +83,7 @@ func TestConfigGetFromDate(t *testing.T) {
 func TestConfigGetToDate(t *testing.T) {
 	tests := []struct {
 		name   string
-		toDate ynabber.Date
+		toDate Date
 		// wantToday is true when we expect GetToDate to return the zero time
 		// (ToDate not yet defaulted — Validate has not been called).
 		wantZero bool
@@ -188,7 +94,7 @@ func TestConfigGetToDate(t *testing.T) {
 		},
 		{
 			name:     "zero Date returns zero time (Validate not yet called)",
-			toDate:   ynabber.Date{},
+			toDate:   Date{},
 			wantZero: true,
 		},
 	}
@@ -224,10 +130,9 @@ func TestConfigValidateDefaultsToDate(t *testing.T) {
 		AppID:       "test-app",
 		Country:     "NO",
 		ASPSP:       "DNB",
-		RedirectURL: "https://example.com",
 		PEMFile:     "test.pem",
 		FromDate:    mustDate(t, "2024-01-01"),
-		// ToDate left as zero ynabber.Date — should be defaulted to today
+		// ToDate left as zero Date — should be defaulted to today
 	}
 
 	err := config.Validate(".")
@@ -239,7 +144,7 @@ func TestConfigValidateDefaultsToDate(t *testing.T) {
 	now := time.Now()
 	got := time.Time(config.ToDate)
 	if got.Year() != now.Year() || got.Month() != now.Month() || got.Day() != now.Day() {
-		t.Errorf("ToDate not set to today: got %v, expected %s", got, now.Format(ynabber.DateFormat))
+		t.Errorf("ToDate not set to today: got %v, expected %s", got, now.Format(dateFormat))
 	}
 }
 
@@ -248,7 +153,6 @@ func TestConfigValidateDefaultsSessionFile(t *testing.T) {
 		AppID:       "test-app",
 		Country:     "NO",
 		ASPSP:       "DNB",
-		RedirectURL: "https://example.com",
 		PEMFile:     "test.pem",
 		FromDate:    mustDate(t, "2024-01-01"),
 		SessionFile: "",
@@ -270,7 +174,6 @@ func TestConfigWithEnvironmentVariables(t *testing.T) {
 		"ENABLEBANKING_APP_ID":       "test-app-123",
 		"ENABLEBANKING_COUNTRY":      "SE",
 		"ENABLEBANKING_ASPSP":        "Nordea",
-		"ENABLEBANKING_REDIRECT_URL": "https://test.example.com",
 		"ENABLEBANKING_PEM_FILE":     "./test.pem",
 		"ENABLEBANKING_SESSION_FILE": "custom_session.json",
 		"ENABLEBANKING_FROM_DATE":     "2024-02-01",
@@ -284,7 +187,6 @@ func TestConfigWithEnvironmentVariables(t *testing.T) {
 		AppID:       "test-app-123",
 		Country:     "SE",
 		ASPSP:       "Nordea",
-		RedirectURL: "https://test.example.com",
 		PEMFile:     "./test.pem",
 		SessionFile: "custom_session.json",
 		FromDate:    mustDate(t, "2024-02-01"),
@@ -308,7 +210,7 @@ func TestConfigWithEnvironmentVariables(t *testing.T) {
 	_ = testEnvVars // silence unused variable warning
 }
 
-func TestConfigDateFormatsAccepted(t *testing.T) {
+func TestConfigdateFormatsAccepted(t *testing.T) {
 	validFormats := []string{
 		"2024-01-01",
 		"2024-12-31",
@@ -320,7 +222,6 @@ func TestConfigDateFormatsAccepted(t *testing.T) {
 			AppID:       "test",
 			Country:     "NO",
 			ASPSP:       "DNB",
-			RedirectURL: "https://example.com",
 			PEMFile:     "test.pem",
 			FromDate:    mustDate(t, dateStr),
 		}
@@ -337,7 +238,6 @@ func TestConfigIntervalParsing(t *testing.T) {
 		AppID:       "test",
 		Country:     "NO",
 		ASPSP:       "DNB",
-		RedirectURL: "https://example.com",
 		PEMFile:     "test.pem",
 		FromDate:    mustDate(t, "2024-01-01"),
 		Interval:    12 * time.Hour,
@@ -358,7 +258,6 @@ func TestConfig_String(t *testing.T) {
 		AppID:       "test-app",
 		Country:     "NO",
 		ASPSP:       "DNB",
-		RedirectURL: "https://example.com",
 		PEMFile:     "test.pem",
 		FromDate:    mustDate(t, "2024-01-01"),
 	}
@@ -448,7 +347,6 @@ func TestConfigValidateSessionFilePath(t *testing.T) {
 		AppID:       "test-app",
 		Country:     "NO",
 		ASPSP:       "DNB",
-		RedirectURL: "https://example.com",
 		PEMFile:     "test.pem",
 		FromDate:    mustDate(t, "2024-01-01"),
 	}
