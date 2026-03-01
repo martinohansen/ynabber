@@ -1,10 +1,12 @@
 package enablebanking
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 )
 
@@ -15,7 +17,7 @@ func TestConfigValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "valid config",
+			name: "valid https URL",
 			config: Config{
 				AppID:       "test-app",
 				Country:     "NO",
@@ -27,69 +29,62 @@ func TestConfigValidate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing app id",
+			name: "valid https URL with path",
 			config: Config{
+				AppID:       "test-app",
 				Country:     "NO",
 				ASPSP:       "DNB",
-				RedirectURL: "https://example.com",
+				RedirectURL: "https://example.com/callback",
+				PEMFile:     "test.pem",
+				FromDate:    mustDate(t, "2024-01-01"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "http scheme rejected",
+			config: Config{
+				AppID:       "test-app",
+				Country:     "NO",
+				ASPSP:       "DNB",
+				RedirectURL: "http://example.com",
 				PEMFile:     "test.pem",
 				FromDate:    mustDate(t, "2024-01-01"),
 			},
 			wantErr: true,
 		},
 		{
-			name: "missing country",
+			name: "no scheme rejected",
 			config: Config{
 				AppID:       "test-app",
+				Country:     "NO",
 				ASPSP:       "DNB",
-				RedirectURL: "https://example.com",
+				RedirectURL: "example.com/callback",
 				PEMFile:     "test.pem",
 				FromDate:    mustDate(t, "2024-01-01"),
 			},
 			wantErr: true,
 		},
 		{
-			name: "missing aspsp",
+			name: "plain string rejected",
 			config: Config{
 				AppID:       "test-app",
 				Country:     "NO",
-				RedirectURL: "https://example.com",
+				ASPSP:       "DNB",
+				RedirectURL: "not-a-url",
 				PEMFile:     "test.pem",
 				FromDate:    mustDate(t, "2024-01-01"),
 			},
 			wantErr: true,
 		},
 		{
-			name: "missing redirect url",
-			config: Config{
-				AppID:    "test-app",
-				Country:  "NO",
-				ASPSP:    "DNB",
-				PEMFile:  "test.pem",
-				FromDate: mustDate(t, "2024-01-01"),
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing pem file",
+			name: "scheme only rejected",
 			config: Config{
 				AppID:       "test-app",
 				Country:     "NO",
 				ASPSP:       "DNB",
-				RedirectURL: "https://example.com",
-				FromDate:    mustDate(t, "2024-01-01"),
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing from date",
-			config: Config{
-				AppID:       "test-app",
-				Country:     "NO",
-				ASPSP:       "DNB",
-				RedirectURL: "https://example.com",
+				RedirectURL: "https://",
 				PEMFile:     "test.pem",
-				// FromDate left as zero ynabber.Date — simulates env var not set
+				FromDate:    mustDate(t, "2024-01-01"),
 			},
 			wantErr: true,
 		},
@@ -101,6 +96,64 @@ func TestConfigValidate(t *testing.T) {
 			err := cfg.Validate(".")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestEnvconfigRequiredFields verifies that each field tagged required:"true"
+// causes envconfig.Process to error when the env var is absent or empty.
+// NOTE: This test uses os.Unsetenv directly. The t.Setenv call below locks
+// the test against t.Parallel(), giving the same protection as using t.Setenv
+// exclusively and preventing future accidental data races on the process env.
+func TestEnvconfigRequiredFields(t *testing.T) {
+	t.Setenv("_PARALLEL_GUARD", "") // prevents t.Parallel() in this test or subtests
+	allVars := map[string]string{
+		"ENABLEBANKING_APP_ID":       "test-app",
+		"ENABLEBANKING_COUNTRY":      "NO",
+		"ENABLEBANKING_ASPSP":        "DNB",
+		"ENABLEBANKING_REDIRECT_URL": "https://example.com",
+		"ENABLEBANKING_PEM_FILE":     "test.pem",
+		"ENABLEBANKING_FROM_DATE":    "2024-01-01",
+	}
+
+	tests := []struct {
+		name    string
+		omit    string // env var to leave empty; "" means set all
+		wantErr bool
+	}{
+		{name: "all required fields set", omit: "", wantErr: false},
+		{name: "missing APP_ID", omit: "ENABLEBANKING_APP_ID", wantErr: true},
+		{name: "missing COUNTRY", omit: "ENABLEBANKING_COUNTRY", wantErr: true},
+		{name: "missing ASPSP", omit: "ENABLEBANKING_ASPSP", wantErr: true},
+		{name: "missing REDIRECT_URL", omit: "ENABLEBANKING_REDIRECT_URL", wantErr: true},
+		{name: "missing PEM_FILE", omit: "ENABLEBANKING_PEM_FILE", wantErr: true},
+		{name: "missing FROM_DATE", omit: "ENABLEBANKING_FROM_DATE", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range allVars {
+				if k == tt.omit {
+					// Must fully unset — envconfig required:"true" only errors
+					// when os.LookupEnv returns false, not on empty string.
+					prev, had := os.LookupEnv(k)
+					os.Unsetenv(k)
+					t.Cleanup(func() {
+						if had {
+							os.Setenv(k, prev)
+						} else {
+							os.Unsetenv(k)
+						}
+					})
+				} else {
+					t.Setenv(k, v)
+				}
+			}
+			var cfg Config
+			err := envconfig.Process("", &cfg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("envconfig.Process() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

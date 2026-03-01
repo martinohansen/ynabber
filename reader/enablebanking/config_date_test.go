@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 )
 
@@ -157,42 +158,45 @@ func TestConfigFromDateIsTypedDate(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Config.Validate — FromDate zero value is an error
+// envconfig integration — FromDate required + Decode validation
 // ---------------------------------------------------------------------------
 
-// TestConfigValidateZeroFromDateIsError confirms that Validate returns an
-// error when FromDate is the zero ynabber.Date (i.e. the env var was not set).
-func TestConfigValidateZeroFromDateIsError(t *testing.T) {
+// TestEnvconfigFromDateDecode verifies that envconfig.Process enforces the
+// required:"true" tag on FromDate and that ynabber.Date.Decode rejects
+// malformed date strings before they reach Validate.
+func TestEnvconfigFromDateDecode(t *testing.T) {
+	base := map[string]string{
+		"ENABLEBANKING_APP_ID":       "test-app",
+		"ENABLEBANKING_COUNTRY":      "NO",
+		"ENABLEBANKING_ASPSP":        "DNB",
+		"ENABLEBANKING_REDIRECT_URL": "https://example.com",
+		"ENABLEBANKING_PEM_FILE":     "test.pem",
+	}
+
 	tests := []struct {
 		name     string
-		fromDate ynabber.Date // zero value = not provided
+		fromDate string // value for ENABLEBANKING_FROM_DATE; "" = leave unset
 		wantErr  bool
 	}{
-		{
-			name:     "zero FromDate must error",
-			fromDate: ynabber.Date{}, // envconfig zero — not provided
-			wantErr:  true,
-		},
-		{
-			name:     "non-zero FromDate must not error",
-			fromDate: mustDate(t, "2024-01-01"),
-			wantErr:  false,
-		},
+		{name: "valid date accepted", fromDate: "2024-01-01", wantErr: false},
+		{name: "absent date rejected (required)", fromDate: "", wantErr: true},
+		{name: "wrong separator rejected", fromDate: "2024/01/01", wantErr: true},
+		{name: "dd-mm-yyyy order rejected", fromDate: "01-01-2024", wantErr: true},
+		{name: "datetime suffix rejected", fromDate: "2024-01-01T00:00:00Z", wantErr: true},
+		{name: "plain text rejected", fromDate: "today", wantErr: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{
-				AppID:       "test-app",
-				Country:     "NO",
-				ASPSP:       "DNB",
-				RedirectURL: "https://example.com",
-				PEMFile:     "test.pem",
-				FromDate:    tt.fromDate,
+			for k, v := range base {
+				t.Setenv(k, v)
 			}
-			err := cfg.Validate(".")
+			t.Setenv("ENABLEBANKING_FROM_DATE", tt.fromDate)
+
+			var cfg Config
+			err := envconfig.Process("", &cfg)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("envconfig.Process() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

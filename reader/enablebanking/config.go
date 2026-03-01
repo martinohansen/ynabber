@@ -5,6 +5,7 @@ package enablebanking
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -15,26 +16,26 @@ import (
 // Config holds the configuration for the EnableBanking reader
 type Config struct {
 	// AppID is the EnableBanking application ID
-	AppID string `envconfig:"ENABLEBANKING_APP_ID"`
+	AppID string `envconfig:"ENABLEBANKING_APP_ID" required:"true"`
 
 	// Country is the country code (e.g., NO, SE, DK)
-	Country string `envconfig:"ENABLEBANKING_COUNTRY"`
+	Country string `envconfig:"ENABLEBANKING_COUNTRY" required:"true"`
 
 	// ASPSP is the bank identifier (e.g., DNB, Nordea, SparBank)
-	ASPSP string `envconfig:"ENABLEBANKING_ASPSP"`
+	ASPSP string `envconfig:"ENABLEBANKING_ASPSP" required:"true"`
 
 	// RedirectURL is the URL where the user will be redirected after authorization
-	RedirectURL string `envconfig:"ENABLEBANKING_REDIRECT_URL"`
+	RedirectURL string `envconfig:"ENABLEBANKING_REDIRECT_URL" required:"true"`
 
 	// PEMFile is the path to the private key file for JWT signing
-	PEMFile string `envconfig:"ENABLEBANKING_PEM_FILE"`
+	PEMFile string `envconfig:"ENABLEBANKING_PEM_FILE" required:"true"`
 
 	// SessionFile is the path where the session is stored for reuse
 	SessionFile string `envconfig:"ENABLEBANKING_SESSION_FILE"`
 
 	// FromDate is the start date for transaction retrieval (YYYY-MM-DD format).
 	// Parsed once at config load via ynabber.Date's envconfig.Decoder.
-	FromDate ynabber.Date `envconfig:"ENABLEBANKING_FROM_DATE"`
+	FromDate ynabber.Date `envconfig:"ENABLEBANKING_FROM_DATE" required:"true"`
 
 	// ToDate is the end date for transaction retrieval (defaults to today).
 	// Parsed once at config load via ynabber.Date's envconfig.Decoder.
@@ -55,26 +56,12 @@ type Config struct {
 	Debug bool `envconfig:"ENABLEBANKING_DEBUG"`
 }
 
-// Validate checks that required fields are set and sets defaults.
+// Validate checks config semantics and sets defaults for optional fields.
 // dataDir is the base directory for the session file (from YNABBER_DATADIR).
 func (c *Config) Validate(dataDir string) error {
-	if c.AppID == "" {
-		return fmt.Errorf("ENABLEBANKING_APP_ID is required")
-	}
-	if c.Country == "" {
-		return fmt.Errorf("ENABLEBANKING_COUNTRY is required")
-	}
-	if c.ASPSP == "" {
-		return fmt.Errorf("ENABLEBANKING_ASPSP is required")
-	}
-	if c.RedirectURL == "" {
-		return fmt.Errorf("ENABLEBANKING_REDIRECT_URL is required")
-	}
-	if c.PEMFile == "" {
-		return fmt.Errorf("ENABLEBANKING_PEM_FILE is required")
-	}
-	if time.Time(c.FromDate).IsZero() {
-		return fmt.Errorf("ENABLEBANKING_FROM_DATE is required")
+	u, err := url.ParseRequestURI(c.RedirectURL)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return fmt.Errorf("ENABLEBANKING_REDIRECT_URL must be a valid HTTPS URL, got %q", c.RedirectURL)
 	}
 
 	// Default ToDate to today if not provided.
