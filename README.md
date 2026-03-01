@@ -76,10 +76,10 @@ Readers fetch transactions from your bank using PSD2 Open Banking standards.
 | Reader | Documentation | Verified Banks |
 |:-------|:--------------|:---------------:|
 | [Nordigen](/reader/nordigen/)[^1] | [Setup Guide](/reader/nordigen/README.md) | ALANDSBANKEN, NORDEA, S_PANKKI, SPAREBANK |
-| [EnableBanking](/reader/enablebanking/)[^2] | [Setup Guide](/reader/enablebanking/README.md) | DNB, Sbanken, SAS Eurobonus Mastercard, and others |
+| [EnableBanking](/reader/enablebanking/)[^2] *(Experimental)* | [Setup Guide](/reader/enablebanking/README.md) | DNB, Sbanken, SAS Eurobonus Mastercard, and others |
 
 [^1]: Connected through GoCardless. Please open an [issue](https://github.com/martinohansen/ynabber/issues/new) if you have problems with a specific bank.
-[^2]: Connected through EnableBanking Open Banking API. Supports any bank implementing PSD2.
+[^2]: Connected through EnableBanking Open Banking API. Supports any bank implementing PSD2. See [known limitations](reader/enablebanking/README.md#experimental).
 
 ### EnableBanking Setup (Short Version)
 

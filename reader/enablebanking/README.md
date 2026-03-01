@@ -1,10 +1,28 @@
-# EnableBanking Reader
+# EnableBanking
 
 EnableBanking reads bank transactions through the EnableBanking Open Banking API. It connects to various European banks using PSD2 open banking standards to retrieve account information and transaction data.
 
-## Why EnableBanking
+# Experimental
 
-Nordigen was acquired by GoCardless in 2022, and its Open Banking API is now part of GoCardless' bank account data offering. If Nordigen access is unavailable for new sign-ups in your region, EnableBanking is a practical alternative. Source: https://www.openbankingexpo.com/news/gocardless-to-buy-latvian-open-banking-provider-nordigen/
+**This reader is experimental. Your mileage may vary.**
+
+- **Bank coverage is incomplete.** Only a handful of banks have been tested
+  (DNB, Sbanken, SAS Eurobonus Mastercard). Other PSD2-compliant banks may
+  work, but different or unexpected behaviour should be expected.
+- **Duplicate transactions are possible.** The deduplication logic has not
+  been validated across all banks and edge cases. Check your YNAB budget after
+  the first few runs.
+- **Authentication is manual.** The initial OAuth flow requires you to copy
+  and paste a URL from the logs into a browser. There is no automated redirect
+  handling yet.
+- **Sessions expire silently.** EnableBanking sessions have a limited
+  lifetime. When a session expires, ynabber will log the error but will
+  **not** send any alert or notification - you must monitor the logs yourself
+  and re-authenticate when needed.
+- **Issues may be hard to reproduce.** If you encounter a bug, please
+  [open an issue](https://github.com/martinohansen/ynabber/issues/new).
+  Be aware that reproducing bank-specific problems is difficult if the
+  developer does not have access to accounts in the same bank.
 
 ## Setup Guide
 
