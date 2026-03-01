@@ -11,4 +11,6 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	golang.org/x/sync v0.15.0
 	golang.org/x/text v0.25.0
+  github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/google/uuid v1.6.0
 )
