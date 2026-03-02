@@ -15,8 +15,17 @@ func (r Reader) Mapper(account AccountInfo, tx EBTransaction) (*ynabber.Transact
 	return r.defaultMapper(account, tx)
 }
 
+// statusBooked is the only transaction status imported into YNAB.
+// Transactions with any other non-empty status (e.g. "PDNG") are discarded
+// because their IDs are unstable and their payee fields are often absent.
+const statusBooked = "BOOK"
+
 // defaultMapper is the generic mapper for EnableBanking transactions
 func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.Transaction, error) {
+	if tx.Status != "" && tx.Status != statusBooked {
+		return nil, nil
+	}
+
 	// Skip transactions with missing required fields
 	transactionID, err := resolveTransactionID(tx)
 	if err != nil {

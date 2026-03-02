@@ -567,3 +567,86 @@ func TestPayeeStripAndTruncate(t *testing.T) {
 		t.Errorf("expected 200 A's, got '%s'", result.Payee)
 	}
 }
+
+// TestDefaultMapperStatusFilter verifies that defaultMapper skips (returns nil,
+// nil) for any transaction whose Status field is non-empty and not "BOOK", while
+// still mapping transactions whose Status is "BOOK" or "" (field absent in the
+// API response, kept for backward compatibility).
+//
+// NOTE: The guard is NOT yet implemented; the "PDNG status skipped" and
+// "other status skipped" sub-tests are therefore expected to FAIL (Red state).
+func TestDefaultMapperStatusFilter(t *testing.T) {
+	tests := []struct {
+		name        string
+		status      string
+		wantNil     bool // true → expect (nil, nil)
+		wantErr     bool
+	}{
+		{
+			name:    "BOOK status mapped",
+			status:  "BOOK",
+			wantNil: false,
+			wantErr: false,
+		},
+		{
+			name:    "empty status mapped",
+			status:  "",
+			wantNil: false,
+			wantErr: false,
+		},
+		{
+			name:    "PDNG status skipped",
+			status:  "PDNG",
+			wantNil: true,
+			wantErr: false,
+		},
+		{
+			name:    "other status skipped",
+			status:  "OTHR",
+			wantNil: true,
+			wantErr: false,
+		},
+	}
+
+	reader := Reader{
+		logger: slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	}
+
+	account := AccountInfo{
+		UID:         "acc-status-test",
+		IBAN:        randomTestIBAN(t),
+		DisplayName: "Status Filter Account",
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tx := EBTransaction{
+				TransactionID:        "tx-status-" + tt.status,
+				BookingDate:          "2024-06-01",
+				CreditDebitIndicator: "CRDT",
+				TransactionAmount: struct {
+					Currency string `json:"currency"`
+					Amount   string `json:"amount"`
+				}{
+					Currency: "NOK",
+					Amount:   "42.00",
+				},
+				Status: tt.status,
+			}
+
+			result, err := reader.defaultMapper(account, tx)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("defaultMapper() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if tt.wantNil && result != nil {
+				t.Errorf("defaultMapper() = non-nil transaction, want nil (status %q should be skipped)", tt.status)
+			}
+
+			if !tt.wantNil && result == nil {
+				t.Errorf("defaultMapper() = nil, want non-nil transaction (status %q should be mapped)", tt.status)
+			}
+		})
+	}
+}
