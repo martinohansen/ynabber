@@ -105,9 +105,22 @@ type AccountInfo struct {
 	Status      string `json:"status"`
 }
 
+// ASPSPData represents a single ASPSP entry from GET /aspsps.
+type ASPSPData struct {
+	Name                   string `json:"name"`
+	Country                string `json:"country"`
+	MaximumConsentValidity int    `json:"maximum_consent_validity"` // seconds
+}
+
+// GetAspspsResponse wraps the array returned by GET /aspsps.
+type GetAspspsResponse struct {
+	ASPSPs []ASPSPData `json:"aspsps"`
+}
+
 // Auth handles authentication and session management for EnableBanking
 type Auth struct {
 	Config     Config
+	baseURL    string
 	httpClient *http.Client
 	logger     *slog.Logger
 }
@@ -115,12 +128,51 @@ type Auth struct {
 // NewAuth creates a new Auth handler
 func NewAuth(cfg Config, logger *slog.Logger) Auth {
 	return Auth{
-		Config: cfg,
+		Config:  cfg,
+		baseURL: enableBankingAPIBase,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 		logger: logger,
 	}
+}
+
+// getMaxConsentDuration queries GET /aspsps to find the maximum consent
+// validity for the configured ASPSP and returns it as a time.Duration.
+// On any error, ASPSP not found, or zero value it falls back to
+// accessRequestDays * 24 * time.Hour.
+func (a Auth) getMaxConsentDuration(ctx context.Context, jwtToken string) time.Duration {
+	fallback := time.Duration(accessRequestDays) * 24 * time.Hour
+
+	url := fmt.Sprintf("%s/aspsps?country=%s", a.baseURL, a.Config.Country)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fallback
+	}
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return fallback
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return fallback
+	}
+
+	var aspspsResp GetAspspsResponse
+	if err := json.Unmarshal(body, &aspspsResp); err != nil {
+		return fallback
+	}
+
+	for _, aspsp := range aspspsResp.ASPSPs {
+		if aspsp.Name == a.Config.ASPSP && aspsp.MaximumConsentValidity > 0 {
+			return time.Duration(aspsp.MaximumConsentValidity) * time.Second
+		}
+	}
+	return fallback
 }
 
 // Session attempts to get session from disk, if it fails it will initiate
@@ -313,8 +365,9 @@ func (a Auth) initiateAuthorization(ctx context.Context, jwtToken string) (strin
 		RedirectURL: a.Config.RedirectURL,
 	}
 
-	// Set valid_until to N days from now
-	validUntil := time.Now().UTC().AddDate(0, 0, accessRequestDays)
+	// Set valid_until to the maximum the bank supports, falling back to accessRequestDays.
+	maxDuration := a.getMaxConsentDuration(ctx, jwtToken)
+	validUntil := time.Now().UTC().Add(maxDuration)
 	authReq.Access.ValidUntil = validUntil.Format(time.RFC3339)
 
 	// Marshal request body
@@ -324,7 +377,7 @@ func (a Auth) initiateAuthorization(ctx context.Context, jwtToken string) (strin
 	}
 
 	// Create HTTP request
-	url := enableBankingAPIBase + "/auth"
+	url := a.baseURL + "/auth"
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(body))
 	if err != nil {
 		return "", "", fmt.Errorf("creating request: %w", err)

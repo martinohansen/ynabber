@@ -5,10 +5,16 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -176,7 +182,6 @@ func TestSaveAndLoadSession(t *testing.T) {
 	}
 }
 
-
 // TestClaims tests JWT claims structure
 func TestClaims(t *testing.T) {
 	now := time.Now()
@@ -310,5 +315,192 @@ func TestExtractCodeFromRedirectURL(t *testing.T) {
 				t.Errorf("code = %q, want %q", got, tt.wantCode)
 			}
 		})
+	}
+}
+
+// TestGetMaxConsentDuration is a table-driven test for the (not-yet-implemented)
+// getMaxConsentDuration method.  Each sub-test spins up an httptest.NewServer
+// that stands in for the EnableBanking /aspsps endpoint and verifies that the
+// method returns the correct time.Duration — or falls back to the hardcoded
+// accessRequestDays when the API fails, the ASPSP is missing, or the value is 0.
+//
+// NOTE: This test intentionally references Auth.baseURL and Auth.getMaxConsentDuration,
+// which do not exist yet.  The file will NOT COMPILE until the implementation
+// is added — that is the expected Red state.
+func TestGetMaxConsentDuration(t *testing.T) {
+	tests := []struct {
+		name         string
+		mockBody     string
+		mockStatus   int
+		wantDuration time.Duration
+	}{
+		{
+			name:         "ASPSP found — uses maximum",
+			mockBody:     `{"aspsps":[{"name":"DNB","country":"NO","maximum_consent_validity":15552000}]}`,
+			mockStatus:   http.StatusOK,
+			wantDuration: 15552000 * time.Second, // 180 days
+		},
+		{
+			name:         "ASPSP not in list — fallback",
+			mockBody:     `{"aspsps":[{"name":"OtherBank","country":"NO","maximum_consent_validity":7776000}]}`,
+			mockStatus:   http.StatusOK,
+			wantDuration: accessRequestDays * 24 * time.Hour,
+		},
+		{
+			name:         "API error — fallback",
+			mockBody:     `internal server error`,
+			mockStatus:   http.StatusInternalServerError,
+			wantDuration: accessRequestDays * 24 * time.Hour,
+		},
+		{
+			name:         "Zero value — fallback",
+			mockBody:     `{"aspsps":[{"name":"DNB","country":"NO","maximum_consent_validity":0}]}`,
+			mockStatus:   http.StatusOK,
+			wantDuration: accessRequestDays * 24 * time.Hour,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("expected GET, got %s", r.Method)
+				}
+				if !strings.HasPrefix(r.URL.Path, "/aspsps") {
+					t.Errorf("unexpected path: %s", r.URL.Path)
+				}
+				if got := r.URL.Query().Get("country"); got != "NO" {
+					t.Errorf("country query param = %q, want %q", got, "NO")
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.mockStatus)
+				fmt.Fprint(w, tt.mockBody)
+			}))
+			defer server.Close()
+
+			// Auth.baseURL does not exist yet — the field will be added as
+			// part of the implementation.  Referencing it here is deliberate:
+			// the test must not compile before the fix is in place.
+			a := Auth{
+				Config: Config{
+					ASPSP:   "DNB",
+					Country: "NO",
+				},
+				baseURL:    server.URL,
+				httpClient: server.Client(),
+				logger:     slog.New(slog.NewTextHandler(os.Stderr, nil)),
+			}
+
+			// getMaxConsentDuration does not exist yet — referencing it here
+			// keeps the test in the Red state until it is implemented.
+			got := a.getMaxConsentDuration(context.Background(), "test-token")
+			if got != tt.wantDuration {
+				t.Errorf("getMaxConsentDuration() = %v, want %v", got, tt.wantDuration)
+			}
+		})
+	}
+}
+
+// TestInitiateAuthorizationUsesMaxConsentValidity verifies the end-to-end fix:
+// initiateAuthorization must call getMaxConsentDuration and use the bank's
+// maximum_consent_validity (180 days) when building the valid_until field,
+// rather than the hardcoded accessRequestDays (10 days) fallback.
+//
+// The test registers two routes on a single httptest.NewServer:
+//
+// GET  /aspsps → returns DNB with maximum_consent_validity = 15 552 000 s (180 d)
+// POST /auth   → captures the request body and returns a minimal success response
+//
+// After the call it asserts that valid_until is approximately 180 days from now
+// (window: [now+179d, now+181d]).
+//
+// NOTE: Like TestGetMaxConsentDuration, this test references Auth.baseURL which
+// does not exist yet and will NOT COMPILE until the implementation is added.
+func TestInitiateAuthorizationUsesMaxConsentValidity(t *testing.T) {
+	var (
+		mu           sync.Mutex
+		capturedBody []byte
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/aspsps"):
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"aspsps":[{"name":"DNB","country":"NO","maximum_consent_validity":15552000}]}`)
+
+		case r.Method == http.MethodPost && r.URL.Path == "/auth":
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Errorf("reading /auth request body: %v", err)
+			}
+			mu.Lock()
+			capturedBody = body
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"url":"https://bank.example/auth","id":"session-1"}`)
+
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	// Auth.baseURL does not exist yet — see note in TestGetMaxConsentDuration.
+	a := Auth{
+		Config: Config{
+			ASPSP:   "DNB",
+			Country: "NO",
+		},
+		baseURL:    server.URL,
+		httpClient: server.Client(),
+		logger:     slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	}
+
+	now := time.Now().UTC()
+
+	_, _, err := a.initiateAuthorization(context.Background(), "test-jwt-token")
+	if err != nil {
+		t.Fatalf("initiateAuthorization returned unexpected error: %v", err)
+	}
+
+	mu.Lock()
+	body := capturedBody
+	mu.Unlock()
+
+	if len(body) == 0 {
+		t.Fatal("no request body was captured from POST /auth — did initiateAuthorization send a request?")
+	}
+
+	var authReq AuthorizationRequest
+	if err := json.Unmarshal(body, &authReq); err != nil {
+		t.Fatalf("parsing captured POST /auth body: %v", err)
+	}
+
+	if authReq.Access.ValidUntil == "" {
+		t.Fatal("valid_until is empty in the captured authorization request")
+	}
+
+	validUntil, err := time.Parse(time.RFC3339, authReq.Access.ValidUntil)
+	if err != nil {
+		t.Fatalf("parsing valid_until %q: %v", authReq.Access.ValidUntil, err)
+	}
+
+	low := now.AddDate(0, 0, 179)
+	high := now.AddDate(0, 0, 181)
+
+	if validUntil.Before(low) || validUntil.After(high) {
+		t.Errorf(
+			"valid_until = %s; want approximately 180 days from now.\n"+
+				"  acceptable window: [%s, %s]\n"+
+				"  This likely means the hardcoded accessRequestDays (%d days) is still\n"+
+				"  being used instead of the bank's maximum_consent_validity (180 days).",
+			validUntil.Format(time.RFC3339),
+			low.Format(time.RFC3339),
+			high.Format(time.RFC3339),
+			accessRequestDays,
+		)
 	}
 }
