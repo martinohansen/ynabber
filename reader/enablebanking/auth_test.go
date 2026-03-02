@@ -401,6 +401,161 @@ func TestGetMaxConsentDuration(t *testing.T) {
 	}
 }
 
+// TestCreateSessionWithCodeParsesValidUntilFromAccess verifies that
+// createSessionWithCode correctly extracts valid_until from the nested
+// access object in the EnableBanking POST /sessions response.
+//
+// The EnableBanking API wraps valid_until inside an "access" object:
+//
+//	{
+//	  "createdAt": "...",
+//	  "accounts": [...],
+//	  "access": {
+//	    "valid_until": "2026-08-29T17:30:27Z",
+//	    ...
+//	  }
+//	}
+//
+// The current implementation unmarshals directly into Session{}, whose
+// ValidUntil field carries the json tag "valid_until" at the top level, so
+// session.ValidUntil is always empty after parsing.
+//
+// This test MUST FAIL before the fix (session.ValidUntil will be "").
+// It MUST PASS once createSessionWithCode uses an intermediate struct that
+// reads access.valid_until and copies it into session.ValidUntil.
+//
+// NOTE: The test also sets baseURL: server.URL because createSessionWithCode
+// currently hardcodes enableBankingAPIBase instead of honouring a.baseURL.
+// Fixing the URL is a prerequisite for the test to reach the assertion.
+func TestCreateSessionWithCodeParsesValidUntilFromAccess(t *testing.T) {
+	const (
+		wantValidUntil = "2026-08-29T17:30:27Z"
+		wantCreatedAt  = "2026-03-02T10:00:00Z"
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/sessions" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{
+			"createdAt": "2026-03-02T10:00:00Z",
+			"accounts": [],
+			"access": {
+				"valid_until": "2026-08-29T17:30:27Z",
+				"balances": true,
+				"transactions": true
+			}
+		}`)
+	}))
+	defer server.Close()
+
+	// Build a temp PEM file, mirroring TestGenerateJWT.
+	keyData := generateTestKeyPair(t)
+	tmpKey, err := os.CreateTemp("", "test-key-*.pem")
+	if err != nil {
+		t.Fatalf("failed to create temp key file: %v", err)
+	}
+	defer os.Remove(tmpKey.Name())
+	if _, err := tmpKey.Write(keyData); err != nil {
+		tmpKey.Close()
+		t.Fatalf("failed to write test key: %v", err)
+	}
+	tmpKey.Close()
+
+	a := Auth{
+		Config: Config{
+			AppID:   "test-app-id",
+			PEMFile: tmpKey.Name(),
+		},
+		baseURL:    server.URL,
+		httpClient: server.Client(),
+		logger:     slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	}
+
+	session, err := a.createSessionWithCode(context.Background(), "test-jwt", "test-code")
+	if err != nil {
+		t.Fatalf("createSessionWithCode returned unexpected error: %v", err)
+	}
+
+	// Core assertion: valid_until must be populated from access.valid_until.
+	// Before the fix this will be "" — the test fails here.
+	if session.ValidUntil != wantValidUntil {
+		t.Errorf("session.ValidUntil = %q, want %q\n"+
+			"  This means valid_until is still read from the top-level JSON field\n"+
+			"  instead of the nested access.valid_until field returned by the API.",
+			session.ValidUntil, wantValidUntil)
+	}
+}
+
+// TestCreateSessionWithCodeMissingAccess verifies that createSessionWithCode
+// handles a POST /sessions response that contains no "access" field without
+// panicking or returning an error. session.ValidUntil must be "" in this case.
+//
+// Like TestCreateSessionWithCodeParsesValidUntilFromAccess, this test currently
+// fails because createSessionWithCode hardcodes enableBankingAPIBase instead of
+// honouring a.baseURL — the mock server is never reached.  Once the URL routing
+// is fixed (a prerequisite shared with the other test), this test must PASS and
+// must continue to PASS after the ValidUntil parsing fix is applied.  It guards
+// against regressions where an absent "access" field causes a panic or a
+// spurious non-empty ValidUntil.
+func TestCreateSessionWithCodeMissingAccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/sessions" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// Deliberately omit the "access" object to test graceful handling.
+		fmt.Fprint(w, `{
+			"createdAt": "2026-03-02T10:00:00Z",
+			"accounts": []
+		}`)
+	}))
+	defer server.Close()
+
+	keyData := generateTestKeyPair(t)
+	tmpKey, err := os.CreateTemp("", "test-key-*.pem")
+	if err != nil {
+		t.Fatalf("failed to create temp key file: %v", err)
+	}
+	defer os.Remove(tmpKey.Name())
+	if _, err := tmpKey.Write(keyData); err != nil {
+		tmpKey.Close()
+		t.Fatalf("failed to write test key: %v", err)
+	}
+	tmpKey.Close()
+
+	a := Auth{
+		Config: Config{
+			AppID:   "test-app-id",
+			PEMFile: tmpKey.Name(),
+		},
+		baseURL:    server.URL,
+		httpClient: server.Client(),
+		logger:     slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	}
+
+	session, err := a.createSessionWithCode(context.Background(), "test-jwt", "test-code")
+	if err != nil {
+		t.Fatalf("createSessionWithCode returned unexpected error: %v", err)
+	}
+
+	// When "access" is absent the field must be empty — never a stale or
+	// default value.
+	if session.ValidUntil != "" {
+		t.Errorf("session.ValidUntil = %q, want empty string when access object is absent",
+			session.ValidUntil)
+	}
+}
+
 // TestInitiateAuthorizationUsesMaxConsentValidity verifies the end-to-end fix:
 // initiateAuthorization must call getMaxConsentDuration and use the bank's
 // maximum_consent_validity (180 days) when building the valid_until field,

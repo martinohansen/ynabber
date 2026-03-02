@@ -68,6 +68,17 @@ type SessionRequest struct {
 	Code string `json:"code"`
 }
 
+// sessionAPIResponse is used to parse the POST /sessions API response.
+// valid_until is nested inside the access object and is mapped to
+// Session.ValidUntil after parsing.
+type sessionAPIResponse struct {
+	CreatedAt string        `json:"createdAt"`
+	Accounts  []AccountInfo `json:"accounts"`
+	Access    struct {
+		ValidUntil string `json:"valid_until"`
+	} `json:"access"`
+}
+
 // Session represents an authenticated session with account information
 type Session struct {
 	CreatedAt  string        `json:"createdAt"`
@@ -475,7 +486,7 @@ func extractCodeFromRedirectURL(rawURL, expectedState string) (string, error) {
 
 // createSessionWithCode exchanges the authorization code for a session
 func (a Auth) createSessionWithCode(ctx context.Context, jwtToken, code string) (Session, error) {
-	url := enableBankingAPIBase + "/sessions"
+	url := a.baseURL + "/sessions"
 
 	// Create request body
 	reqBody := SessionRequest{
@@ -513,9 +524,14 @@ func (a Auth) createSessionWithCode(ctx context.Context, jwtToken, code string) 
 	}
 
 	// Parse response
-	var session Session
-	if err := json.Unmarshal(respBody, &session); err != nil {
+	var apiResp sessionAPIResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
 		return Session{}, fmt.Errorf("parsing response: %w", err)
+	}
+	session := Session{
+		CreatedAt:  apiResp.CreatedAt,
+		Accounts:   apiResp.Accounts,
+		ValidUntil: apiResp.Access.ValidUntil,
 	}
 
 	// Ensure CreatedAt is set; the API may not return it.
