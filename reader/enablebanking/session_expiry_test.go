@@ -91,7 +91,7 @@ past := time.Now().UTC().Add(-time.Second).Format(time.RFC3339)
 staleSession := Session{
 CreatedAt:  time.Now().UTC().AddDate(0, 0, -11).Format(time.RFC3339),
 ValidUntil: past,
-Accounts:   []AccountInfo{{UID: "acc-1", IBAN: randomTestIBAN(t)}},
+Accounts:   []AccountInfo{{UID: "acc-1", AccountID: AccountID{IBAN: randomTestIBAN(t)}}},
 }
 data, err := json.Marshal(staleSession)
 if err != nil {
@@ -207,7 +207,7 @@ t.Errorf("placeholder file with empty createdAt must not return ErrSessionExpire
 func TestAuthSessionAcceptsFreshSessionFile(t *testing.T) {
 freshSession := Session{
 CreatedAt: time.Now().UTC().Format(time.RFC3339),
-Accounts:  []AccountInfo{{UID: "acc-fresh", IBAN: randomTestIBAN(t)}},
+Accounts:  []AccountInfo{{UID: "acc-fresh", AccountID: AccountID{IBAN: randomTestIBAN(t)}}},
 // No ValidUntil — API did not return one; assume valid forever.
 }
 data, err := json.Marshal(freshSession)

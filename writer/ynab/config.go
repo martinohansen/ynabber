@@ -69,9 +69,8 @@ type Config struct {
 	Token string `envconfig:"YNAB_TOKEN"`
 
 	// AccountMap maps reader accounts to YNAB accounts. See reader for more
-	// details. For example: '{"<IBAN or ID>": "<YNAB Account ID>"}'
+	// details. For example: '{"<IBAN, BBAN or CPAN>": "<YNAB Account ID>"}'
 	AccountMap AccountMap `envconfig:"YNAB_ACCOUNTMAP"`
-
 	// FromDate only imports transactions from this date onward. For
 	// example: 2006-01-02
 	FromDate Date `envconfig:"YNAB_FROM_DATE"`

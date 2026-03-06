@@ -102,18 +102,49 @@ func (s Session) IsExpired() bool {
 	return time.Now().UTC().After(t)
 }
 
+// AccountIDOther contains the alternative identifier for an account (BBAN, CPAN, etc.).
+type AccountIDOther struct {
+	Identification string `json:"identification"`
+	SchemeName     string `json:"scheme_name"`
+	Issuer         string `json:"issuer"`
+}
+
+// AccountID contains the stable identifiers for an account as returned by the
+// EnableBanking /sessions endpoint nested under "account_id".
+type AccountID struct {
+	IBAN  string         `json:"iban"`
+	Other AccountIDOther `json:"other"`
+}
+
 // AccountInfo represents account information from session
 type AccountInfo struct {
-	UID         string `json:"uid"`
-	IBAN        string `json:"iban"`
-	BBAN        string `json:"bban"`
-	MaskedPAN   string `json:"maskedPan"`
-	Currency    string `json:"currency"`
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName"`
-	OwnerName   string `json:"ownerName"`
-	AccountType string `json:"accountType"`
-	Status      string `json:"status"`
+	UID         string    `json:"uid"`
+	AccountID   AccountID `json:"account_id"`
+	Currency    string    `json:"currency"`
+	Name        string    `json:"name"`
+	DisplayName string    `json:"displayName"`
+	OwnerName   string    `json:"ownerName"`
+	AccountType string    `json:"accountType"`
+	Status      string    `json:"status"`
+}
+
+// StableID returns the most stable identifier for this account across sessions.
+// Priority: IBAN (standard bank accounts) → Other.Identification (BBAN or masked
+// CPAN for credit cards) → UID as a last resort.
+//
+// Returned values are length-bounded to reject malformed API responses.
+func (a AccountInfo) StableID() string {
+	const (
+		maxIBANLen           = 34 // ISO 13616 hard maximum
+		maxIdentificationLen = 64 // practical upper bound for BBAN/CPAN
+	)
+	if iban := a.AccountID.IBAN; iban != "" && len(iban) <= maxIBANLen {
+		return iban
+	}
+	if id := a.AccountID.Other.Identification; id != "" && len(id) <= maxIdentificationLen {
+		return id
+	}
+	return a.UID
 }
 
 // ASPSPData represents a single ASPSP entry from GET /aspsps.
