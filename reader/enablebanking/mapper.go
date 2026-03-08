@@ -74,7 +74,7 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 		Account: ynabber.Account{
 			ID:   ynabber.ID(account.UID),
 			Name: account.DisplayName,
-			IBAN: account.IBAN,
+			IBAN: account.StableID(),
 		},
 		ID:     ynabber.ID(transactionID),
 		Date:   date,

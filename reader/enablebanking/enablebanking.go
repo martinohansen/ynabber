@@ -82,35 +82,6 @@ type EBTransaction struct {
 	TransactionID               string      `json:"transaction_id"`
 }
 
-// AccountDetails represents the account details response from the EnableBanking API
-type AccountDetails struct {
-	AccountID struct {
-		IBAN string `json:"iban"`
-	} `json:"account_id"`
-	AllAccountIDs []struct {
-		Identification string `json:"identification"`
-		SchemeName     string `json:"scheme_name"`
-	} `json:"all_account_ids"`
-	AccountServicer struct {
-		BicFi string `json:"bic_fi"`
-		Name  string `json:"name"`
-	} `json:"account_servicer"`
-	Name            string `json:"name"`
-	Details         string `json:"details"`
-	Usage           string `json:"usage"`
-	CashAccountType string `json:"cash_account_type"`
-	Product         string `json:"product"`
-	Currency        string `json:"currency"`
-	PSUStatus       string `json:"psu_status"`
-	CreditLimit     struct {
-		Currency string `json:"currency"`
-		Amount   string `json:"amount"`
-	} `json:"credit_limit"`
-	UID                  string   `json:"uid"`
-	IdentificationHash   string   `json:"identification_hash"`
-	IdentificationHashes []string `json:"identification_hashes"`
-}
-
 // GetAccountTransactions fetches transactions for a specific account
 func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUID, fromDate, toDate string) (*TransactionsResponse, error) {
 	url := fmt.Sprintf("%s/accounts/%s/transactions?date_from=%s&date_to=%s",
@@ -151,47 +122,6 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 	}
 
 	return &transactions, nil
-}
-
-// GetAccountDetails fetches detailed information for a specific account
-func (c *Client) GetAccountDetails(ctx context.Context, jwtToken, accountUID string) (*AccountDetails, error) {
-	url := fmt.Sprintf("%s/accounts/%s/details", c.BaseURL, accountUID)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+jwtToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("sending request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("reading response: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("%w: %s", ErrRateLimit, string(respBody))
-	}
-	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("%w: %s", ErrUnauthorized, string(respBody))
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var details AccountDetails
-	if err := json.Unmarshal(respBody, &details); err != nil {
-		return nil, fmt.Errorf("parsing response: %w", err)
-	}
-
-	return &details, nil
 }
 
 // Reader represents an EnableBanking reader instance
@@ -254,47 +184,22 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 
 	r.logger.Info("loaded session", "accounts", len(session.Accounts))
 
-	// Fetch and log a summary of all account details for easy identification
-	accountDetailsMap := make(map[string]*AccountDetails)
-	for _, account := range session.Accounts {
-		details, err := r.Client.GetAccountDetails(ctx, session.AuthToken, account.UID)
-		if err != nil {
-			r.logger.Warn("failed to fetch account details", "uid", account.UID, "error", err)
-			continue
-		}
-
-		accountDetailsMap[account.UID] = details
-
-		log.Trace(r.logger, "account_details", "uid", account.UID, "data", details)
-
-		// Log account details for easy identification
-		r.logger.Info("account_details",
-			"uid", details.UID,
-			"account_id", details.AccountID,
-			"details", details.Details,
-		)
-	}
-
 	// Fetch transactions for each account
 	var results []ynabber.Transaction
 	fromDate := time.Time(r.Config.FromDate).Format(dateFormat)
 	toDate := time.Time(r.Config.ToDate).Format(dateFormat)
 
 	for i, account := range session.Accounts {
-		details := accountDetailsMap[account.UID]
+		accountLogger := r.logger.With("account", account.UID, "stable_id_hint", maskIdentifier(account.StableID()))
+		log.Trace(accountLogger, "stable id", "stable_id", account.StableID())
 
-		logFields := []interface{}{
-			"account", account.UID,
+		// Warn when the session file predates the account_id fix (issue #152).
+		// In that case StableID() falls back to the session-scoped UID, which
+		// won't match any YNAB_ACCOUNTMAP key and transactions will be dropped.
+		if account.AccountID.IBAN == "" && account.AccountID.Other.Identification == "" {
+			accountLogger.Warn("account has no stable ID (IBAN/BBAN/CPAN) — " +
+				"delete the session file and re-authorize to fix YNAB_ACCOUNTMAP matching")
 		}
-		if details != nil {
-			logFields = append(logFields, "iban", details.AccountID.IBAN)
-			// Enrich account with IBAN from details API
-			account.IBAN = details.AccountID.IBAN
-		} else {
-			logFields = append(logFields, "iban", account.IBAN)
-		}
-
-		accountLogger := r.logger.With(logFields...)
 
 		txResp, err := r.Client.GetAccountTransactions(ctx, session.AuthToken, account.UID, fromDate, toDate)
 		if err != nil {
@@ -326,6 +231,17 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 
 	r.logger.Info("read transactions", "total", len(results))
 	return results, nil
+}
+
+// maskIdentifier returns a truncated identifier safe for INFO-level logs,
+// showing only the first 4 and last 4 characters (e.g. "NO98...8901").
+// This avoids emitting full IBANs or BBANs to log aggregators.
+func maskIdentifier(id string) string {
+	r := []rune(id)
+	if len(r) <= 8 {
+		return "****"
+	}
+	return string(r[:4]) + "..." + string(r[len(r)-4:])
 }
 
 // loadEnvConfig loads config from environment variables using kelseyhightower/envconfig

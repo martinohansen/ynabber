@@ -17,7 +17,7 @@ func TestMapper(t *testing.T) {
 
 	account := AccountInfo{
 		UID:         "acc-123",
-		IBAN:        randomTestIBAN(t),
+		AccountID:   AccountID{IBAN: randomTestIBAN(t)},
 		DisplayName: "Test",
 	}
 
@@ -114,7 +114,7 @@ func TestDefaultMapperCredit(t *testing.T) {
 
 	account := AccountInfo{
 		UID:         "acc-123",
-		IBAN:        randomTestIBAN(t),
+		AccountID:   AccountID{IBAN: randomTestIBAN(t)},
 		DisplayName: "My Account",
 	}
 
@@ -158,8 +158,8 @@ func TestDefaultMapperDebit(t *testing.T) {
 	}
 
 	account := AccountInfo{
-		UID:  "acc-123",
-		IBAN: randomTestIBAN(t),
+		UID:       "acc-123",
+		AccountID: AccountID{IBAN: randomTestIBAN(t)},
 	}
 
 	tx := EBTransaction{
@@ -343,8 +343,8 @@ func TestMapperWithDifferentASPSPs(t *testing.T) {
 	}
 
 	account := AccountInfo{
-		UID:  "acc-123",
-		IBAN: randomTestIBAN(t),
+		UID:       "acc-123",
+		AccountID: AccountID{IBAN: randomTestIBAN(t)},
 	}
 
 	tx := EBTransaction{
@@ -426,7 +426,7 @@ func TestPayeeStrip(t *testing.T) {
 
 			account := AccountInfo{
 				UID:  "acc-123",
-				IBAN: randomTestIBAN(t),
+				AccountID: AccountID{IBAN: randomTestIBAN(t)},
 			}
 
 			tx := EBTransaction{
@@ -494,7 +494,7 @@ func TestPayeeTruncation(t *testing.T) {
 
 			account := AccountInfo{
 				UID:  "acc-123",
-				IBAN: randomTestIBAN(t),
+				AccountID: AccountID{IBAN: randomTestIBAN(t)},
 			}
 
 			tx := EBTransaction{
@@ -535,7 +535,7 @@ func TestPayeeStripAndTruncate(t *testing.T) {
 
 	account := AccountInfo{
 		UID:  "acc-123",
-		IBAN: randomTestIBAN(t),
+		AccountID: AccountID{IBAN: randomTestIBAN(t)},
 	}
 
 	// Payee is "Visa " + 200 characters = 205 total
@@ -614,7 +614,7 @@ func TestDefaultMapperStatusFilter(t *testing.T) {
 
 	account := AccountInfo{
 		UID:         "acc-status-test",
-		IBAN:        randomTestIBAN(t),
+		AccountID:   AccountID{IBAN: randomTestIBAN(t)},
 		DisplayName: "Status Filter Account",
 	}
 

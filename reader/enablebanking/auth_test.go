@@ -153,7 +153,7 @@ func TestSaveAndLoadSession(t *testing.T) {
 		Accounts: []AccountInfo{
 			{
 				UID:         "test-uid-1",
-				IBAN:        iban,
+				AccountID:   AccountID{IBAN: iban},
 				DisplayName: "Test Account 1",
 				Currency:    "NOK",
 			},
@@ -210,7 +210,7 @@ func TestAccountInfo(t *testing.T) {
 	iban := randomTestIBAN(t)
 	account := AccountInfo{
 		UID:         "test-uid",
-		IBAN:        iban,
+		AccountID:   AccountID{IBAN: iban},
 		DisplayName: "Test Account",
 		Currency:    "NOK",
 		Status:      "active",
@@ -220,8 +220,8 @@ func TestAccountInfo(t *testing.T) {
 		t.Fatalf("expected UID 'test-uid', got '%s'", account.UID)
 	}
 
-	if account.IBAN != iban {
-		t.Fatalf("expected IBAN '%s', got '%s'", iban, account.IBAN)
+	if account.AccountID.IBAN != iban {
+		t.Fatalf("expected IBAN '%s', got '%s'", iban, account.AccountID.IBAN)
 	}
 }
 
@@ -657,5 +657,182 @@ func TestInitiateAuthorizationUsesMaxConsentValidity(t *testing.T) {
 			high.Format(time.RFC3339),
 			accessRequestDays,
 		)
+	}
+}
+
+// TestAccountInfoStableID verifies that StableID() returns the most stable
+// identifier for an account, in priority order: IBAN → BBAN/CPAN → UID.
+//
+// NOTE: This test references AccountID, AccountIDOther, and StableID() which
+// do not exist yet. It will NOT COMPILE until the implementation is added —
+// that is the expected Red state.
+func TestAccountInfoStableID(t *testing.T) {
+	tests := []struct {
+		name    string
+		account AccountInfo
+		wantID  string
+	}{
+		{
+			name: "IBAN present — returns IBAN",
+			account: AccountInfo{
+				UID: "uid-1",
+				AccountID: AccountID{
+					IBAN: "NO9812345678901",
+					Other: AccountIDOther{
+						Identification: "12345678901",
+						SchemeName:     "BBAN",
+					},
+				},
+			},
+			wantID: "NO9812345678901",
+		},
+		{
+			name: "No IBAN, BBAN present — returns BBAN",
+			account: AccountInfo{
+				UID: "uid-2",
+				AccountID: AccountID{
+					Other: AccountIDOther{
+						Identification: "12345678901",
+						SchemeName:     "BBAN",
+					},
+				},
+			},
+			wantID: "12345678901",
+		},
+		{
+			name: "No IBAN, CPAN present — returns masked CPAN",
+			account: AccountInfo{
+				UID: "uid-3",
+				AccountID: AccountID{
+					Other: AccountIDOther{
+						Identification: "540111******9999",
+						SchemeName:     "CPAN",
+					},
+				},
+			},
+			wantID: "540111******9999",
+		},
+		{
+			name: "No IBAN, unknown scheme — returns identification",
+			account: AccountInfo{
+				UID: "uid-4",
+				AccountID: AccountID{
+					Other: AccountIDOther{
+						Identification: "XYZABC",
+						SchemeName:     "PROPRIETARY",
+					},
+				},
+			},
+			wantID: "XYZABC",
+		},
+		{
+			name:    "No identifiers at all — falls back to UID",
+			account: AccountInfo{UID: "uid-5"},
+			wantID:  "uid-5",
+		},
+		{
+			name: "IBAN exceeds ISO max length — falls back to Other.Identification",
+			account: AccountInfo{
+				UID: "uid-6",
+				AccountID: AccountID{
+					// 35 chars — one over the ISO 13616 maximum of 34
+					IBAN: "NO981234567890123456789012345678901",
+					Other: AccountIDOther{
+						Identification: "12345678901",
+						SchemeName:     "BBAN",
+					},
+				},
+			},
+			wantID: "12345678901",
+		},
+		{
+			name: "Identification exceeds max length — falls back to UID",
+			account: AccountInfo{
+				UID: "uid-7",
+				AccountID: AccountID{
+					Other: AccountIDOther{
+						// 65 chars — one over the practical maximum of 64
+						Identification: "1234567890123456789012345678901234567890123456789012345678901234X",
+						SchemeName:     "BBAN",
+					},
+				},
+			},
+			wantID: "uid-7",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.account.StableID()
+			if got != tt.wantID {
+				t.Errorf("StableID() = %q, want %q", got, tt.wantID)
+			}
+		})
+	}
+}
+
+// TestAccountInfoParsesAccountIDFromSession verifies that AccountInfo correctly
+// parses the nested account_id structure returned by the /sessions endpoint.
+//
+// The API returns stable identifiers nested inside account_id:
+//
+//	{ "uid": "...", "account_id": { "iban": "...", "other": { "identification": "...", "scheme_name": "BBAN" } } }
+//
+// The current flat json tags (json:"iban" at top level) silently discard this
+// data. This test must FAIL before the fix and PASS after.
+//
+// NOTE: This test references AccountID.IBAN and AccountID.Other.Identification
+// which do not exist yet. It will NOT COMPILE until the struct is added.
+func TestAccountInfoParsesAccountIDFromSession(t *testing.T) {
+	tests := []struct {
+		name               string
+		jsonInput          string
+		wantIBAN           string
+		wantIdentification string
+		wantSchemeName     string
+	}{
+		{
+			name:               "standard bank account — IBAN and BBAN",
+			jsonInput:          `{"uid":"u1","account_id":{"iban":"NO9812345678901","other":{"identification":"12345678901","scheme_name":"BBAN"}}}`,
+			wantIBAN:           "NO9812345678901",
+			wantIdentification: "12345678901",
+			wantSchemeName:     "BBAN",
+		},
+		{
+			name:               "credit card — null IBAN, masked CPAN",
+			jsonInput:          `{"uid":"u2","account_id":{"iban":null,"other":{"identification":"540111******9999","scheme_name":"CPAN"}}}`,
+			wantIBAN:           "",
+			wantIdentification: "540111******9999",
+			wantSchemeName:     "CPAN",
+		},
+		{
+			name:               "missing account_id — all fields empty",
+			jsonInput:          `{"uid":"u3"}`,
+			wantIBAN:           "",
+			wantIdentification: "",
+			wantSchemeName:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var account AccountInfo
+			if err := json.Unmarshal([]byte(tt.jsonInput), &account); err != nil {
+				t.Fatalf("json.Unmarshal failed: %v", err)
+			}
+			if account.AccountID.IBAN != tt.wantIBAN {
+				t.Errorf("AccountID.IBAN = %q, want %q\n"+
+					"  AccountInfo likely still uses flat json:\"iban\" instead of nested account_id.",
+					account.AccountID.IBAN, tt.wantIBAN)
+			}
+			if account.AccountID.Other.Identification != tt.wantIdentification {
+				t.Errorf("AccountID.Other.Identification = %q, want %q",
+					account.AccountID.Other.Identification, tt.wantIdentification)
+			}
+			if account.AccountID.Other.SchemeName != tt.wantSchemeName {
+				t.Errorf("AccountID.Other.SchemeName = %q, want %q",
+					account.AccountID.Other.SchemeName, tt.wantSchemeName)
+			}
+		})
 	}
 }
