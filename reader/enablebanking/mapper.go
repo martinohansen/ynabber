@@ -1,6 +1,7 @@
 package enablebanking
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strconv"
 	"strings"
@@ -26,11 +27,8 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 		return nil, nil
 	}
 
-	// Skip transactions with missing required fields
-	transactionID, err := resolveTransactionID(tx)
-	if err != nil {
-		return nil, err
-	}
+	// Resolve a stable transaction ID.
+	transactionID := resolveTransactionID(tx)
 
 	bookingDateStr, err := resolveBookingDate(tx)
 	if err != nil {
@@ -84,17 +82,55 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 	}, nil
 }
 
-func resolveTransactionID(tx EBTransaction) (string, error) {
-	if tx.TransactionID != "" {
-		return tx.TransactionID, nil
-	}
+// resolveTransactionID returns a stable identifier for tx, trying candidates
+// in order of reliability:
+//
+//  1. entry_reference — bank-assigned, stable across sessions
+//     (present for Sparebanken and credit-card ASPSPs).
+//  2. reference_number — bank-assigned, stable across sessions
+//     (null for all currently observed ASPSPs; included for future-proofing).
+//  3. syntheticTransactionID — deterministic SHA-256 hash of the mandatory
+//     transaction fields (fallback for DNB and any ASPSP that sets both
+//     entry_reference and reference_number to null).
+//
+// transaction_id is intentionally excluded: for DNB it is a session-scoped
+// token (base64 of a counter-prefixed string) that changes on every
+// re-authorisation, and for other ASPSPs it is merely a re-encoding of
+// entry_reference.
+//
+// The function always returns a non-empty string.
+func resolveTransactionID(tx EBTransaction) string {
 	if value := stringFromInterface(tx.EntryReference); value != "" {
-		return value, nil
+		return value
 	}
 	if value := stringFromInterface(tx.ReferenceNumber); value != "" {
-		return value, nil
+		return value
 	}
-	return "", fmt.Errorf("missing transaction ID")
+	return syntheticTransactionID(tx)
+}
+
+// syntheticTransactionID derives a deterministic, session-independent
+// transaction identifier for ASPSPs that provide no stable bank-assigned
+// reference (e.g. DNB, where entry_reference is null and transaction_id is a
+// session-scoped opaque token that changes on re-authorisation).
+//
+// The hash input is the concatenation of always-present EnableBanking fields,
+// separated by NUL bytes to prevent cross-field collisions:
+//
+//	booking_date \x00 amount \x00 currency \x00 credit_debit_indicator \x00 remittance_information
+//
+// The "synth:" prefix distinguishes synthetic IDs from bank-assigned IDs in
+// logs and makes the origin of the value unambiguous.
+func syntheticTransactionID(tx EBTransaction) string {
+	parts := []string{
+		tx.BookingDate,
+		tx.TransactionAmount.Amount,
+		tx.TransactionAmount.Currency,
+		tx.CreditDebitIndicator,
+		strings.Join(tx.RemittanceInformation, "\x00"),
+	}
+	h := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return fmt.Sprintf("synth:%x", h)
 }
 
 func resolveBookingDate(tx EBTransaction) (string, error) {
