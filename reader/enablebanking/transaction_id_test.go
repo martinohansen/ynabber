@@ -25,11 +25,11 @@ import (
 // using real field combinations observed in the three EnableBanking ASPSPs.
 func TestResolveTransactionID_Priority(t *testing.T) {
 	tests := []struct {
-		name          string
-		tx            EBTransaction
-		want          string   // exact match when wantSynth is false
-		wantSynth     bool     // true → only assert "synth:" prefix
-		wantNotEqual  string   // if non-empty, result must NOT equal this value
+		name         string
+		tx           EBTransaction
+		want         string // exact match when wantSynth is false
+		wantSynth    bool   // true → only assert "synth:" prefix
+		wantNotEqual string // if non-empty, result must NOT equal this value
 	}{
 		{
 			// Sparebanken: entry_reference is stable; transaction_id is null.
@@ -115,7 +115,7 @@ func TestResolveTransactionID_Priority(t *testing.T) {
 					Amount   string `json:"amount"`
 				}{Currency: "NOK", Amount: "9237.33"},
 				CreditDebitIndicator:  "DBIT",
-				RemittanceInformation: []string{"Lån, Lån 9802.49.21506"},
+				RemittanceInformation: []string{"Lån, Lån 9802.55.21212"},
 			},
 			wantSynth: true,
 		},
