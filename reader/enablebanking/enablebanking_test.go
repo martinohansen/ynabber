@@ -177,7 +177,8 @@ func TestReaderMapTransaction(t *testing.T) {
 	}
 
 	ebTx := EBTransaction{
-		TransactionID:        "tx-456",
+		EntryReference:       "202401150000456", // stable bank-assigned reference
+		TransactionID:        "tx-456",          // session-scoped; must not be used as ID
 		BookingDate:          "2024-01-15",
 		CreditDebitIndicator: "CRDT",
 		TransactionAmount: struct {
@@ -200,8 +201,8 @@ func TestReaderMapTransaction(t *testing.T) {
 		t.Fatal("expected transaction, got nil")
 	}
 
-	if tx.ID != "tx-456" {
-		t.Errorf("expected ID 'tx-456', got '%s'", tx.ID)
+	if tx.ID != "202401150000456" {
+		t.Errorf("expected ID '202401150000456', got '%s'", tx.ID)
 	}
 
 	if tx.Account.IBAN != iban {
