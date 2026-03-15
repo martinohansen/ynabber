@@ -266,7 +266,7 @@ func TestSyntheticTransactionID(t *testing.T) {
 
 	t.Run("remittance pipe in entry does not cause intra-list collision", func(t *testing.T) {
 		// ["a|b", "c"] and ["a", "b|c"] must hash differently.
-		// This confirms the \x00 intra-list separator is used, not "|".
+		// JSON encoding preserves element boundaries, preventing this collision.
 		txA := base
 		txA.RemittanceInformation = []string{"a|b", "c"}
 		txB := base
@@ -287,7 +287,7 @@ func TestSyntheticTransactionID(t *testing.T) {
 
 	t.Run("field boundary: adjacent-field collision resistance", func(t *testing.T) {
 		// "abc" + "def" must not collide with "ab" + "cdef".
-		// Achieved by NUL-byte separation in the hash input.
+		// Achieved by JSON encoding, which quotes each field individually.
 		txA := EBTransaction{
 			BookingDate: "2026-01-01",
 			TransactionAmount: struct {
@@ -307,7 +307,7 @@ func TestSyntheticTransactionID(t *testing.T) {
 			RemittanceInformation: []string{"x"},
 		}
 		if syntheticTransactionID(txA) == syntheticTransactionID(txB) {
-			t.Error("NUL-byte separation must prevent cross-field collision")
+			t.Error("JSON encoding must prevent cross-field collision")
 		}
 	})
 }

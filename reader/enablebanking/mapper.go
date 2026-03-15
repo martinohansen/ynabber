@@ -2,6 +2,7 @@ package enablebanking
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -114,10 +115,11 @@ func resolveTransactionID(tx EBTransaction) string {
 // reference (e.g. DNB, where entry_reference is null and transaction_id is a
 // session-scoped opaque token that changes on re-authorisation).
 //
-// The hash input is the concatenation of always-present EnableBanking fields,
-// separated by NUL bytes to prevent cross-field collisions:
+// The hash input is the JSON encoding of the always-present EnableBanking
+// fields, which provides unambiguous field boundaries without manual separator
+// logic:
 //
-//	booking_date \x00 amount \x00 currency \x00 credit_debit_indicator \x00 remittance_information
+//	[booking_date, amount, currency, credit_debit_indicator, remittance_information...]
 //
 // The "synth:" prefix distinguishes synthetic IDs from bank-assigned IDs in
 // logs and makes the origin of the value unambiguous.
@@ -127,9 +129,10 @@ func syntheticTransactionID(tx EBTransaction) string {
 		tx.TransactionAmount.Amount,
 		tx.TransactionAmount.Currency,
 		tx.CreditDebitIndicator,
-		strings.Join(tx.RemittanceInformation, "\x00"),
 	}
-	h := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	parts = append(parts, tx.RemittanceInformation...)
+	b, _ := json.Marshal(parts)
+	h := sha256.Sum256(b)
 	return fmt.Sprintf("synth:%x", h)
 }
 
