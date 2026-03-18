@@ -76,8 +76,9 @@ type Config struct {
 	FromDate Date `envconfig:"YNAB_FROM_DATE"`
 
 	// Delay sending transactions to YNAB by this duration. This can be
-	// necessary if the bank changes transaction IDs after some time. Default is
-	// 0 (no delay).
+	// necessary if the bank changes transaction IDs after some time, or
+	// enriches remittance information after booking (which can cause duplicate
+	// imports). Default is 0 (no delay).
 	Delay time.Duration `envconfig:"YNAB_DELAY" default:"0"`
 
 	// Cleared sets the transaction status. Possible values: cleared, uncleared,

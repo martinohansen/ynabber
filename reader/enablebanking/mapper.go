@@ -123,6 +123,11 @@ func resolveTransactionID(tx EBTransaction) string {
 //
 // The "synth:" prefix distinguishes synthetic IDs from bank-assigned IDs in
 // logs and makes the origin of the value unambiguous.
+//
+// Note: remittance_information is included in the hash. Some ASPSPs (e.g. DNB)
+// enrich this field asynchronously after booking, which changes the hash and
+// causes duplicates in YNAB. Use YNAB_DELAY=12h to avoid importing transactions
+// before their remittance information has stabilised.
 func syntheticTransactionID(tx EBTransaction) string {
 	parts := []string{
 		tx.BookingDate,

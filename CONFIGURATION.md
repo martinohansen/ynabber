@@ -57,7 +57,7 @@ YNAB writes transactions You Need a Budget (YNAB) using their API. It handles tr
 | YNAB_TOKEN | `string` | - | Token is your personal access token obtained from the YNAB developer<br>settings section |
 | YNAB_ACCOUNTMAP | `AccountMap` | - | AccountMap maps reader accounts to YNAB accounts. See reader for more<br>details. For example: '{"&lt;IBAN, BBAN or CPAN&gt;": "&lt;YNAB Account ID&gt;"}' |
 | YNAB_FROM_DATE | `Date` | - | FromDate only imports transactions from this date onward. For<br>example: 2006-01-02 |
-| YNAB_DELAY | `time.Duration` | `0` | Delay sending transactions to YNAB by this duration. This can be<br>necessary if the bank changes transaction IDs after some time. Default is<br>0 (no delay). |
+| YNAB_DELAY | `time.Duration` | `0` | Delay sending transactions to YNAB by this duration. This can be<br>necessary if the bank changes transaction IDs after some time, or<br>enriches remittance information after booking (which can cause duplicate<br>imports). Default is 0 (no delay). |
 | YNAB_CLEARED | `TransactionStatus` | `cleared` | Cleared sets the transaction status. Possible values: cleared, uncleared,<br>reconciled. |
 | YNAB_SWAPFLOW | `[]string` | - | SwapFlow reverses inflow to outflow and vice versa for any account<br>identified by IBAN or ID. Example: "DK9520000123456789,NO8330001234567" |
 
