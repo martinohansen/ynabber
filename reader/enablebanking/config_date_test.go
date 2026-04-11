@@ -1,6 +1,7 @@
 package enablebanking
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -23,12 +24,18 @@ func mustDate(t *testing.T, s string) Date {
 func validBaseConfig(t *testing.T) Config {
 	t.Helper()
 	return Config{
-		AppID:       "test-app",
-		Country:     "NO",
-		ASPSP:       "DNB",
-		PEMFile:     "test.pem",
-		FromDate:    mustDate(t, "2024-01-01"), // typed Date, not string
+		AppID:    "test-app",
+		Country:  "NO",
+		ASPSP:    "DNB",
+		PEMFile:  "test.pem",
+		FromDate: mustDate(t, "2024-01-01"), // typed Date, not string
 	}
+}
+
+func sameUTCDate(a, b time.Time) bool {
+	ay, am, ad := a.UTC().Date()
+	by, bm, bd := b.UTC().Date()
+	return ay == by && am == bm && ad == bd
 }
 
 // ---------------------------------------------------------------------------
@@ -164,10 +171,10 @@ func TestConfigFromDateIsTypedDate(t *testing.T) {
 // malformed date strings before they reach Validate.
 func TestEnvconfigFromDateDecode(t *testing.T) {
 	base := map[string]string{
-		"ENABLEBANKING_APP_ID":       "test-app",
-		"ENABLEBANKING_COUNTRY":      "NO",
-		"ENABLEBANKING_ASPSP":        "DNB",
-		"ENABLEBANKING_PEM_FILE":     "test.pem",
+		"ENABLEBANKING_APP_ID":   "test-app",
+		"ENABLEBANKING_COUNTRY":  "NO",
+		"ENABLEBANKING_ASPSP":    "DNB",
+		"ENABLEBANKING_PEM_FILE": "test.pem",
 	}
 
 	tests := []struct {
@@ -200,12 +207,12 @@ func TestEnvconfigFromDateDecode(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Config.Validate — ToDate defaults to today as Date
+// Config.Validate — omitted ToDate remains dynamic
 // ---------------------------------------------------------------------------
 
 // TestConfigValidateToDateDefaultsToTypedDate asserts that when ToDate is the
-// zero Date, Validate sets it to today's date — and that the result is
-// a Date (time.Time), not a string that needs re-parsing.
+// zero Date, Validate leaves it unset so GetToDate can resolve it dynamically
+// on each run.
 func TestConfigValidateToDateDefaultsToTypedDate(t *testing.T) {
 	cfg := validBaseConfig(t)
 	cfg.ToDate = Date{} // explicitly zero — not provided
@@ -214,14 +221,156 @@ func TestConfigValidateToDateDefaultsToTypedDate(t *testing.T) {
 		t.Fatalf("Validate() unexpected error: %v", err)
 	}
 
+	if !time.Time(cfg.ToDate).IsZero() {
+		t.Fatalf("Validate() materialized omitted ToDate as %v; want zero Date", time.Time(cfg.ToDate))
+	}
+
 	got, err := cfg.GetToDate()
 	if err != nil {
 		t.Fatalf("GetToDate() unexpected error: %v", err)
 	}
 
-	now := time.Now()
-	if got.Year() != now.Year() || got.Month() != now.Month() || got.Day() != now.Day() {
+	now := time.Now().UTC()
+	if !sameUTCDate(got, now) {
 		t.Errorf("GetToDate() = %v, want today (%v)", got, now.Format(dateFormat))
+	}
+}
+
+// TestConfigGetToDateZeroDateUsesCurrentUTCDate captures the continuous-mode
+// regression: when ENABLEBANKING_TO_DATE is omitted, date resolution must stay
+// dynamic and follow the current UTC date instead of returning the zero time.
+func TestConfigGetToDateZeroDateUsesCurrentUTCDate(t *testing.T) {
+	tests := []struct {
+		name   string
+		toDate Date
+		want   time.Time
+	}{
+		{
+			name:   "implicit zero ToDate resolves to current UTC date",
+			toDate: Date{},
+		},
+		{
+			name:   "explicit ToDate remains fixed",
+			toDate: mustDate(t, "2024-12-31"),
+			want:   time.Date(2024, time.December, 31, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validBaseConfig(t)
+			cfg.ToDate = tt.toDate
+
+			got, err := cfg.GetToDate()
+			if err != nil {
+				t.Fatalf("GetToDate() unexpected error: %v", err)
+			}
+
+			if time.Time(tt.toDate).IsZero() {
+				now := time.Now().UTC()
+				if !sameUTCDate(got, now) {
+					t.Fatalf("GetToDate() = %v, want current UTC date (%s) when ToDate is omitted",
+						got, now.Format(dateFormat))
+				}
+				return
+			}
+
+			if got != tt.want {
+				t.Fatalf("GetToDate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestEnvconfigOmittedToDateRemainsDynamic verifies the narrow seam needed for
+// continuous mode: omitting ENABLEBANKING_TO_DATE must not be materialized into
+// a fixed date at startup, while an explicit date must remain fixed.
+func TestEnvconfigOmittedToDateRemainsDynamic(t *testing.T) {
+	baseEnv := map[string]string{
+		"ENABLEBANKING_APP_ID":    "test-app",
+		"ENABLEBANKING_COUNTRY":   "NO",
+		"ENABLEBANKING_ASPSP":     "DNB",
+		"ENABLEBANKING_PEM_FILE":  "test.pem",
+		"ENABLEBANKING_FROM_DATE": "2024-01-01",
+	}
+
+	explicitToDate := "2024-12-31"
+	tests := []struct {
+		name           string
+		toDateEnv      *string
+		wantStoredZero bool
+		want           time.Time
+	}{
+		{
+			name:           "omitted ToDate stays unset and resolves dynamically",
+			toDateEnv:      nil,
+			wantStoredZero: true,
+		},
+		{
+			name:      "explicit ToDate stays fixed after Validate",
+			toDateEnv: &explicitToDate,
+			want:      time.Date(2024, time.December, 31, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range baseEnv {
+				t.Setenv(k, v)
+			}
+
+			const toDateKey = "ENABLEBANKING_TO_DATE"
+			if tt.toDateEnv == nil {
+				prev, had := os.LookupEnv(toDateKey)
+				os.Unsetenv(toDateKey)
+				t.Cleanup(func() {
+					if had {
+						_ = os.Setenv(toDateKey, prev)
+					} else {
+						_ = os.Unsetenv(toDateKey)
+					}
+				})
+			} else {
+				t.Setenv(toDateKey, *tt.toDateEnv)
+			}
+
+			var cfg Config
+			if err := envconfig.Process("", &cfg); err != nil {
+				t.Fatalf("envconfig.Process() unexpected error: %v", err)
+			}
+
+			if err := cfg.Validate("."); err != nil {
+				t.Fatalf("Validate() unexpected error: %v", err)
+			}
+
+			stored := time.Time(cfg.ToDate)
+			if tt.wantStoredZero {
+				if !stored.IsZero() {
+					t.Fatalf("Validate() materialized omitted ENABLEBANKING_TO_DATE as %v; want zero Date so later runs can advance",
+						stored)
+				}
+			} else if stored != tt.want {
+				t.Fatalf("Validate() changed explicit ToDate = %v, want %v", stored, tt.want)
+			}
+
+			got, err := cfg.GetToDate()
+			if err != nil {
+				t.Fatalf("GetToDate() unexpected error: %v", err)
+			}
+
+			if tt.wantStoredZero {
+				now := time.Now().UTC()
+				if !sameUTCDate(got, now) {
+					t.Fatalf("GetToDate() = %v, want current UTC date (%s) when ENABLEBANKING_TO_DATE is omitted",
+						got, now.Format(dateFormat))
+				}
+				return
+			}
+
+			if got != tt.want {
+				t.Fatalf("GetToDate() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

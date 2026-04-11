@@ -17,11 +17,11 @@ import (
 func TestEnvconfigRequiredFields(t *testing.T) {
 	t.Setenv("_PARALLEL_GUARD", "") // prevents t.Parallel() in this test or subtests
 	allVars := map[string]string{
-		"ENABLEBANKING_APP_ID":       "test-app",
-		"ENABLEBANKING_COUNTRY":      "NO",
-		"ENABLEBANKING_ASPSP":        "DNB",
-		"ENABLEBANKING_PEM_FILE":     "test.pem",
-		"ENABLEBANKING_FROM_DATE":    "2024-01-01",
+		"ENABLEBANKING_APP_ID":    "test-app",
+		"ENABLEBANKING_COUNTRY":   "NO",
+		"ENABLEBANKING_ASPSP":     "DNB",
+		"ENABLEBANKING_PEM_FILE":  "test.pem",
+		"ENABLEBANKING_FROM_DATE": "2024-01-01",
 	}
 
 	tests := []struct {
@@ -82,20 +82,18 @@ func TestConfigGetFromDate(t *testing.T) {
 
 func TestConfigGetToDate(t *testing.T) {
 	tests := []struct {
-		name   string
-		toDate Date
-		// wantToday is true when we expect GetToDate to return the zero time
-		// (ToDate not yet defaulted — Validate has not been called).
-		wantZero bool
+		name    string
+		toDate  Date
+		wantNow bool
 	}{
 		{
 			name:   "with explicit date",
 			toDate: mustDate(t, "2024-12-31"),
 		},
 		{
-			name:     "zero Date returns zero time (Validate not yet called)",
-			toDate:   Date{},
-			wantZero: true,
+			name:    "zero Date resolves to current UTC date",
+			toDate:  Date{},
+			wantNow: true,
 		},
 	}
 
@@ -110,9 +108,10 @@ func TestConfigGetToDate(t *testing.T) {
 				t.Fatalf("GetToDate() failed: %v", err)
 			}
 
-			if tt.wantZero {
-				if !date.IsZero() {
-					t.Errorf("expected zero time, got %v", date)
+			if tt.wantNow {
+				now := time.Now().UTC()
+				if !sameUTCDate(date, now) {
+					t.Errorf("expected current UTC date, got %v (now %v)", date, now)
 				}
 				return
 			}
@@ -127,12 +126,12 @@ func TestConfigGetToDate(t *testing.T) {
 
 func TestConfigValidateDefaultsToDate(t *testing.T) {
 	config := Config{
-		AppID:       "test-app",
-		Country:     "NO",
-		ASPSP:       "DNB",
-		PEMFile:     "test.pem",
-		FromDate:    mustDate(t, "2024-01-01"),
-		// ToDate left as zero Date — should be defaulted to today
+		AppID:    "test-app",
+		Country:  "NO",
+		ASPSP:    "DNB",
+		PEMFile:  "test.pem",
+		FromDate: mustDate(t, "2024-01-01"),
+		// ToDate left as zero Date — should remain unset and resolve dynamically
 	}
 
 	err := config.Validate(".")
@@ -140,11 +139,10 @@ func TestConfigValidateDefaultsToDate(t *testing.T) {
 		t.Fatalf("Validate() failed: %v", err)
 	}
 
-	// ToDate should be set to today
-	now := time.Now()
+	// ToDate should remain zero so future runs can resolve it dynamically.
 	got := time.Time(config.ToDate)
-	if got.Year() != now.Year() || got.Month() != now.Month() || got.Day() != now.Day() {
-		t.Errorf("ToDate not set to today: got %v, expected %s", got, now.Format(dateFormat))
+	if !got.IsZero() {
+		t.Errorf("ToDate should remain zero when omitted, got %v", got)
 	}
 }
 
@@ -176,8 +174,8 @@ func TestConfigWithEnvironmentVariables(t *testing.T) {
 		"ENABLEBANKING_ASPSP":        "Nordea",
 		"ENABLEBANKING_PEM_FILE":     "./test.pem",
 		"ENABLEBANKING_SESSION_FILE": "custom_session.json",
-		"ENABLEBANKING_FROM_DATE":     "2024-02-01",
-		"ENABLEBANKING_TO_DATE":       "2024-12-31",
+		"ENABLEBANKING_FROM_DATE":    "2024-02-01",
+		"ENABLEBANKING_TO_DATE":      "2024-12-31",
 		"ENABLEBANKING_INTERVAL":     "24h",
 	}
 
@@ -219,11 +217,11 @@ func TestConfigdateFormatsAccepted(t *testing.T) {
 
 	for _, dateStr := range validFormats {
 		config := Config{
-			AppID:       "test",
-			Country:     "NO",
-			ASPSP:       "DNB",
-			PEMFile:     "test.pem",
-			FromDate:    mustDate(t, dateStr),
+			AppID:    "test",
+			Country:  "NO",
+			ASPSP:    "DNB",
+			PEMFile:  "test.pem",
+			FromDate: mustDate(t, dateStr),
 		}
 
 		err := config.Validate(".")
@@ -235,12 +233,12 @@ func TestConfigdateFormatsAccepted(t *testing.T) {
 
 func TestConfigIntervalParsing(t *testing.T) {
 	config := Config{
-		AppID:       "test",
-		Country:     "NO",
-		ASPSP:       "DNB",
-		PEMFile:     "test.pem",
-		FromDate:    mustDate(t, "2024-01-01"),
-		Interval:    12 * time.Hour,
+		AppID:    "test",
+		Country:  "NO",
+		ASPSP:    "DNB",
+		PEMFile:  "test.pem",
+		FromDate: mustDate(t, "2024-01-01"),
+		Interval: 12 * time.Hour,
 	}
 
 	err := config.Validate(".")
@@ -255,11 +253,11 @@ func TestConfigIntervalParsing(t *testing.T) {
 
 func TestConfig_String(t *testing.T) {
 	config := Config{
-		AppID:       "test-app",
-		Country:     "NO",
-		ASPSP:       "DNB",
-		PEMFile:     "test.pem",
-		FromDate:    mustDate(t, "2024-01-01"),
+		AppID:    "test-app",
+		Country:  "NO",
+		ASPSP:    "DNB",
+		PEMFile:  "test.pem",
+		FromDate: mustDate(t, "2024-01-01"),
 	}
 
 	// Create a simple string representation (not required but good practice)
@@ -344,11 +342,11 @@ func TestSanitizeSessionPart(t *testing.T) {
 // overridden regardless of dataDir.
 func TestConfigValidateSessionFilePath(t *testing.T) {
 	base := Config{
-		AppID:       "test-app",
-		Country:     "NO",
-		ASPSP:       "DNB",
-		PEMFile:     "test.pem",
-		FromDate:    mustDate(t, "2024-01-01"),
+		AppID:    "test-app",
+		Country:  "NO",
+		ASPSP:    "DNB",
+		PEMFile:  "test.pem",
+		FromDate: mustDate(t, "2024-01-01"),
 	}
 
 	tests := []struct {
