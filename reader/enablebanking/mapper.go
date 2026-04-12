@@ -204,10 +204,28 @@ func stringFromInterface(value interface{}) string {
 func (r Reader) extractPayee(tx EBTransaction) string {
 	// Try remittance information first
 	if len(tx.RemittanceInformation) > 0 {
+		var firstInfo string
+		var firstTrimmed string
 		for _, info := range tx.RemittanceInformation {
-			if info != "" {
+			trimmed := strings.TrimSpace(info)
+			if trimmed == "" {
+				continue
+			}
+			if firstTrimmed == "" {
+				firstInfo = info
+				firstTrimmed = trimmed
+				continue
+			}
+			if isDigitsOnly(firstTrimmed) {
+				if isDigitsOnly(trimmed) {
+					continue
+				}
 				return info
 			}
+			return firstInfo
+		}
+		if firstTrimmed != "" {
+			return firstInfo
 		}
 	}
 
@@ -227,6 +245,18 @@ func (r Reader) extractPayee(tx EBTransaction) string {
 
 	// Fallback to transaction ID
 	return tx.TransactionID
+}
+
+func isDigitsOnly(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // extractMemo extracts memo/description from a transaction.
