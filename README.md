@@ -55,7 +55,7 @@ EOT
 Run Ynabber locally:
 
 ```sh
-env $(ynabber.env | xargs) ynabber
+env $(cat ynabber.env | xargs) ynabber
 ```
 
 Or using Docker:
@@ -90,7 +90,7 @@ EOT
 sudo systemctl enable --now ynabber
 ```
 
-See [CONFIGURATION.md](./CONFIGURATION.md) for all available settings.
+See [Configuration](./CONFIGURATION.md) for all available settings.
 
 ## Readers
 
@@ -98,8 +98,8 @@ Readers fetches transactions from your bank(s) and pushes them to writers.
 
 | Reader | Description |
 |:-------|:------------|
-| [Nordigen](/reader/nordigen/) | Now known as [GoCardless](https://developer.gocardless.com/bank-account-data/overview/), this is for their "Bank Account Data" product |
-| [EnableBanking](/reader/enablebanking/)| Supports lots of financial institutions [across Europe](https://enablebanking.com/docs/markets/) |
+| [Nordigen](./reader/nordigen/) | Now known as [GoCardless](https://developer.gocardless.com/bank-account-data/overview/), this is for their "Bank Account Data" product |
+| [EnableBanking](./reader/enablebanking/) | Supports lots of financial institutions [across Europe](https://enablebanking.com/docs/markets/) |
 
 ## Writers
 
@@ -107,13 +107,13 @@ Writers are destinations for fetched transactions.
 
 | Writer  | Description |
 |:--------|:------------|
-| [YNAB](/writer/ynab/) | Pushes transactions to a YNAB budget |
-| [JSON](/writer/json/) | Writes transactions as JSON to stdout (useful for testing) |
+| [YNAB](./writer/ynab/) | Pushes transactions to a YNAB budget |
+| [JSON](./writer/json/) | Writes transactions as JSON to stdout (useful for testing) |
 
 ## Contributing
 
 Pull requests welcome. Found a bug or have ideas? [Open an
-issue]((https://github.com/martinohansen/ynabber/issues/new)). Help make Ynabber
+issue](https://github.com/martinohansen/ynabber/issues/new). Help make Ynabber
 better for everyone.
 
 _[bitcoin:bc1qct2au09va7rk5psevmesalkaxtjmdjun9x2r3a](bitcoin:bc1qct2au09va7rk5psevmesalkaxtjmdjun9x2r3a)_
