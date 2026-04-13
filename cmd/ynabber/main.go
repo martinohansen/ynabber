@@ -12,6 +12,7 @@ import (
 	"github.com/martinohansen/ynabber/reader/enablebanking"
 	"github.com/martinohansen/ynabber/reader/generator"
 	"github.com/martinohansen/ynabber/reader/nordigen"
+	"github.com/martinohansen/ynabber/writer/actual"
 	"github.com/martinohansen/ynabber/writer/json"
 	"github.com/martinohansen/ynabber/writer/ynab"
 )
@@ -78,6 +79,12 @@ func main() {
 	}
 	for _, writer := range cfg.Writers {
 		switch writer {
+		case "actual":
+			actualWriter, err := actual.NewWriter()
+			if err != nil {
+				log.Fatal(logger, "creating actual writer", "error", err)
+			}
+			y.Writers = append(y.Writers, actualWriter)
 		case "ynab":
 			ynabWriter, err := ynab.NewWriter()
 			if err != nil {
