@@ -187,7 +187,11 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 	// Fetch transactions for each account
 	var results []ynabber.Transaction
 	fromDate := time.Time(r.Config.FromDate).Format(dateFormat)
-	toDate := time.Time(r.Config.ToDate).Format(dateFormat)
+	toDateTime, err := r.Config.GetToDate()
+	if err != nil {
+		return nil, fmt.Errorf("getting to date: %w", err)
+	}
+	toDate := toDateTime.Format(dateFormat)
 
 	for i, account := range session.Accounts {
 		accountLogger := r.logger.With("account", account.UID, "stable_id_hint", maskIdentifier(account.StableID()))

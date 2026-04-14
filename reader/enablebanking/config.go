@@ -47,7 +47,8 @@ type Config struct {
 	// FromDate is the start date for transaction retrieval (YYYY-MM-DD format).
 	FromDate Date `envconfig:"ENABLEBANKING_FROM_DATE" required:"true"`
 
-	// ToDate is the end date for transaction retrieval (defaults to today).
+	// ToDate is the end date for transaction retrieval.
+	// When omitted, it resolves dynamically to the current UTC date on each run.
 	ToDate Date `envconfig:"ENABLEBANKING_TO_DATE"`
 
 	// Interval is the time between fetches (0 means run once and exit)
@@ -61,11 +62,6 @@ type Config struct {
 // Validate checks config semantics and sets defaults for optional fields.
 // dataDir is the base directory for the session file (from YNABBER_DATADIR).
 func (c *Config) Validate(dataDir string) error {
-	// Default ToDate to today if not provided.
-	if time.Time(c.ToDate).IsZero() {
-		c.ToDate = Date(time.Now().UTC())
-	}
-
 	// Set default session file if not provided
 	if c.SessionFile == "" {
 		c.SessionFile = filepath.Join(dataDir, defaultSessionFile(c.ASPSP, c.Country))
@@ -79,8 +75,14 @@ func (c Config) GetFromDate() (time.Time, error) {
 	return time.Time(c.FromDate), nil
 }
 
-// GetToDate returns ToDate as a time.Time. It is always valid after Validate.
+// GetToDate returns ToDate as a time.Time.
+// When ToDate is omitted, it resolves to the current UTC time so repeated runs
+// continue to advance the effective date window.
 func (c Config) GetToDate() (time.Time, error) {
+	if time.Time(c.ToDate).IsZero() {
+		return time.Now().UTC(), nil
+	}
+
 	return time.Time(c.ToDate), nil
 }
 
