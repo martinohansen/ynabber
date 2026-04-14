@@ -41,13 +41,11 @@ retrieve account information and transaction data.
 1. In the EnableBanking dashboard, find the **"Link Accounts"** or **"Connect Bank"** section
 2. Select your country (e.g., NO for Norway, SE for Sweden)
 3. Choose your bank (ASPSP):
-   - Tested with **DNB** (Danske Bank Group)
+   - Tested with **DNB** (Norway)
    - Other banks available for your region
 4. Follow the bank's authentication flow (online banking login)
 5. Grant access to your account(s)
 6. The system will confirm the connected accounts
-
-Alternatively, if you prefer to link accounts dynamically during Ynabber setup, the reader will show you a link to authorize during the initial run.
 
 ## Authentication
 
