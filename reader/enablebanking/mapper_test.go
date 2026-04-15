@@ -191,14 +191,74 @@ func TestExtractPayeeRemittance(t *testing.T) {
 		logger: slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	}
 
-	tx := EBTransaction{
-		RemittanceInformation: []string{"My Payee", "Additional info"},
-		TransactionID:         "tx-123",
+	tests := []struct {
+		name  string
+		input EBTransaction
+		want  string
+	}{
+		{
+			name: "numeric first remittance uses second descriptive entry as payee",
+			input: EBTransaction{
+				RemittanceInformation: []string{
+					"10001087010048505904",
+					"Giro, Føie As, Avtalegiro, Hallingdal Kraftnett As",
+				},
+				TransactionID: "tx-123",
+			},
+			want: "Giro, Føie As, Avtalegiro, Hallingdal Kraftnett As",
+		},
+		{
+			name: "whitespace trimmed numeric first entry is skipped",
+			input: EBTransaction{
+				RemittanceInformation: []string{
+					" \t882735244  ",
+					"Giro, Tibber Norge As, Avtalegiro",
+				},
+				TransactionID: "tx-124",
+			},
+			want: "Giro, Tibber Norge As, Avtalegiro",
+		},
+		{
+			name: "single descriptive remittance is unchanged",
+			input: EBTransaction{
+				RemittanceInformation: []string{"My Payee"},
+				TransactionID:         "tx-125",
+			},
+			want: "My Payee",
+		},
+		{
+			name: "descriptive first entry with later fields is unchanged",
+			input: EBTransaction{
+				RemittanceInformation: []string{"My Payee", "Additional info"},
+				TransactionID:         "tx-126",
+			},
+			want: "My Payee",
+		},
+		{
+			name: "alphanumeric first entry is not skipped",
+			input: EBTransaction{
+				RemittanceInformation: []string{"INV12345", "Giro, Example As"},
+				TransactionID:         "tx-127",
+			},
+			want: "INV12345",
+		},
+		{
+			name: "multiple leading numeric entries use first descriptive entry",
+			input: EBTransaction{
+				RemittanceInformation: []string{"12345", "67890", "Utility Company"},
+				TransactionID:         "tx-128",
+			},
+			want: "Utility Company",
+		},
 	}
 
-	payee := reader.extractPayee(tx)
-	if payee != "My Payee" {
-		t.Errorf("expected 'My Payee', got '%s'", payee)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payee := reader.extractPayee(tt.input)
+			if payee != tt.want {
+				t.Errorf("expected '%s', got '%s'", tt.want, payee)
+			}
+		})
 	}
 }
 
@@ -263,13 +323,38 @@ func TestExtractMemoMultipleRemittance(t *testing.T) {
 		logger: slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	}
 
-	tx := EBTransaction{
-		RemittanceInformation: []string{"Payee", "Memo Info", "Extra"},
+	tests := []struct {
+		name  string
+		input EBTransaction
+		want  string
+	}{
+		{
+			name: "multiple remittance joins trailing entries",
+			input: EBTransaction{
+				RemittanceInformation: []string{"Payee", "Memo Info", "Extra"},
+			},
+			want: "Memo Info Extra",
+		},
+		{
+			name: "memo behavior stays unchanged for numeric first multi remittance",
+			input: EBTransaction{
+				RemittanceInformation: []string{
+					"10001087010048505904",
+					"Giro, Føie As, Avtalegiro, Hallingdal Kraftnett As",
+					"KID 123",
+				},
+			},
+			want: "Giro, Føie As, Avtalegiro, Hallingdal Kraftnett As KID 123",
+		},
 	}
 
-	memo := reader.extractMemo(tx)
-	if memo != "Memo Info Extra" {
-		t.Errorf("expected 'Memo Info Extra', got '%s'", memo)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			memo := reader.extractMemo(tt.input)
+			if memo != tt.want {
+				t.Errorf("expected '%s', got '%s'", tt.want, memo)
+			}
+		})
 	}
 }
 
@@ -425,7 +510,7 @@ func TestPayeeStrip(t *testing.T) {
 			}
 
 			account := AccountInfo{
-				UID:  "acc-123",
+				UID:       "acc-123",
 				AccountID: AccountID{IBAN: randomTestIBAN(t)},
 			}
 
@@ -455,10 +540,10 @@ func TestPayeeStrip(t *testing.T) {
 // TestPayeeTruncation tests that payees exceeding 200 characters are truncated
 func TestPayeeTruncation(t *testing.T) {
 	tests := []struct {
-		name          string
-		remittance    []string
-		expectedLen   int
-		maxLen        int
+		name        string
+		remittance  []string
+		expectedLen int
+		maxLen      int
 	}{
 		{
 			name:        "under limit",
@@ -493,7 +578,7 @@ func TestPayeeTruncation(t *testing.T) {
 			}
 
 			account := AccountInfo{
-				UID:  "acc-123",
+				UID:       "acc-123",
 				AccountID: AccountID{IBAN: randomTestIBAN(t)},
 			}
 
@@ -534,7 +619,7 @@ func TestPayeeStripAndTruncate(t *testing.T) {
 	}
 
 	account := AccountInfo{
-		UID:  "acc-123",
+		UID:       "acc-123",
 		AccountID: AccountID{IBAN: randomTestIBAN(t)},
 	}
 
@@ -577,10 +662,10 @@ func TestPayeeStripAndTruncate(t *testing.T) {
 // "other status skipped" sub-tests are therefore expected to FAIL (Red state).
 func TestDefaultMapperStatusFilter(t *testing.T) {
 	tests := []struct {
-		name        string
-		status      string
-		wantNil     bool // true → expect (nil, nil)
-		wantErr     bool
+		name    string
+		status  string
+		wantNil bool // true → expect (nil, nil)
+		wantErr bool
 	}{
 		{
 			name:    "BOOK status mapped",
