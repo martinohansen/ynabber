@@ -27,9 +27,10 @@ EnableBanking reads bank transactions through the EnableBanking Open Banking API
 | ENABLEBANKING_PEM_FILE | `string` | - | PEMFile is the path to the private key file for JWT signing |
 | ENABLEBANKING_SESSION_FILE | `string` | - | SessionFile is the path where the session is stored for reuse |
 | ENABLEBANKING_FROM_DATE | `Date` | - | FromDate is the start date for transaction retrieval (YYYY-MM-DD format). |
-| ENABLEBANKING_TO_DATE | `Date` | - | ToDate is the end date for transaction retrieval (defaults to today). |
+| ENABLEBANKING_TO_DATE | `Date` | - | ToDate is the end date for transaction retrieval.<br>When omitted, it resolves dynamically to the current UTC date on each run. |
 | ENABLEBANKING_INTERVAL | `time.Duration` | - | Interval is the time between fetches (0 means run once and exit) |
 | ENABLEBANKING_PAYEE_STRIP | `[]string` | - | PayeeStrip contains words to remove from payee names.<br>Example: "foo,bar" removes "foo" and "bar" from all payee names. |
+| ENABLEBANKING_PAYEE_STRIP_REGEX | `PayeeRegex` | - | PayeeStripRegex is a comma-separated list of regular expressions whose<br>matches are removed from payee names. Use it to strip dynamic prefixes<br>or codes that PayeeStrip can't express. Patterns cannot contain a<br>literal comma.<br>Example: "^Dk-Nota\S+\s+" turns "Dk-Nota61221 Remouladen" into<br>"Remouladen". |
 
 ## Nordigen
 
@@ -42,6 +43,7 @@ Nordigen reads bank transactions through the Nordigen/GoCardless API. It connect
 | NORDIGEN_SECRET_KEY | `string` | - | SecretKey is the client secret for API authentication |
 | NORDIGEN_PAYEE_SOURCE | `PayeeGroups` | `remittance,name,additional` | PayeeSource defines the sources and order for extracting payee<br>information. Multiple sources can be combined with "+" to merge their<br>values. Groups are separated by "," and tried in order until a non-empty<br>result is found.<br><br>Available sources:<br>* remittance: uses the remittanceInformation fields<br>* name: uses either the debtorName or creditorName field<br>* additional: uses the additionalInformation field<br><br>Example: "name+additional,remittance" will first try to combine name and<br>additional fields, falling back to remittance if both are empty. |
 | NORDIGEN_PAYEE_STRIP | `[]string` | - | PayeeStrip contains words to remove from payee names.<br>Example: "foo,bar" removes "foo" and "bar" from all payee names. |
+| NORDIGEN_PAYEE_STRIP_REGEX | `PayeeRegex` | - | PayeeStripRegex is a comma-separated list of regular expressions whose<br>matches are removed from payee names. Use it to strip dynamic prefixes<br>or codes that PayeeStrip can't express. Patterns cannot contain a<br>literal comma.<br>Example: "^Dk-Nota\S+\s+" turns "Dk-Nota61221 Remouladen" into<br>"Remouladen". |
 | NORDIGEN_TRANSACTION_ID | `string` | `TransactionId` | TransactionID specifies which field to use as the unique transaction<br>identifier. Banks may use different fields, and some change the ID format<br>over time.<br><br>Valid options: TransactionId, InternalTransactionId,<br>ProprietaryBankTransactionCode |
 | NORDIGEN_REQUISITION_HOOK | `string` | - | RequisitionHook is an executable that runs at various stages of the<br>requisition process. It receives arguments: &lt;status&gt; &lt;link&gt;<br>Non-zero exit codes will stop the process. |
 | NORDIGEN_REQUISITION_FILE | `string` | - | RequisitionFile specifies the filename for storing requisition data.<br>The file is stored in the directory defined by YNABBER_DATADIR. |

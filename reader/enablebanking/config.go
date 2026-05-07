@@ -57,6 +57,14 @@ type Config struct {
 	// PayeeStrip contains words to remove from payee names.
 	// Example: "foo,bar" removes "foo" and "bar" from all payee names.
 	PayeeStrip []string `envconfig:"ENABLEBANKING_PAYEE_STRIP"`
+
+	// PayeeStripRegex is a comma-separated list of regular expressions whose
+	// matches are removed from payee names. Use it to strip dynamic prefixes
+	// or codes that PayeeStrip can't express. Patterns cannot contain a
+	// literal comma.
+	// Example: "^Dk-Nota\S+\s+" turns "Dk-Nota61221 Remouladen" into
+	// "Remouladen".
+	PayeeStripRegex PayeeRegex `envconfig:"ENABLEBANKING_PAYEE_STRIP_REGEX"`
 }
 
 // Validate checks config semantics and sets defaults for optional fields.
