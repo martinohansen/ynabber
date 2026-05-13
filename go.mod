@@ -1,6 +1,6 @@
 module github.com/martinohansen/ynabber
 
-go 1.26.2
+go 1.26.3
 
 require (
 	github.com/carlmjohnson/versioninfo v0.22.5
