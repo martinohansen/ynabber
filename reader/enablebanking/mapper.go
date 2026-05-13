@@ -61,6 +61,9 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 	if r.Config.PayeeStrip != nil {
 		payee = strip(payee, r.Config.PayeeStrip)
 	}
+	if len(r.Config.PayeeStripRegex) > 0 {
+		payee = stripRegex(payee, r.Config.PayeeStripRegex)
+	}
 
 	// Truncate payee to 200 characters (YNAB API maximum length) If payee
 	// exceeds this limit, the API ignores the field and it displays as blank in

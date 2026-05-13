@@ -64,6 +64,9 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 	if r.Config.PayeeStrip != nil {
 		payee.value = strip(payee.value, r.Config.PayeeStrip)
 	}
+	if len(r.Config.PayeeStripRegex) > 0 {
+		payee.value = stripRegex(payee.value, r.Config.PayeeStripRegex)
+	}
 
 	// Set the transaction ID according to config
 	var id string
