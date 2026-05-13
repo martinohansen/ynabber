@@ -100,6 +100,14 @@ type Config struct {
 	// Example: "foo,bar" removes "foo" and "bar" from all payee names.
 	PayeeStrip []string `envconfig:"NORDIGEN_PAYEE_STRIP"`
 
+	// PayeeStripRegex is a comma-separated list of regular expressions whose
+	// matches are removed from payee names. Use it to strip dynamic prefixes
+	// or codes that PayeeStrip can't express. Patterns cannot contain a
+	// literal comma.
+	// Example: "^Dk-Nota\S+\s+" turns "Dk-Nota61221 Remouladen" into
+	// "Remouladen".
+	PayeeStripRegex PayeeRegex `envconfig:"NORDIGEN_PAYEE_STRIP_REGEX"`
+
 	// TransactionID specifies which field to use as the unique transaction
 	// identifier. Banks may use different fields, and some change the ID format
 	// over time.
@@ -130,6 +138,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("secret_key", "******"),
 		slog.String("payee_source", c.PayeeSource.String()),
 		slog.String("payee_strip", strings.Join(c.PayeeStrip, ",")),
+		slog.String("payee_strip_regex", c.PayeeStripRegex.String()),
 		slog.String("transaction_id", c.TransactionID),
 		slog.String("requisition_hook", c.RequisitionHook),
 		slog.String("requisition_file", c.RequisitionFile),
