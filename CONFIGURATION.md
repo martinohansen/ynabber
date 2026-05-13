@@ -61,3 +61,20 @@ YNAB writes transactions You Need a Budget (YNAB) using their API. It handles tr
 | YNAB_CLEARED | `TransactionStatus` | `cleared` | Cleared sets the transaction status. Possible values: cleared, uncleared,<br>reconciled. |
 | YNAB_SWAPFLOW | `[]string` | - | SwapFlow reverses inflow to outflow and vice versa for any account<br>identified by IBAN or ID. Example: "DK9520000123456789,NO8330001234567" |
 
+## Actual
+
+Package actual provides a writer implementation that sends transactions to an Actual Budget HTTP API instance.
+
+| Environment variable | Type | Default | Description |
+|:---------------------|:-----|:--------|:------------|
+| ACTUAL_BASE_URL | `string` | - | BaseURL points to the running actual-http-api service, e.g. https://actual.example.com |
+| ACTUAL_API_KEY | `string` | - | APIKey is an optional shared secret that will be sent via the x-api-key header. |
+| ACTUAL_BUDGET_ID | `string` | - | BudgetID is the Actual Sync ID for the budget to update. |
+| ACTUAL_ACCOUNTMAP | `AccountMap` | - | AccountMap maps reader accounts to Actual accounts. See reader for more<br>details. For example: '{"&lt;IBAN or Account ID&gt;": "&lt;Actual Account ID&gt;"}' |
+| ACTUAL_ENCRYPTION_PASSWORD | `string` | - | EncryptionPassword optionally unlocks end-to-end encrypted budgets. |
+| ACTUAL_FROM_DATE | `Date` | - | FromDate only imports transactions from this date onward. For<br>example: 2006-01-02 |
+| ACTUAL_DELAY | `time.Duration` | `0` | Delay sending transactions to Actual by this duration. This can be<br>necessary if the bank changes transaction IDs after some time, or<br>enriches remittance information after booking (which can cause duplicate<br>imports). Default is 0 (no delay). |
+| ACTUAL_CLEARED | `bool` | `false` | Cleared sets the transaction cleared flag for newly created transactions.<br>Default is false. |
+| ACTUAL_REIMPORT_DELETED | `bool` | `false` | ReimportDeleted controls whether Actual should reimport transactions that<br>were previously imported and then deleted. Default is false. |
+| ACTUAL_DRY_RUN | `bool` | `false` | DryRun simulates the import without persisting any data. Useful for<br>verifying mappings and deduplication before writing. Default is false. |
+
