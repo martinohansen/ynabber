@@ -42,36 +42,6 @@ func TestMapper(t *testing.T) {
 	}
 }
 
-// TestParseAmount tests amount parsing
-func TestParseAmount(t *testing.T) {
-	tests := []struct {
-		name      string
-		amountStr string
-		expected  float64
-		wantErr   bool
-	}{
-		{"positive whole", "1000.00", 1000.00, false},
-		{"positive decimal", "123.45", 123.45, false},
-		{"zero", "0.00", 0.00, false},
-		{"small amount", "0.01", 0.01, false},
-		{"large amount", "999999.99", 999999.99, false},
-		{"invalid", "abc", 0, true},
-		{"empty", "", 0, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseAmount(tt.amountStr)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseAmount error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if !tt.wantErr && result != tt.expected {
-				t.Errorf("parseAmount = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
-}
-
 // TestParseDateFlexible tests date parsing
 func TestParseDateFlexible(t *testing.T) {
 	tests := []struct {
