@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -42,15 +41,13 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 		return nil, fmt.Errorf("parsing booking date: %w", err)
 	}
 
-	// Parse amount
-	amount, err := parseAmount(tx.TransactionAmount.Amount)
+	amount, err := ynabber.MilliunitsFromString(tx.TransactionAmount.Amount)
 	if err != nil {
 		return nil, fmt.Errorf("parsing amount: %w", err)
 	}
 
-	// Adjust sign based on credit/debit indicator
 	if tx.CreditDebitIndicator == "DBIT" {
-		amount = -amount
+		amount = amount.Negate()
 	}
 
 	// Extract payee and memo
@@ -82,7 +79,7 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 		Date:   date,
 		Payee:  payee,
 		Memo:   memo,
-		Amount: ynabber.MilliunitsFromAmount(amount),
+		Amount: amount,
 	}, nil
 }
 
@@ -155,15 +152,6 @@ func resolveBookingDate(tx EBTransaction) (string, error) {
 		return value, nil
 	}
 	return "", fmt.Errorf("missing booking date")
-}
-
-// parseAmount parses a string amount to float64
-func parseAmount(amountStr string) (float64, error) {
-	amount, err := strconv.ParseFloat(amountStr, 64)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse amount: %w", err)
-	}
-	return amount, nil
 }
 
 // parseDate parses a YYYY-MM-DD formatted date string
