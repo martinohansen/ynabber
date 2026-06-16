@@ -2,7 +2,6 @@ package nordigen
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,14 +29,6 @@ func (r Reader) Mapper(a ynabber.Account, t nordigen.Transaction) (*ynabber.Tran
 	}
 }
 
-func parseAmount(t nordigen.Transaction) (float64, error) {
-	amount, err := strconv.ParseFloat(t.TransactionAmount.Amount, 64)
-	if err != nil {
-		return 0, fmt.Errorf("failed to convert string to float: %w", err)
-	}
-	return amount, nil
-}
-
 func parseDate(t nordigen.Transaction) (time.Time, error) {
 	date, err := time.Parse(dateFormat, t.BookingDate)
 	if err != nil {
@@ -51,7 +42,7 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 	payee := newPayee(t, r.Config.PayeeSource)
 	TransactionID := r.Config.TransactionID // TODO(Martin): Parse into enum at startup
 
-	amount, err := parseAmount(t)
+	amount, err := ynabber.MilliunitsFromString(t.TransactionAmount.Amount)
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +84,6 @@ func (r Reader) defaultMapper(a ynabber.Account, t nordigen.Transaction) (*ynabb
 		Date:    date,
 		Payee:   payee.value,
 		Memo:    memo,
-		Amount:  ynabber.MilliunitsFromAmount(amount),
+		Amount:  amount,
 	}, nil
 }
