@@ -20,9 +20,16 @@ import (
 // ErrRateLimit is returned when the API responds with HTTP 429 Too Many Requests.
 var ErrRateLimit = errors.New("rate limited")
 
-// ErrUnauthorized is returned when the API responds with HTTP 401 Unauthorized,
-// indicating the session has been revoked or has expired server-side.
+// ErrUnauthorized is returned when the API reports EXPIRED_SESSION. Enable
+// Banking uses HTTP 401 for other errors too, so the response code alone must
+// not trigger reauthorization.
 var ErrUnauthorized = errors.New("session rejected by API")
+
+const expiredSessionErrorCode = "EXPIRED_SESSION"
+
+type apiErrorResponse struct {
+	Error string `json:"error"`
+}
 
 const (
 	// maxResponseBodyBytes caps how much of an EnableBanking response body we
@@ -136,7 +143,10 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 		return nil, fmt.Errorf("%w: %s", ErrRateLimit, string(respBody))
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("%w: %s", ErrUnauthorized, string(respBody))
+		var apiErr apiErrorResponse
+		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error == expiredSessionErrorCode {
+			return nil, fmt.Errorf("%w: %s", ErrUnauthorized, string(respBody))
+		}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))

@@ -18,21 +18,30 @@ func TestFetchSessionTransactionsPropagatesAccountErrors(t *testing.T) {
 	tests := []struct {
 		name       string
 		statusCode int
+		body       string
 		wantIs     error
 	}{
 		{
-			name:       "unauthorized session",
+			name:       "expired session",
 			statusCode: http.StatusUnauthorized,
+			body:       `{"message":"Session expired","code":401,"error":"EXPIRED_SESSION"}`,
 			wantIs:     ErrUnauthorized,
+		},
+		{
+			name:       "other unauthorized error",
+			statusCode: http.StatusUnauthorized,
+			body:       `{"message":"Unauthorized access","code":401,"error":"UNAUTHORIZED_ACCESS"}`,
 		},
 		{
 			name:       "rate limit",
 			statusCode: http.StatusTooManyRequests,
+			body:       `{"error":"rate limited"}`,
 			wantIs:     ErrRateLimit,
 		},
 		{
 			name:       "transient server failure",
 			statusCode: http.StatusServiceUnavailable,
+			body:       `{"error":"temporarily unavailable"}`,
 		},
 	}
 
@@ -40,7 +49,7 @@ func TestFetchSessionTransactionsPropagatesAccountErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.statusCode)
-				_, _ = fmt.Fprintf(w, `{"error":"status %d"}`, tt.statusCode)
+				_, _ = fmt.Fprint(w, tt.body)
 			}))
 			defer server.Close()
 
@@ -66,10 +75,47 @@ func TestFetchSessionTransactionsPropagatesAccountErrors(t *testing.T) {
 			if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
 				t.Errorf("fetchSessionTransactions() error = %v, want errors.Is(error, %v)", err, tt.wantIs)
 			}
+			if tt.wantIs == nil && errors.Is(err, ErrUnauthorized) {
+				t.Errorf("fetchSessionTransactions() error = %v, must not classify this response as expired", err)
+			}
 			if !strings.Contains(err.Error(), `account "NO98...8901"`) {
 				t.Errorf("Bulk() error = %q, want masked account context", err)
 			}
 		})
+	}
+}
+
+func TestBulkPreservesSessionForOtherUnauthorizedErrors(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprint(w, `{"message":"Unauthorized IP","code":401,"error":"UNAUTHORIZED_IP"}`)
+	}))
+	defer server.Close()
+
+	reader := newBulkTestReader(t, server, []AccountInfo{
+		{
+			UID:       "account-1",
+			AccountID: AccountID{IBAN: "NO9812345678901"},
+		},
+	})
+
+	transactions, err := reader.Bulk(context.Background())
+	if err == nil {
+		t.Fatal("Bulk() error = nil, want unauthorized IP error")
+	}
+	if transactions != nil {
+		t.Fatalf("Bulk() transactions = %#v, want nil", transactions)
+	}
+	if errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("Bulk() error = %v, must not classify UNAUTHORIZED_IP as expired", err)
+	}
+	if requests != 1 {
+		t.Fatalf("request count = %d, want 1 without reauthorization", requests)
+	}
+	if _, statErr := os.Stat(reader.Auth.Config.SessionFile); statErr != nil {
+		t.Fatalf("stored session was removed after unrelated 401: %v", statErr)
 	}
 }
 

@@ -371,7 +371,8 @@ func TestBulkReauthorizesServerRejectedSession(t *testing.T) {
 		switch {
 		case strings.Contains(r.URL.Path, "/accounts/"+rejectedAccountUID+"/transactions"):
 			rejectedTransactionRequests++
-			http.Error(w, "expired consent", http.StatusUnauthorized)
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"Session expired","code":401,"error":"EXPIRED_SESSION"}`))
 		case strings.Contains(r.URL.Path, "/accounts/"+replacementAccountUID+"/transactions"):
 			replacementTransactionRequests++
 			w.Header().Set("Content-Type", "application/json")
@@ -530,7 +531,8 @@ func TestBulkStopsAfterReplacementSessionIsRejected(t *testing.T) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/transactions"):
 			transactionRequests++
-			http.Error(w, "expired consent", http.StatusUnauthorized)
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"Session expired","code":401,"error":"EXPIRED_SESSION"}`))
 		case r.URL.Path == "/aspsps":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"aspsps":[]}`))

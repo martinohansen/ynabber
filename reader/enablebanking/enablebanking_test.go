@@ -758,28 +758,45 @@ func TestYnabberTransaction(t *testing.T) {
 // ErrRateLimit so callers can use errors.Is for retry decisions.
 func TestClientGetAccountTransactionsRateLimit(t *testing.T) {
 	tests := []struct {
-		name       string
-		statusCode int
-		wantErr    bool
-		wantIsRL   bool // errors.Is(err, ErrRateLimit)
+		name               string
+		statusCode         int
+		body               string
+		wantErr            bool
+		wantIsRL           bool // errors.Is(err, ErrRateLimit)
+		wantIsUnauthorized bool // errors.Is(err, ErrUnauthorized)
 	}{
 		{
 			name:       "HTTP 429 returns ErrRateLimit",
 			statusCode: http.StatusTooManyRequests,
+			body:       `{"error":"ASPSP_RATE_LIMIT_EXCEEDED"}`,
 			wantErr:    true,
 			wantIsRL:   true,
 		},
 		{
 			name:       "HTTP 500 does not return ErrRateLimit",
 			statusCode: http.StatusInternalServerError,
+			body:       `{"error":"ASPSP_ERROR"}`,
 			wantErr:    true,
 			wantIsRL:   false,
 		},
 		{
-			name:       "HTTP 401 returns ErrUnauthorized (not ErrRateLimit)",
+			name:               "expired-session 401 returns ErrUnauthorized",
+			statusCode:         http.StatusUnauthorized,
+			body:               `{"message":"Session expired","code":401,"error":"EXPIRED_SESSION"}`,
+			wantErr:            true,
+			wantIsUnauthorized: true,
+		},
+		{
+			name:       "other structured 401 does not return ErrUnauthorized",
 			statusCode: http.StatusUnauthorized,
+			body:       `{"message":"Unauthorized access","code":401,"error":"UNAUTHORIZED_ACCESS"}`,
 			wantErr:    true,
-			wantIsRL:   false,
+		},
+		{
+			name:       "unparseable 401 does not return ErrUnauthorized",
+			statusCode: http.StatusUnauthorized,
+			body:       "unauthorized",
+			wantErr:    true,
 		},
 	}
 
@@ -787,7 +804,7 @@ func TestClientGetAccountTransactionsRateLimit(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tt.statusCode)
-				fmt.Fprintf(w, `{"error":"status %d"}`, tt.statusCode)
+				_, _ = fmt.Fprint(w, tt.body)
 			}))
 			defer server.Close()
 
@@ -807,8 +824,9 @@ func TestClientGetAccountTransactionsRateLimit(t *testing.T) {
 			if !tt.wantIsRL && err != nil && errors.Is(err, ErrRateLimit) {
 				t.Errorf("expected errors.Is(err, ErrRateLimit) = false, got true")
 			}
-			if tt.statusCode == http.StatusUnauthorized && !errors.Is(err, ErrUnauthorized) {
-				t.Errorf("HTTP 401: expected errors.Is(err, ErrUnauthorized) = true; err = %v", err)
+			if errors.Is(err, ErrUnauthorized) != tt.wantIsUnauthorized {
+				t.Errorf("errors.Is(err, ErrUnauthorized) = %v, want %v; err = %v",
+					errors.Is(err, ErrUnauthorized), tt.wantIsUnauthorized, err)
 			}
 		})
 	}
