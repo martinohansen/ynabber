@@ -66,14 +66,14 @@ type Config struct {
 	// "Remouladen".
 	PayeeStripRegex PayeeRegex `envconfig:"ENABLEBANKING_PAYEE_STRIP_REGEX"`
 
-        // PSUIPAddress is an optional end-user IP address sent to EnableBanking.
+	// PSUIPAddress is an optional end-user IP address sent to EnableBanking.
 	// Required by certain banks (e.g., Bulder / Sparebanken Vest) to prevent
 	// failures after the first authorization (400 ASPSP_ERROR). Set to "auto" to dynamically
 	// resolve your public WAN IP, enter a static IPv4 address, or leave empty to disable.
 	PSUIPAddress string `envconfig:"ENABLEBANKING_PSU_IP_ADDRESS"`
 
-        // PSUUserAgent is an optional User-Agent header sent to EnableBanking
-        // Required by certain banks (e.g., Bulder / Sparebanken Vest) to prevent
+	// PSUUserAgent is an optional User-Agent header sent to EnableBanking
+	// Required by certain banks (e.g., Bulder / Sparebanken Vest) to prevent
 	// failures after the first authorization (400 ASPSP_ERROR).
 	// Set to "auto" to use the default Mozilla/5.0 (compatible; Ynabber/1.0), enter a custom string,
 	// or leave empty to disable.
