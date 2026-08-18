@@ -308,7 +308,6 @@ func resolvePSUIP(setting string) (string, error) {
 
 // resolvePSUConfig normalizes the PSU IP and User-Agent values on the config struct.
 func resolvePSUConfig(cfg *Config, logger *slog.Logger) error {
-	// 1. Resolve IP Address
 	ip, err := resolvePSUIP(cfg.PSUIPAddress)
 	if err != nil {
 		return err
@@ -318,7 +317,6 @@ func resolvePSUConfig(cfg *Config, logger *slog.Logger) error {
 	}
 	cfg.PSUIPAddress = ip
 
-	// 2. Resolve User-Agent
 	switch strings.ToLower(cfg.PSUUserAgent) {
 	case "auto", "true", "1":
 		cfg.PSUUserAgent = "Mozilla/5.0 (compatible; Ynabber/1.0)"

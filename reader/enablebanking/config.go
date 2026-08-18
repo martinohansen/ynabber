@@ -73,8 +73,6 @@ type Config struct {
 	PSUIPAddress string `envconfig:"ENABLEBANKING_PSU_IP_ADDRESS"`
 
 	// PSUUserAgent is an optional User-Agent header sent to EnableBanking
-	// Required by certain banks (e.g., Bulder / Sparebanken Vest) to prevent
-	// failures after the first authorization (400 ASPSP_ERROR).
 	// Set to "auto" to use the default Mozilla/5.0 (compatible; Ynabber/1.0), enter a custom string,
 	// or leave empty to disable.
 	PSUUserAgent string `envconfig:"ENABLEBANKING_PSU_USER_AGENT"`
