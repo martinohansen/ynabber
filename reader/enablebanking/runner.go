@@ -3,7 +3,6 @@ package enablebanking
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/martinohansen/ynabber"
@@ -40,7 +39,8 @@ func nextDailyRetryTime(now time.Time) time.Time {
 // error to signal "stop the runner".
 //
 //   - nil input         → return nil (nothing to handle)
-//   - ErrSessionExpired → always fatal; re-authentication is required
+//   - ErrSessionExpired → always fatal; automatic reauthorization failed
+//   - ErrUnauthorized   → always fatal; Bulk normally handles this internally
 //   - Interval == 0     → one-shot mode; never retry, surface error to caller
 //   - ErrRateLimit      → wait until 06:30 local time tomorrow (daily quota reset)
 //   - other transient   → wait retryBaseDelay then return nil
@@ -57,10 +57,11 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 		return err
 	}
 
-	// A 401 from the API means the session was revoked or expired server-side.
-	// Wrap it as ErrSessionExpired so the operator knows to re-authorize.
+	// Bulk handles API rejection by replacing the session once. Treat any raw
+	// unauthorized error that reaches the runner as fatal rather than retrying
+	// it as a transient failure.
 	if errors.Is(err, ErrUnauthorized) {
-		return fmt.Errorf("%w: %w", ErrSessionExpired, err)
+		return err
 	}
 
 	// One-shot mode: surface error immediately, never block.
@@ -129,7 +130,6 @@ func (r Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) er
 				continue
 			}
 		}
-
 		select {
 		case out <- batch:
 		case <-ctx.Done():

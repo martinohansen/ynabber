@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func TestBulkPropagatesAccountFetchErrors(t *testing.T) {
+func TestFetchSessionTransactionsPropagatesAccountErrors(t *testing.T) {
 	tests := []struct {
 		name       string
 		statusCode int
@@ -51,15 +51,20 @@ func TestBulkPropagatesAccountFetchErrors(t *testing.T) {
 				},
 			})
 
-			transactions, err := reader.Bulk(context.Background())
+			ctx := context.Background()
+			session, err := reader.Auth.Session(ctx)
+			if err != nil {
+				t.Fatalf("Session() error = %v", err)
+			}
+			transactions, err := reader.fetchSessionTransactions(ctx, session)
 			if err == nil {
-				t.Fatalf("Bulk() error = nil, want HTTP %d error", tt.statusCode)
+				t.Fatalf("fetchSessionTransactions() error = nil, want HTTP %d error", tt.statusCode)
 			}
 			if transactions != nil {
-				t.Fatalf("Bulk() transactions = %#v, want nil after fetch failure", transactions)
+				t.Fatalf("fetchSessionTransactions() transactions = %#v, want nil after fetch failure", transactions)
 			}
 			if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
-				t.Errorf("Bulk() error = %v, want errors.Is(error, %v)", err, tt.wantIs)
+				t.Errorf("fetchSessionTransactions() error = %v, want errors.Is(error, %v)", err, tt.wantIs)
 			}
 			if !strings.Contains(err.Error(), `account "NO98...8901"`) {
 				t.Errorf("Bulk() error = %q, want masked account context", err)
@@ -68,7 +73,7 @@ func TestBulkPropagatesAccountFetchErrors(t *testing.T) {
 	}
 }
 
-func TestBulkDiscardsPartialResultsAfterAccountFetchError(t *testing.T) {
+func TestFetchSessionTransactionsDiscardsPartialResults(t *testing.T) {
 	requests := make([]string, 0, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.URL.Path)
@@ -106,12 +111,17 @@ func TestBulkDiscardsPartialResultsAfterAccountFetchError(t *testing.T) {
 		},
 	})
 
-	transactions, err := reader.Bulk(context.Background())
+	ctx := context.Background()
+	session, err := reader.Auth.Session(ctx)
+	if err != nil {
+		t.Fatalf("Session() error = %v", err)
+	}
+	transactions, err := reader.fetchSessionTransactions(ctx, session)
 	if err == nil {
-		t.Fatal("Bulk() error = nil, want second account fetch error")
+		t.Fatal("fetchSessionTransactions() error = nil, want second account fetch error")
 	}
 	if transactions != nil {
-		t.Fatalf("Bulk() returned partial transactions %#v, want nil", transactions)
+		t.Fatalf("fetchSessionTransactions() returned partial transactions %#v, want nil", transactions)
 	}
 	if len(requests) != 2 {
 		t.Fatalf("transaction request count = %d, want 2; paths = %v", len(requests), requests)

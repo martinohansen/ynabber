@@ -5,7 +5,10 @@ import (
 "encoding/json"
 "errors"
 "log/slog"
+"net/http"
+"net/http/httptest"
 "os"
+"strings"
 "testing"
 "time"
 )
@@ -85,44 +88,78 @@ t.Error("IsExpired() = true for old CreatedAt without ValidUntil; want false (AP
 // Auth.Session() with expired session on disk
 // ---------------------------------------------------------------------------
 
-func TestAuthSessionRejectsExpiredSessionFile(t *testing.T) {
-past := time.Now().UTC().Add(-time.Second).Format(time.RFC3339)
+func TestAuthSessionReauthorizesExpiredSessionFile(t *testing.T) {
+	past := time.Now().UTC().Add(-time.Second).Format(time.RFC3339)
 
-staleSession := Session{
-CreatedAt:  time.Now().UTC().AddDate(0, 0, -11).Format(time.RFC3339),
-ValidUntil: past,
-Accounts:   []AccountInfo{{UID: "acc-1", AccountID: AccountID{IBAN: randomTestIBAN(t)}}},
-}
-data, err := json.Marshal(staleSession)
-if err != nil {
-t.Fatalf("marshaling session: %v", err)
-}
+	staleSession := Session{
+		CreatedAt:  time.Now().UTC().AddDate(0, 0, -11).Format(time.RFC3339),
+		ValidUntil: past,
+		Accounts:   []AccountInfo{{UID: "acc-1", AccountID: AccountID{IBAN: randomTestIBAN(t)}}},
+	}
+	data, err := json.Marshal(staleSession)
+	if err != nil {
+		t.Fatalf("marshaling session: %v", err)
+	}
 
-f, err := os.CreateTemp(t.TempDir(), "session-*.json")
-if err != nil {
-t.Fatalf("creating temp session file: %v", err)
-}
-if _, err := f.Write(data); err != nil {
-t.Fatalf("writing session file: %v", err)
-}
-f.Close()
+	f, err := os.CreateTemp(t.TempDir(), "session-*.json")
+	if err != nil {
+		t.Fatalf("creating temp session file: %v", err)
+	}
+	if _, err := f.Write(data); err != nil {
+		t.Fatalf("writing session file: %v", err)
+	}
+	f.Close()
 
-auth := Auth{
-Config: Config{
-SessionFile: f.Name(),
-// No PEMFile — if the expiry check is skipped and code falls
-// through to generateJWT it will fail for the wrong reason.
-},
-logger: slog.New(slog.NewTextHandler(os.Stderr, nil)),
-}
+	keyData := generateTestKeyPair(t)
+	pemFile, err := os.CreateTemp(t.TempDir(), "key-*.pem")
+	if err != nil {
+		t.Fatalf("creating temporary PEM file: %v", err)
+	}
+	if _, err := pemFile.Write(keyData); err != nil {
+		t.Fatalf("writing temporary PEM file: %v", err)
+	}
+	pemFile.Close()
 
-_, err = auth.Session(context.Background())
-if err == nil {
-t.Fatal("Auth.Session() returned nil error for expired session; expected ErrSessionExpired")
-}
-if !errors.Is(err, ErrSessionExpired) {
-t.Errorf("Auth.Session() error = %q; want errors.Is(err, ErrSessionExpired)", err)
-}
+	authorizationRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/aspsps":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"aspsps":[]}`))
+		case "/auth":
+			authorizationRequests++
+			http.Error(w, "authorization unavailable", http.StatusServiceUnavailable)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	auth := Auth{
+		Config: Config{
+			SessionFile: f.Name(),
+			PEMFile:     pemFile.Name(),
+			AppID:       "test-app",
+		},
+		baseURL:    server.URL,
+		httpClient: server.Client(),
+		logger:     slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	}
+
+	_, err = auth.Session(context.Background())
+	if err == nil {
+		t.Fatal("Auth.Session() returned nil error; expected the test authorization endpoint to fail")
+	}
+	if errors.Is(err, ErrSessionExpired) {
+		t.Fatalf("Auth.Session() returned ErrSessionExpired instead of starting authorization: %v", err)
+	}
+	if !strings.Contains(err.Error(), "authorization unavailable") {
+		t.Errorf("Auth.Session() error = %q; want authorization endpoint error", err)
+	}
+	if authorizationRequests != 1 {
+		t.Errorf("authorization requests = %d, want 1", authorizationRequests)
+	}
 }
 
 // TestAuthSessionPlaceholderFileInitiatesNewAuth verifies that a session file
