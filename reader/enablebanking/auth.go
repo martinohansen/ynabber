@@ -222,19 +222,28 @@ func (a Auth) getMaxConsentDuration(ctx context.Context, jwtToken string) time.D
 // Session attempts to get session from disk, if it fails it will initiate
 // a new authorization flow and create a session
 func (a Auth) Session(ctx context.Context) (Session, error) {
+	session, _, err := a.acquireSession(ctx)
+	return session, err
+}
+
+// acquireSession returns a usable session and reports whether this call had to
+// complete a new authorization flow.
+func (a Auth) acquireSession(ctx context.Context) (Session, bool, error) {
 	// Try to load existing session from disk
 	sessionFile, err := os.ReadFile(a.Config.SessionFile)
 	if errors.Is(err, os.ErrNotExist) {
 		a.logger.Info("session file not found, initiating new authorization")
-		return a.createNewSession(ctx)
+		session, err := a.createNewSession(ctx)
+		return session, true, err
 	} else if err != nil {
-		return Session{}, fmt.Errorf("reading session file: %w", err)
+		return Session{}, false, fmt.Errorf("reading session file: %w", err)
 	}
 
 	var session Session
 	if err := json.Unmarshal(sessionFile, &session); err != nil {
 		a.logger.Error("parsing session file", "error", err)
-		return a.createNewSession(ctx)
+		session, err := a.createNewSession(ctx)
+		return session, true, err
 	}
 
 	if session.IsExpired() {
@@ -242,7 +251,8 @@ func (a Auth) Session(ctx context.Context) (Session, error) {
 			"file", a.Config.SessionFile,
 			"valid_until", session.ValidUntil,
 		)
-		return a.createNewSession(ctx)
+		session, err := a.createNewSession(ctx)
+		return session, true, err
 	}
 
 	// Placeholder file: accounts are listed but no authorization has been
@@ -251,17 +261,18 @@ func (a Auth) Session(ctx context.Context) (Session, error) {
 		a.logger.Info("session file has no createdAt (placeholder), initiating new authorization",
 			"file", a.Config.SessionFile,
 		)
-		return a.createNewSession(ctx)
+		session, err := a.createNewSession(ctx)
+		return session, true, err
 	}
 
 	jwtToken, err := a.generateJWT()
 	if err != nil {
-		return Session{}, fmt.Errorf("generating JWT: %w", err)
+		return Session{}, false, fmt.Errorf("generating JWT: %w", err)
 	}
 	session.AuthToken = jwtToken
 
 	a.logger.Info("loaded session from disk", "file", a.Config.SessionFile)
-	return session, nil
+	return session, false, nil
 }
 
 // invalidateSession removes a session that the API has rejected. The next

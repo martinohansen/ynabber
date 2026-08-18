@@ -495,7 +495,7 @@ func TestBulkReauthorizesServerRejectedSession(t *testing.T) {
 	}
 }
 
-func TestBulkStopsAfterReplacementSessionIsRejected(t *testing.T) {
+func TestBulkStopsWhenFreshSessionIsRejected(t *testing.T) {
 	const accountUID = "rejected-account"
 
 	tempDir := t.TempDir()
@@ -503,8 +503,8 @@ func TestBulkStopsAfterReplacementSessionIsRejected(t *testing.T) {
 	keyPath := filepath.Join(tempDir, "key.pem")
 
 	sessionData, err := json.Marshal(Session{
-		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
-		ValidUntil: time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339),
+		CreatedAt:  time.Now().UTC().AddDate(0, 0, -11).Format(time.RFC3339),
+		ValidUntil: time.Now().UTC().Add(-time.Second).Format(time.RFC3339),
 		Accounts:   []AccountInfo{{UID: accountUID}},
 	})
 	if err != nil {
@@ -603,10 +603,10 @@ func TestBulkStopsAfterReplacementSessionIsRejected(t *testing.T) {
 
 	_, err = reader.Bulk(context.Background())
 	if !errors.Is(err, ErrSessionExpired) {
-		t.Fatalf("Bulk() error = %v, want ErrSessionExpired after replacement rejection", err)
+		t.Fatalf("Bulk() error = %v, want ErrSessionExpired after fresh session rejection", err)
 	}
-	if transactionRequests != 2 {
-		t.Errorf("transaction requests = %d, want 2", transactionRequests)
+	if transactionRequests != 1 {
+		t.Errorf("transaction requests = %d, want 1", transactionRequests)
 	}
 	if authorizationRequests != 1 {
 		t.Errorf("authorization requests = %d, want 1", authorizationRequests)
@@ -615,7 +615,26 @@ func TestBulkStopsAfterReplacementSessionIsRejected(t *testing.T) {
 		t.Errorf("session requests = %d, want 1", sessionRequests)
 	}
 	if _, statErr := os.Stat(sessionPath); !errors.Is(statErr, os.ErrNotExist) {
-		t.Errorf("rejected replacement session file still exists; os.Stat error = %v", statErr)
+		t.Errorf("rejected fresh session file still exists; os.Stat error = %v", statErr)
+	}
+}
+
+func TestRejectedFreshSessionIsFatalWhenInvalidationFails(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session")
+	if err := os.Mkdir(sessionPath, 0700); err != nil {
+		t.Fatalf("creating session directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionPath, "keep"), []byte("test"), 0600); err != nil {
+		t.Fatalf("making session directory non-empty: %v", err)
+	}
+
+	reader := Reader{Auth: Auth{Config: Config{SessionFile: sessionPath}}}
+	err := reader.rejectedNewSessionError(ErrUnauthorized)
+	if !errors.Is(err, ErrSessionExpired) {
+		t.Fatalf("rejectedNewSessionError() error = %v, want ErrSessionExpired", err)
+	}
+	if !strings.Contains(err.Error(), "discarding rejected session") {
+		t.Fatalf("rejectedNewSessionError() error = %v, want invalidation context", err)
 	}
 }
 

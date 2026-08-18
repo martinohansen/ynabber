@@ -213,7 +213,7 @@ func (r Reader) String() string {
 
 // Bulk fetches all accounts and their transactions
 func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
-	session, err := r.Auth.Session(ctx)
+	session, authorized, err := r.Auth.acquireSession(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting session: %w", err)
 	}
@@ -221,6 +221,9 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 	results, err := r.fetchSessionTransactions(ctx, session)
 	if !errors.Is(err, ErrUnauthorized) {
 		return results, err
+	}
+	if authorized {
+		return nil, r.rejectedNewSessionError(err)
 	}
 
 	r.logger.Info("session rejected by API; initiating new authorization")
@@ -234,10 +237,18 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 		return results, err
 	}
 
+	return nil, r.rejectedNewSessionError(err)
+}
+
+// rejectedNewSessionError invalidates credentials that failed immediately
+// after authorization. ErrSessionExpired remains available to the runner even
+// when invalidation also fails.
+func (r Reader) rejectedNewSessionError(fetchErr error) error {
+	sessionErr := fmt.Errorf("%w: newly authorized session rejected by API: %w", ErrSessionExpired, fetchErr)
 	if invalidateErr := r.Auth.invalidateSession(); invalidateErr != nil {
-		return nil, fmt.Errorf("discarding rejected replacement session: %w", invalidateErr)
+		return fmt.Errorf("%w; discarding rejected session: %w", sessionErr, invalidateErr)
 	}
-	return nil, fmt.Errorf("%w: replacement session rejected by API: %w", ErrSessionExpired, err)
+	return sessionErr
 }
 
 // fetchSessionTransactions fetches and maps every account in one authorized
