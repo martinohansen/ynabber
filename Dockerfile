@@ -4,9 +4,14 @@ RUN apk add --no-cache git
 WORKDIR /go/src/app
 COPY . .
 
-ARG TARGETOS TARGETARCH
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH && \
-    go get -d -v ./... && \
+ARG TARGETOS TARGETARCH TARGETVARIANT
+RUN set -eux; \
+    export CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH"; \
+    target_goarm="${TARGETVARIANT#v}"; \
+    if [ "$TARGETARCH" = "arm" ] && [ -n "$target_goarm" ]; then \
+        export GOARM="$target_goarm"; \
+    fi; \
+    go mod download; \
     go build -o /go/bin/app -v ./cmd/ynabber/.
 
 # Final stage
