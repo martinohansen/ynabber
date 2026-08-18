@@ -31,8 +31,9 @@ EnableBanking reads bank transactions through the EnableBanking Open Banking API
 | ENABLEBANKING_INTERVAL | `time.Duration` | - | Interval is the time between fetches (0 means run once and exit) |
 | ENABLEBANKING_PAYEE_STRIP | `[]string` | - | PayeeStrip contains words to remove from payee names.<br>Example: "foo,bar" removes "foo" and "bar" from all payee names. |
 | ENABLEBANKING_PAYEE_STRIP_REGEX | `PayeeRegex` | - | PayeeStripRegex is a comma-separated list of regular expressions whose<br>matches are removed from payee names. Use it to strip dynamic prefixes<br>or codes that PayeeStrip can't express. Patterns cannot contain a<br>literal comma.<br>Example: "^Dk-Nota\S+\s+" turns "Dk-Nota61221 Remouladen" into<br>"Remouladen". |
-| ENABLEBANKING_PSU_IP_ADDRESS | `string` | - | PSUIPAddress is an optional end-user IP address sent to EnableBanking.<br>Required by certain banks (e.g., Bulder / Sparebanken Vest) to prevent<br>failures after the first authorization (400 ASPSP_ERROR). Set to "auto" to dynamically<br>resolve your public WAN IP, enter a static IPv4 address, or leave empty to disable. |
-| ENABLEBANKING_PSU_USER_AGENT | `string` | - | PSUUserAgent is an optional User-Agent header sent to EnableBanking<br>Set to "auto" to use the default Mozilla/5.0 (compatible; Ynabber/1.0), enter a custom string,<br>or leave empty to disable. |
+| ENABLEBANKING_PSU_HEADERS | `*bool` | - | PSUHeaders controls whether PSU headers are sent to EnableBanking.<br>Leave it unset to enable them only for banks that require them, such as<br>Bulder and Sparebanken Vest. Set it to true to always enable the headers,<br>or false to always disable them. |
+| ENABLEBANKING_PSU_IP_ADDRESS | `string` | - | PSUIPAddress is an optional end-user IP address sent to EnableBanking.<br>The value is sent as configured. When PSU headers are enabled, Ynabber<br>discovers the public IP address if this value is empty. |
+| ENABLEBANKING_PSU_USER_AGENT | `string` | `Mozilla/5.0 (compatible; Ynabber/1.0)` | PSUUserAgent is the User-Agent value sent in the PSU-User-Agent header. |
 
 ## Nordigen
 

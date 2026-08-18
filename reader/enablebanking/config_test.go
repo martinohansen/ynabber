@@ -65,6 +65,68 @@ func TestEnvconfigRequiredFields(t *testing.T) {
 	}
 }
 
+func TestEnvconfigPSUSettings(t *testing.T) {
+	for key, value := range map[string]string{
+		"ENABLEBANKING_APP_ID":    "test-app",
+		"ENABLEBANKING_COUNTRY":   "NO",
+		"ENABLEBANKING_ASPSP":     "DNB",
+		"ENABLEBANKING_PEM_FILE":  "test.pem",
+		"ENABLEBANKING_FROM_DATE": "2024-01-01",
+	} {
+		t.Setenv(key, value)
+	}
+
+	for _, key := range []string{
+		"ENABLEBANKING_PSU_IP_ADDRESS",
+		"ENABLEBANKING_PSU_USER_AGENT",
+		"ENABLEBANKING_PSU_HEADERS",
+	} {
+		previous, existed := os.LookupEnv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("unset %s: %v", key, err)
+		}
+		t.Cleanup(func() {
+			if existed {
+				_ = os.Setenv(key, previous)
+			} else {
+				_ = os.Unsetenv(key)
+			}
+		})
+	}
+
+	var defaults Config
+	if err := envconfig.Process("", &defaults); err != nil {
+		t.Fatalf("load default PSU settings: %v", err)
+	}
+	if defaults.PSUIPAddress != "" {
+		t.Errorf("PSUIPAddress = %q, want no default", defaults.PSUIPAddress)
+	}
+	if defaults.PSUUserAgent != "Mozilla/5.0 (compatible; Ynabber/1.0)" {
+		t.Errorf("PSUUserAgent = %q, want default user agent", defaults.PSUUserAgent)
+	}
+	if defaults.PSUHeaders != nil {
+		t.Errorf("PSUHeaders = %v, want nil when unset", *defaults.PSUHeaders)
+	}
+
+	t.Setenv("ENABLEBANKING_PSU_IP_ADDRESS", "203.0.113.10")
+	t.Setenv("ENABLEBANKING_PSU_USER_AGENT", "custom-agent")
+	t.Setenv("ENABLEBANKING_PSU_HEADERS", "false")
+
+	var configured Config
+	if err := envconfig.Process("", &configured); err != nil {
+		t.Fatalf("load explicit PSU settings: %v", err)
+	}
+	if configured.PSUIPAddress != "203.0.113.10" {
+		t.Errorf("PSUIPAddress = %q, want configured value", configured.PSUIPAddress)
+	}
+	if configured.PSUUserAgent != "custom-agent" {
+		t.Errorf("PSUUserAgent = %q, want configured value", configured.PSUUserAgent)
+	}
+	if configured.PSUHeaders == nil || *configured.PSUHeaders {
+		t.Errorf("PSUHeaders = %v, want false", configured.PSUHeaders)
+	}
+}
+
 func TestConfigGetFromDate(t *testing.T) {
 	config := Config{
 		FromDate: mustDate(t, "2024-01-15"),

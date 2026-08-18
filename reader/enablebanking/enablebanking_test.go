@@ -72,6 +72,162 @@ func TestClientGetAccountTransactions(t *testing.T) {
 	}
 }
 
+func TestClientGetAccountTransactionsPSUHeaders(t *testing.T) {
+	enabled := true
+	disabled := false
+	tests := []struct {
+		name          string
+		aspsp         string
+		setting       *bool
+		ipAddress     string
+		userAgent     string
+		wantIPAddress string
+		wantUserAgent string
+	}{
+		{
+			name:          "unset enables headers for listed bank",
+			aspsp:         "Bulder",
+			ipAddress:     "203.0.113.10",
+			userAgent:     "test-agent",
+			wantIPAddress: "203.0.113.10",
+			wantUserAgent: "test-agent",
+		},
+		{
+			name:      "unset disables headers for other bank",
+			aspsp:     "DNB",
+			ipAddress: "203.0.113.11",
+			userAgent: "test-agent",
+		},
+		{
+			name:          "true enables headers",
+			aspsp:         "DNB",
+			setting:       &enabled,
+			ipAddress:     "203.0.113.12",
+			userAgent:     "test-agent",
+			wantIPAddress: "203.0.113.12",
+			wantUserAgent: "test-agent",
+		},
+		{
+			name:      "false ignores header values",
+			aspsp:     "Bulder",
+			setting:   &disabled,
+			ipAddress: "203.0.113.13",
+			userAgent: "test-agent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.Header.Get("PSU-IP-Address"); got != tt.wantIPAddress {
+					t.Errorf("PSU-IP-Address = %q, want %q", got, tt.wantIPAddress)
+				}
+				if got := r.Header.Get("PSU-User-Agent"); got != tt.wantUserAgent {
+					t.Errorf("PSU-User-Agent = %q, want %q", got, tt.wantUserAgent)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"transactions":[],"pending":[]}`)
+			}))
+			defer server.Close()
+
+			client := &Client{
+				BaseURL:    server.URL,
+				HTTPClient: http.DefaultClient,
+				logger:     slog.New(slog.NewTextHandler(os.Stderr, nil)),
+				config: Config{
+					ASPSP:        tt.aspsp,
+					PSUHeaders:   tt.setting,
+					PSUIPAddress: tt.ipAddress,
+					PSUUserAgent: tt.userAgent,
+				},
+			}
+
+			if _, err := client.GetAccountTransactions(
+				context.Background(), "token", "account", "2024-01-01", "2024-01-31",
+			); err != nil {
+				t.Fatalf("GetAccountTransactions() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestResolvePSUIPAddress(t *testing.T) {
+	enabled := true
+	disabled := false
+	tests := []struct {
+		name      string
+		config    Config
+		wantCalls int
+		wantIP    string
+	}{
+		{
+			name:      "discover for active headers without configured address",
+			config:    Config{ASPSP: "Bulder"},
+			wantCalls: 1,
+			wantIP:    "2001:db8::1",
+		},
+		{
+			name:   "keep configured address",
+			config: Config{ASPSP: "DNB", PSUHeaders: &enabled, PSUIPAddress: "203.0.113.10"},
+			wantIP: "203.0.113.10",
+		},
+		{
+			name:   "do not discover for disabled headers",
+			config: Config{ASPSP: "Bulder", PSUHeaders: &disabled},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			discover := func(context.Context) (string, error) {
+				calls++
+				return "2001:db8::1", nil
+			}
+
+			if err := resolvePSUIPAddress(context.Background(), &tt.config, discover); err != nil {
+				t.Fatalf("resolvePSUIPAddress() error = %v", err)
+			}
+			if calls != tt.wantCalls {
+				t.Errorf("discover calls = %d, want %d", calls, tt.wantCalls)
+			}
+			if tt.config.PSUIPAddress != tt.wantIP {
+				t.Errorf("PSUIPAddress = %q, want %q", tt.config.PSUIPAddress, tt.wantIP)
+			}
+		})
+	}
+}
+
+func TestDiscoverPublicIPAddress(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		want    string
+		wantErr bool
+	}{
+		{name: "IPv4", body: " 203.0.113.10\n", want: "203.0.113.10"},
+		{name: "IPv6", body: "2001:0db8:0:0:0:0:0:1", want: "2001:db8::1"},
+		{name: "invalid response", body: "not-an-address", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprint(w, tt.body)
+			}))
+			defer server.Close()
+
+			got, err := discoverPublicIPAddress(context.Background(), server.Client(), server.URL)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("discoverPublicIPAddress() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("discoverPublicIPAddress() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestClientGetAccountTransactionsQueryParams verifies that GetAccountTransactions
 // sends the correct date_from / date_to query parameter names required by the
 // EnableBanking API. Using the wrong names (e.g. "from"/"to") causes the API to
