@@ -240,8 +240,7 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 
 		txResp, err := r.Client.GetAccountTransactions(ctx, session.AuthToken, account.UID, fromDate, toDate)
 		if err != nil {
-			accountLogger.Error("fetching transactions", "error", err)
-			continue
+			return nil, fmt.Errorf("fetching transactions for account %q: %w", maskIdentifier(account.StableID()), err)
 		}
 
 		log.Trace(accountLogger, "transactions", "data", txResp)
