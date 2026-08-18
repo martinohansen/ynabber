@@ -31,6 +31,8 @@ EnableBanking reads bank transactions through the EnableBanking Open Banking API
 | ENABLEBANKING_INTERVAL | `time.Duration` | - | Interval is the time between fetches (0 means run once and exit) |
 | ENABLEBANKING_PAYEE_STRIP | `[]string` | - | PayeeStrip contains words to remove from payee names.<br>Example: "foo,bar" removes "foo" and "bar" from all payee names. |
 | ENABLEBANKING_PAYEE_STRIP_REGEX | `PayeeRegex` | - | PayeeStripRegex is a comma-separated list of regular expressions whose<br>matches are removed from payee names. Use it to strip dynamic prefixes<br>or codes that PayeeStrip can't express. Patterns cannot contain a<br>literal comma.<br>Example: "^Dk-Nota\S+\s+" turns "Dk-Nota61221 Remouladen" into<br>"Remouladen". |
+| ENABLEBANKING_PSU_IP_ADDRESS | `string` | `auto` | PSUIPAddress is the IP address of the end user (required by Bulder/SparBank for background sync) |
+| ENABLEBANKING_PSU_USER_AGENT | `string` | `Mozilla/5.0 (Windows NT 10.0; Win64; x64) Ynabber/1.0` | PSUUserAgent is the user agent of the end user (required by Bulder/SparBank for background sync) |
 
 ## Nordigen
 

@@ -32,16 +32,23 @@ type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
 	logger     *slog.Logger
+	config     Config
 }
 
 // NewClient creates a new EnableBanking API client
-func NewClient(logger *slog.Logger) *Client {
+func NewClient(cfg Config, logger *slog.Logger) *Client {
+	resolvedIP := cfg.ResolvePSUIP()
+	cfg.PSUIPAddress = resolvedIP
+
+	logger.Debug("resolved PSU IP address", "ip", resolvedIP)
+
 	return &Client{
 		BaseURL: enableBankingAPIBase,
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 		logger: logger,
+		config: cfg,
 	}
 }
 
@@ -94,6 +101,14 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
 	req.Header.Set("Content-Type", "application/json")
+
+	// Legg til PSU-headere for Bulder/Sparebanken Vest
+	if c.config.PSUIPAddress != "" {
+		req.Header.Set("PSU-IP-Address", c.config.PSUIPAddress)
+	}
+	if c.config.PSUUserAgent != "" {
+		req.Header.Set("PSU-User-Agent", c.config.PSUUserAgent)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -153,7 +168,7 @@ func NewReader(logger *slog.Logger, dataDir string) (Reader, error) {
 	logger.Debug("config loaded", "aspsp", cfg.ASPSP, "country", cfg.Country)
 
 	auth := NewAuth(cfg, logger)
-	client := NewClient(logger)
+	client := NewClient(cfg, logger)
 
 	return Reader{
 		Config: cfg,

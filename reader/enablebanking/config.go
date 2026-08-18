@@ -5,6 +5,8 @@ package enablebanking
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -65,6 +67,12 @@ type Config struct {
 	// Example: "^Dk-Nota\S+\s+" turns "Dk-Nota61221 Remouladen" into
 	// "Remouladen".
 	PayeeStripRegex PayeeRegex `envconfig:"ENABLEBANKING_PAYEE_STRIP_REGEX"`
+
+	// PSUIPAddress is the IP address of the end user (required by Bulder/SparBank for background sync)
+	PSUIPAddress string `envconfig:"ENABLEBANKING_PSU_IP_ADDRESS" default:"auto"`
+
+	// PSUUserAgent is the user agent of the end user (required by Bulder/SparBank for background sync)
+	PSUUserAgent string `envconfig:"ENABLEBANKING_PSU_USER_AGENT" default:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) Ynabber/1.0"`
 }
 
 // Validate checks config semantics and sets defaults for optional fields.
@@ -117,4 +125,31 @@ func sanitizeSessionPart(value string) string {
 		return "unknown"
 	}
 	return trimmed
+}
+
+// ResolvePSUIP returns the configured PSU IP address. If it is set to "auto" or left empty,
+// it attempts to fetch the machine's current public IPv4 address.
+func (c *Config) ResolvePSUIP() string {
+	if c.PSUIPAddress != "" && c.PSUIPAddress != "auto" {
+		return c.PSUIPAddress
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("https://api.ipify.org")
+	if err != nil {
+		return "127.0.0.1" // Fallback if offline or blocked
+	}
+	defer resp.Body.Close()
+
+	ipBytes, err := io.ReadAll(io.LimitReader(resp.Body, 64))
+	if err != nil {
+		return "127.0.0.1"
+	}
+
+	ip := strings.TrimSpace(string(ipBytes))
+	if ip == "" {
+		return "127.0.0.1"
+	}
+
+	return ip
 }

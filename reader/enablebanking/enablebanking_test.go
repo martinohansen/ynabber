@@ -444,7 +444,7 @@ func TestTransactionStructure(t *testing.T) {
 // TestClientNewClient tests client creation
 func TestClientNewClient(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	client := NewClient(logger)
+	client := NewClient(Config{}, logger)
 
 	if client == nil {
 		t.Fatal("expected client, got nil")
