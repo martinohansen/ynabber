@@ -66,16 +66,19 @@ type Config struct {
 	// "Remouladen".
 	PayeeStripRegex PayeeRegex `envconfig:"ENABLEBANKING_PAYEE_STRIP_REGEX"`
 
+	// PSUHeaders controls whether PSU headers are sent to EnableBanking.
+	// Leave it unset to enable them only for banks that require them, such as
+	// Bulder and Sparebanken Vest. Set it to true to always enable the headers,
+	// or false to always disable them.
+	PSUHeaders *bool `envconfig:"ENABLEBANKING_PSU_HEADERS"`
+
 	// PSUIPAddress is an optional end-user IP address sent to EnableBanking.
-	// Required by certain banks (e.g., Bulder / Sparebanken Vest) to prevent
-	// failures after the first authorization (400 ASPSP_ERROR). Set to "auto" to dynamically
-	// resolve your public WAN IP, enter a static IPv4 address, or leave empty to disable.
+	// The value is sent as configured. When PSU headers are enabled, Ynabber
+	// discovers the public IP address if this value is empty.
 	PSUIPAddress string `envconfig:"ENABLEBANKING_PSU_IP_ADDRESS"`
 
-	// PSUUserAgent is an optional User-Agent header sent to EnableBanking
-	// Set to "auto" to use the default Mozilla/5.0 (compatible; Ynabber/1.0), enter a custom string,
-	// or leave empty to disable.
-	PSUUserAgent string `envconfig:"ENABLEBANKING_PSU_USER_AGENT"`
+	// PSUUserAgent is the User-Agent value sent in the PSU-User-Agent header.
+	PSUUserAgent string `envconfig:"ENABLEBANKING_PSU_USER_AGENT" default:"Mozilla/5.0 (compatible; Ynabber/1.0)"`
 }
 
 // Validate checks config semantics and sets defaults for optional fields.

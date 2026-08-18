@@ -24,10 +24,23 @@ var ErrRateLimit = errors.New("rate limited")
 // indicating the session has been revoked or has expired server-side.
 var ErrUnauthorized = errors.New("session rejected by API")
 
-// maxResponseBodyBytes caps how much of an HTTP response body we buffer. 10 MB
-// is far above any realistic API payload and guards against a misbehaving or
-// compromised upstream exhausting the process's memory.
-const maxResponseBodyBytes = 10 * 1024 * 1024
+const (
+	// maxResponseBodyBytes caps how much of an EnableBanking response body we
+	// buffer. 10 MB is far above any realistic API payload.
+	maxResponseBodyBytes = 10 * 1024 * 1024
+
+	publicIPAddressURL        = "https://api64.ipify.org"
+	publicIPAddressTimeout    = 5 * time.Second
+	maxIPAddressResponseBytes = 64
+)
+
+// psuHeaderASPSPs contains Enable Banking ASPSP names for banks known to need
+// PSU headers for reliable transaction requests. The names must match the
+// values returned by Enable Banking's GET /aspsps endpoint.
+var psuHeaderASPSPs = map[string]struct{}{
+	"bulder":           {},
+	"sparebanken vest": {},
+}
 
 // Client handles HTTP communication with the EnableBanking API
 type Client struct {
@@ -99,11 +112,13 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
 	req.Header.Set("Content-Type", "application/json")
 
-	if c.config.PSUIPAddress != "" {
-		req.Header.Set("PSU-IP-Address", c.config.PSUIPAddress)
-	}
-	if c.config.PSUUserAgent != "" {
-		req.Header.Set("PSU-User-Agent", c.config.PSUUserAgent)
+	if psuHeadersEnabled(c.config) {
+		if c.config.PSUIPAddress != "" {
+			req.Header.Set("PSU-IP-Address", c.config.PSUIPAddress)
+		}
+		if c.config.PSUUserAgent != "" {
+			req.Header.Set("PSU-User-Agent", c.config.PSUUserAgent)
+		}
 	}
 
 	resp, err := c.HTTPClient.Do(req)
@@ -162,9 +177,12 @@ func NewReader(logger *slog.Logger, dataDir string) (Reader, error) {
 
 	logger.Debug("config loaded", "aspsp", cfg.ASPSP, "country", cfg.Country)
 
-	// Prepare PSU headers
-	if err := resolvePSUConfig(&cfg, logger); err != nil {
-		return Reader{}, fmt.Errorf("resolving PSU config: %w", err)
+	discoverIPAddress := func(ctx context.Context) (string, error) {
+		client := &http.Client{Timeout: publicIPAddressTimeout}
+		return discoverPublicIPAddress(ctx, client, publicIPAddressURL)
+	}
+	if err := resolvePSUIPAddress(context.Background(), &cfg, discoverIPAddress); err != nil {
+		return Reader{}, fmt.Errorf("resolving PSU IP address: %w", err)
 	}
 
 	auth := NewAuth(cfg, logger)
@@ -271,59 +289,63 @@ func loadEnvConfig(cfg *Config) error {
 	return nil
 }
 
-// resolvePSUIP resolves the "auto" setting to the public WAN IP address.
-// Returns an empty string if PSU IP is disabled/unset.
-func resolvePSUIP(setting string) (string, error) {
-	if setting == "" {
-		return "", nil
+// psuHeadersEnabled reports whether the configuration enables PSU headers.
+func psuHeadersEnabled(cfg Config) bool {
+	if cfg.PSUHeaders != nil {
+		return *cfg.PSUHeaders
 	}
 
-	if setting != "auto" {
-		return setting, nil
+	_, enabled := psuHeaderASPSPs[strings.ToLower(strings.TrimSpace(cfg.ASPSP))]
+	return enabled
+}
+
+// resolvePSUIPAddress discovers the public IP address when active PSU headers
+// need one and no address was configured.
+func resolvePSUIPAddress(ctx context.Context, cfg *Config, discover func(context.Context) (string, error)) error {
+	if !psuHeadersEnabled(*cfg) || cfg.PSUIPAddress != "" {
+		return nil
 	}
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("https://api.ipify.org")
+	ipAddress, err := discover(ctx)
 	if err != nil {
-		return "", fmt.Errorf("discovering public IP: %w", err)
+		return fmt.Errorf("discovering public IP address: %w", err)
+	}
+	cfg.PSUIPAddress = ipAddress
+
+	return nil
+}
+
+// discoverPublicIPAddress returns the public IPv4 or IPv6 address reported by
+// endpoint. The response must contain one plain-text IP address.
+func discoverPublicIPAddress(ctx context.Context, client *http.Client, endpoint string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Accept", "text/plain")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("discovering public IP: unexpected status %s", resp.Status)
+		return "", fmt.Errorf("unexpected HTTP status %s", resp.Status)
 	}
 
-	ipBytes, err := io.ReadAll(io.LimitReader(resp.Body, 64))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxIPAddressResponseBytes+1))
 	if err != nil {
-		return "", fmt.Errorf("discovering public IP: reading response: %w", err)
+		return "", fmt.Errorf("reading response: %w", err)
+	}
+	if len(body) > maxIPAddressResponseBytes {
+		return "", fmt.Errorf("response exceeds %d bytes", maxIPAddressResponseBytes)
 	}
 
-	ip, err := netip.ParseAddr(strings.TrimSpace(string(ipBytes)))
-	if err != nil || !ip.Is4() {
-		return "", fmt.Errorf("discovering public IP: invalid IPv4 address")
-	}
-
-	return ip.String(), nil
-}
-
-// resolvePSUConfig normalizes the PSU IP and User-Agent values on the config struct.
-func resolvePSUConfig(cfg *Config, logger *slog.Logger) error {
-	ip, err := resolvePSUIP(cfg.PSUIPAddress)
+	ipAddress, err := netip.ParseAddr(strings.TrimSpace(string(body)))
 	if err != nil {
-		return err
-	}
-	if ip != "" {
-		logger.Debug("resolved PSU IP address", "ip", ip)
-	}
-	cfg.PSUIPAddress = ip
-
-	switch strings.ToLower(cfg.PSUUserAgent) {
-	case "auto", "true", "1":
-		cfg.PSUUserAgent = "Mozilla/5.0 (compatible; Ynabber/1.0)"
-	}
-	if cfg.PSUUserAgent != "" {
-		logger.Debug("resolved PSU user-agent", "user_agent", cfg.PSUUserAgent)
+		return "", fmt.Errorf("parsing response as an IP address: %w", err)
 	}
 
-	return nil
+	return ipAddress.Unmap().String(), nil
 }
