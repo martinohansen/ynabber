@@ -102,7 +102,7 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
 	req.Header.Set("Content-Type", "application/json")
 
-	// Legg til PSU-headere for Bulder/Sparebanken Vest
+	// Add PSU-headers
 	if c.config.PSUIPAddress != "" {
 		req.Header.Set("PSU-IP-Address", c.config.PSUIPAddress)
 	}
