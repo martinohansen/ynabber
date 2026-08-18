@@ -65,6 +65,17 @@ type Config struct {
 	// Example: "^Dk-Nota\S+\s+" turns "Dk-Nota61221 Remouladen" into
 	// "Remouladen".
 	PayeeStripRegex PayeeRegex `envconfig:"ENABLEBANKING_PAYEE_STRIP_REGEX"`
+
+	// PSUIPAddress is an optional end-user IP address sent to EnableBanking.
+	// Required by certain banks (e.g., Bulder / Sparebanken Vest) to prevent
+	// failures after the first authorization (400 ASPSP_ERROR). Set to "auto" to dynamically
+	// resolve your public WAN IP, enter a static IPv4 address, or leave empty to disable.
+	PSUIPAddress string `envconfig:"ENABLEBANKING_PSU_IP_ADDRESS"`
+
+	// PSUUserAgent is an optional User-Agent header sent to EnableBanking
+	// Set to "auto" to use the default Mozilla/5.0 (compatible; Ynabber/1.0), enter a custom string,
+	// or leave empty to disable.
+	PSUUserAgent string `envconfig:"ENABLEBANKING_PSU_USER_AGENT"`
 }
 
 // Validate checks config semantics and sets defaults for optional fields.

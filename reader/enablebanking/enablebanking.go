@@ -8,6 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -32,16 +34,18 @@ type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
 	logger     *slog.Logger
+	config     Config
 }
 
 // NewClient creates a new EnableBanking API client
-func NewClient(logger *slog.Logger) *Client {
+func NewClient(cfg Config, logger *slog.Logger) *Client {
 	return &Client{
 		BaseURL: enableBankingAPIBase,
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 		logger: logger,
+		config: cfg,
 	}
 }
 
@@ -95,6 +99,13 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
 	req.Header.Set("Content-Type", "application/json")
 
+	if c.config.PSUIPAddress != "" {
+		req.Header.Set("PSU-IP-Address", c.config.PSUIPAddress)
+	}
+	if c.config.PSUUserAgent != "" {
+		req.Header.Set("PSU-User-Agent", c.config.PSUUserAgent)
+	}
+
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("sending request: %w", err)
@@ -141,8 +152,7 @@ func NewReader(logger *slog.Logger, dataDir string) (Reader, error) {
 
 	// Load and validate config
 	cfg := Config{}
-	err := loadEnvConfig(&cfg)
-	if err != nil {
+	if err := loadEnvConfig(&cfg); err != nil {
 		return Reader{}, fmt.Errorf("loading config: %w", err)
 	}
 
@@ -152,8 +162,13 @@ func NewReader(logger *slog.Logger, dataDir string) (Reader, error) {
 
 	logger.Debug("config loaded", "aspsp", cfg.ASPSP, "country", cfg.Country)
 
+	// Prepare PSU headers
+	if err := resolvePSUConfig(&cfg, logger); err != nil {
+		return Reader{}, fmt.Errorf("resolving PSU config: %w", err)
+	}
+
 	auth := NewAuth(cfg, logger)
-	client := NewClient(logger)
+	client := NewClient(cfg, logger)
 
 	return Reader{
 		Config: cfg,
@@ -253,5 +268,62 @@ func loadEnvConfig(cfg *Config) error {
 	if err := envconfig.Process("", cfg); err != nil {
 		return fmt.Errorf("processing config: %w", err)
 	}
+	return nil
+}
+
+// resolvePSUIP resolves the "auto" setting to the public WAN IP address.
+// Returns an empty string if PSU IP is disabled/unset.
+func resolvePSUIP(setting string) (string, error) {
+	if setting == "" {
+		return "", nil
+	}
+
+	if setting != "auto" {
+		return setting, nil
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("https://api.ipify.org")
+	if err != nil {
+		return "", fmt.Errorf("discovering public IP: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("discovering public IP: unexpected status %s", resp.Status)
+	}
+
+	ipBytes, err := io.ReadAll(io.LimitReader(resp.Body, 64))
+	if err != nil {
+		return "", fmt.Errorf("discovering public IP: reading response: %w", err)
+	}
+
+	ip, err := netip.ParseAddr(strings.TrimSpace(string(ipBytes)))
+	if err != nil || !ip.Is4() {
+		return "", fmt.Errorf("discovering public IP: invalid IPv4 address")
+	}
+
+	return ip.String(), nil
+}
+
+// resolvePSUConfig normalizes the PSU IP and User-Agent values on the config struct.
+func resolvePSUConfig(cfg *Config, logger *slog.Logger) error {
+	ip, err := resolvePSUIP(cfg.PSUIPAddress)
+	if err != nil {
+		return err
+	}
+	if ip != "" {
+		logger.Debug("resolved PSU IP address", "ip", ip)
+	}
+	cfg.PSUIPAddress = ip
+
+	switch strings.ToLower(cfg.PSUUserAgent) {
+	case "auto", "true", "1":
+		cfg.PSUUserAgent = "Mozilla/5.0 (compatible; Ynabber/1.0)"
+	}
+	if cfg.PSUUserAgent != "" {
+		logger.Debug("resolved PSU user-agent", "user_agent", cfg.PSUUserAgent)
+	}
+
 	return nil
 }
