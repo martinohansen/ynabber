@@ -21,6 +21,13 @@ const (
 	rateLimitRetryMinute = 30
 )
 
+func (r Reader) after(delay time.Duration) <-chan time.Time {
+	if r.afterFn != nil {
+		return r.afterFn(delay)
+	}
+	return time.After(delay)
+}
+
 // nextDailyRetryTime returns the next occurrence of
 // rateLimitRetryHour:rateLimitRetryMinute on the calendar day after now.
 // Waiting until then gives the bank's API quota time to reset before we try
@@ -79,7 +86,7 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 			r.logger.Warn("transient error, backing off before retry", "error", err, "delay", delay)
 		}
 		select {
-		case <-time.After(delay):
+		case <-r.after(delay):
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -92,7 +99,7 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 			"retry_at", retryAt.Format(time.RFC3339),
 			"wait", time.Until(retryAt).Round(time.Second))
 		select {
-		case <-time.After(time.Until(retryAt)):
+		case <-r.after(time.Until(retryAt)):
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -101,7 +108,7 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 
 	r.logger.Warn("transient error, backing off before retry", "error", err, "delay", retryBaseDelay)
 	select {
-	case <-time.After(retryBaseDelay):
+	case <-r.after(retryBaseDelay):
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -112,6 +119,11 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 // If Config.Interval is 0, it runs once and returns.
 // If Config.Interval > 0, it runs continuously, waiting between fetches.
 func (r Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) error {
+	bulk := r.Bulk
+	if r.bulkFn != nil {
+		bulk = r.bulkFn
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -119,7 +131,7 @@ func (r Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) er
 		default:
 		}
 
-		batch, err := r.Bulk(ctx)
+		batch, err := bulk(ctx)
 		if err != nil {
 			r.logger.Error("bulk reading transactions", "error", err)
 			if err := r.retryHandler(ctx, err); err != nil {
@@ -139,7 +151,7 @@ func (r Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) er
 		if r.Config.Interval > 0 {
 			r.logger.Info("waiting for next run", "in", r.Config.Interval)
 			select {
-			case <-time.After(r.Config.Interval):
+			case <-r.after(r.Config.Interval):
 			case <-ctx.Done():
 				return ctx.Err()
 			}

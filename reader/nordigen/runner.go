@@ -9,6 +9,13 @@ import (
 	"github.com/martinohansen/ynabber"
 )
 
+func (r Reader) after(delay time.Duration) <-chan time.Time {
+	if r.afterFn != nil {
+		return r.afterFn(delay)
+	}
+	return time.After(delay)
+}
+
 // retryHandler handles rate limit errors by waiting for the reset timer or
 // returns err imimediately if it cannot handle the error.
 func (r Reader) retryHandler(ctx context.Context, err error) error {
@@ -19,7 +26,7 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 		r.logger.Info("rate limited, retrying later", "wait", wait)
 
 		select {
-		case <-time.After(wait):
+		case <-r.after(wait):
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -30,6 +37,11 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 
 // Runner continuously fetches transactions and sends them to out
 func (r Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) error {
+	bulk := r.Bulk
+	if r.bulkFn != nil {
+		bulk = r.bulkFn
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -37,7 +49,7 @@ func (r Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) er
 		default:
 		}
 
-		batch, err := r.Bulk()
+		batch, err := bulk()
 		if err != nil {
 			r.logger.Error("bulk reading transactions", "error", err)
 			if err := r.retryHandler(ctx, err); err != nil {
@@ -58,7 +70,7 @@ func (r Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) er
 		if r.Config.Interval > 0 {
 			r.logger.Info("waiting for next run", "in", r.Config.Interval)
 			select {
-			case <-time.After(r.Config.Interval):
+			case <-r.after(r.Config.Interval):
 			case <-ctx.Done():
 				return ctx.Err()
 			}

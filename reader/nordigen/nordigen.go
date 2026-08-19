@@ -3,6 +3,7 @@ package nordigen
 import (
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
 	"github.com/kelseyhightower/envconfig"
@@ -14,6 +15,10 @@ type Reader struct {
 	Config Config
 	Client *nordigen.Client
 	logger *slog.Logger
+	// bulkFn and afterFn let runner tests exercise the production loop without
+	// making network requests or waiting on wall-clock timers.
+	bulkFn  func() ([]ynabber.Transaction, error)
+	afterFn func(time.Duration) <-chan time.Time
 
 	// TODO(Martin): Move into Nordigen config struct
 	DataDir string
