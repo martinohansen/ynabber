@@ -86,7 +86,7 @@ func TestRunnerOneShotMode(t *testing.T) {
 			}
 
 			out := make(chan []ynabber.Transaction, 10)
-			sendCount := 0
+			sendCount := make(chan int, 1)
 
 			// Create a context with a timeout to prevent infinite loops
 			ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -95,6 +95,11 @@ func TestRunnerOneShotMode(t *testing.T) {
 			// Create a modified Runner that uses a stub Bulk instead
 			// We'll test this by checking the loop behavior
 			go func() {
+				count := 0
+				defer func() {
+					sendCount <- count
+				}()
+
 				for {
 					select {
 					case <-ctx.Done():
@@ -113,7 +118,7 @@ func TestRunnerOneShotMode(t *testing.T) {
 
 					select {
 					case out <- batch:
-						sendCount++
+						count++
 					case <-ctx.Done():
 						return
 					}
@@ -132,16 +137,20 @@ func TestRunnerOneShotMode(t *testing.T) {
 				}
 			}()
 
-			// Wait for goroutine to complete or timeout
-			<-ctx.Done()
+			var got int
+			select {
+			case got = <-sendCount:
+			case <-time.After(time.Second):
+				t.Fatal("runner did not stop")
+			}
 
 			// In one-shot mode, should send exactly 1
-			if tt.interval == 0 && sendCount != 1 {
-				t.Errorf("one-shot mode: expected 1 send, got %d", sendCount)
+			if tt.interval == 0 && got != 1 {
+				t.Errorf("one-shot mode: expected 1 send, got %d", got)
 			}
 			// In continuous mode with timeout, should send at least 2
-			if tt.interval > 0 && sendCount < 2 {
-				t.Errorf("continuous mode: expected at least 2 sends, got %d", sendCount)
+			if tt.interval > 0 && got < 2 {
+				t.Errorf("continuous mode: expected at least 2 sends, got %d", got)
 			}
 		})
 	}
@@ -152,19 +161,18 @@ func TestRunnerContextHandling(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	tests := []struct {
-		name        string
-		cancelDelay time.Duration
-		wantErr     error
+		name    string
+		timeout bool
+		wantErr error
 	}{
 		{
-			name:        "context cancellation",
-			cancelDelay: 50 * time.Millisecond,
-			wantErr:     context.Canceled,
+			name:    "context cancellation",
+			wantErr: context.Canceled,
 		},
 		{
-			name:        "context timeout",
-			cancelDelay: 100 * time.Millisecond,
-			wantErr:     context.DeadlineExceeded,
+			name:    "context timeout",
+			timeout: true,
+			wantErr: context.DeadlineExceeded,
 		},
 	}
 
@@ -178,20 +186,16 @@ func TestRunnerContextHandling(t *testing.T) {
 			}
 
 			out := make(chan []ynabber.Transaction, 1)
-			var runnerErr error
+			runnerErr := make(chan error, 1)
 
 			// Create mock context based on test case
 			var ctx context.Context
 			var cancel context.CancelFunc
 
-			if tt.name == "context timeout" {
-				ctx, cancel = context.WithTimeout(context.Background(), tt.cancelDelay)
+			if tt.timeout {
+				ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 			} else {
 				ctx, cancel = context.WithCancel(context.Background())
-				go func() {
-					time.Sleep(tt.cancelDelay)
-					cancel()
-				}()
 			}
 			defer cancel()
 
@@ -200,7 +204,7 @@ func TestRunnerContextHandling(t *testing.T) {
 				for {
 					select {
 					case <-ctx.Done():
-						runnerErr = ctx.Err()
+						runnerErr <- ctx.Err()
 						return
 					default:
 					}
@@ -210,7 +214,7 @@ func TestRunnerContextHandling(t *testing.T) {
 					select {
 					case out <- batch:
 					case <-ctx.Done():
-						runnerErr = ctx.Err()
+						runnerErr <- ctx.Err()
 						return
 					}
 
@@ -218,7 +222,7 @@ func TestRunnerContextHandling(t *testing.T) {
 						select {
 						case <-time.After(reader.Config.Interval):
 						case <-ctx.Done():
-							runnerErr = ctx.Err()
+							runnerErr <- ctx.Err()
 							return
 						}
 					} else {
@@ -227,11 +231,23 @@ func TestRunnerContextHandling(t *testing.T) {
 				}
 			}()
 
-			// Wait for the runner to finish
-			time.Sleep(150 * time.Millisecond)
+			select {
+			case <-out:
+			case <-time.After(time.Second):
+				t.Fatal("runner did not send a batch")
+			}
 
-			if runnerErr != tt.wantErr {
-				t.Errorf("expected error %v, got %v", tt.wantErr, runnerErr)
+			if !tt.timeout {
+				cancel()
+			}
+
+			select {
+			case got := <-runnerErr:
+				if got != tt.wantErr {
+					t.Errorf("expected error %v, got %v", tt.wantErr, got)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("runner did not stop")
 			}
 		})
 	}

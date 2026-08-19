@@ -22,7 +22,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Test
-        run: go test -v ./...
+        run: go test -race -v ./...
 
   vuln:
     runs-on: ubuntu-latest
