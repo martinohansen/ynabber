@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/martinohansen/ynabber"
 )
 
@@ -54,295 +56,237 @@ func TestReaderRetryHandler(t *testing.T) {
 	}
 }
 
-// TestRunnerOneShotMode tests Runner behavior in one-shot mode (interval = 0)
-// This test verifies the Runner loop exits after one iteration when interval is 0
+// TestRunnerOneShotMode verifies that the production runner fetches and sends
+// one batch when the interval is zero.
 func TestRunnerOneShotMode(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	tests := []struct {
-		name     string
-		interval time.Duration
-		want     int // Expected number of send attempts before exit
-	}{
-		{
-			name:     "one-shot mode",
-			interval: 0,
-			want:     1,
-		},
-		{
-			name:     "continuous with timeout",
-			interval: 100 * time.Millisecond,
-			want:     2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			reader := Reader{
-				Config: Config{
-					Interval: tt.interval,
-				},
-				logger: logger,
-			}
-
-			out := make(chan []ynabber.Transaction, 10)
-			sendCount := make(chan int, 1)
-
-			// Create a context with a timeout to prevent infinite loops
-			ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
-			defer cancel()
-
-			// Create a modified Runner that uses a stub Bulk instead
-			// We'll test this by checking the loop behavior
-			go func() {
-				count := 0
-				defer func() {
-					sendCount <- count
-				}()
-
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					default:
-					}
-
-					// Simulate Bulk returning one transaction
-					batch := []ynabber.Transaction{
-						{
-							ID:     ynabber.ID("tx-test"),
-							Payee:  "Test",
-							Amount: ynabber.Milliunits(10000),
-						},
-					}
-
-					select {
-					case out <- batch:
-						count++
-					case <-ctx.Done():
-						return
-					}
-
-					if reader.Config.Interval > 0 {
-						reader.logger.Debug("waiting for next run", "in", reader.Config.Interval)
-						select {
-						case <-time.After(reader.Config.Interval):
-						case <-ctx.Done():
-							return
-						}
-					} else {
-						// One-shot mode: exit after first send
-						return
-					}
-				}
-			}()
-
-			var got int
-			select {
-			case got = <-sendCount:
-			case <-time.After(time.Second):
-				t.Fatal("runner did not stop")
-			}
-
-			// In one-shot mode, should send exactly 1
-			if tt.interval == 0 && got != 1 {
-				t.Errorf("one-shot mode: expected 1 send, got %d", got)
-			}
-			// In continuous mode with timeout, should send at least 2
-			if tt.interval > 0 && got < 2 {
-				t.Errorf("continuous mode: expected at least 2 sends, got %d", got)
-			}
-		})
-	}
-}
-
-// TestRunnerContextHandling tests that Runner respects context cancellation
-func TestRunnerContextHandling(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	tests := []struct {
-		name    string
-		timeout bool
-		wantErr error
-	}{
-		{
-			name:    "context cancellation",
-			wantErr: context.Canceled,
-		},
-		{
-			name:    "context timeout",
-			timeout: true,
-			wantErr: context.DeadlineExceeded,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			reader := Reader{
-				Config: Config{
-					Interval: 10 * time.Second,
-				},
-				logger: logger,
-			}
-
-			out := make(chan []ynabber.Transaction, 1)
-			runnerErr := make(chan error, 1)
-
-			// Create mock context based on test case
-			var ctx context.Context
-			var cancel context.CancelFunc
-
-			if tt.timeout {
-				ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-			} else {
-				ctx, cancel = context.WithCancel(context.Background())
-			}
-			defer cancel()
-
-			// We'll run a simplified version of Runner that demonstrates context handling
-			go func() {
-				for {
-					select {
-					case <-ctx.Done():
-						runnerErr <- ctx.Err()
-						return
-					default:
-					}
-
-					batch := []ynabber.Transaction{}
-
-					select {
-					case out <- batch:
-					case <-ctx.Done():
-						runnerErr <- ctx.Err()
-						return
-					}
-
-					if reader.Config.Interval > 0 {
-						select {
-						case <-time.After(reader.Config.Interval):
-						case <-ctx.Done():
-							runnerErr <- ctx.Err()
-							return
-						}
-					} else {
-						return
-					}
-				}
-			}()
-
-			select {
-			case <-out:
-			case <-time.After(time.Second):
-				t.Fatal("runner did not send a batch")
-			}
-
-			if !tt.timeout {
-				cancel()
-			}
-
-			select {
-			case got := <-runnerErr:
-				if got != tt.wantErr {
-					t.Errorf("expected error %v, got %v", tt.wantErr, got)
-				}
-			case <-time.After(time.Second):
-				t.Fatal("runner did not stop")
-			}
-		})
-	}
-}
-
-// TestRunnerChannelBehavior tests that Runner properly handles channel operations
-func TestRunnerChannelBehavior(t *testing.T) {
-	tests := []struct {
-		name            string
-		bufferedChannel bool
-		wantBatches     int
-	}{
-		{
-			name:            "buffered channel",
-			bufferedChannel: true,
-			wantBatches:     1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var out chan []ynabber.Transaction
-			if tt.bufferedChannel {
-				out = make(chan []ynabber.Transaction, 5)
-			} else {
-				out = make(chan []ynabber.Transaction)
-			}
-
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			// Send a batch to the channel
-			batch := []ynabber.Transaction{
-				{
-					ID:     ynabber.ID("tx-1"),
-					Payee:  "Test Payee",
-					Amount: ynabber.Milliunits(50000),
-				},
-			}
-
-			go func() {
-				out <- batch
-				cancel()
-			}()
-
-			// Receive from channel
-			receivedBatches := 0
-			for {
-				select {
-				case b := <-out:
-					receivedBatches++
-					if len(b) != 1 {
-						t.Errorf("expected batch size 1, got %d", len(b))
-					}
-					if b[0].Payee != "Test Payee" {
-						t.Errorf("expected payee 'Test Payee', got '%s'", b[0].Payee)
-					}
-				case <-ctx.Done():
-					goto done
-				}
-			}
-
-		done:
-			if receivedBatches != tt.wantBatches {
-				t.Errorf("expected %d batches, got %d", tt.wantBatches, receivedBatches)
-			}
-		})
-	}
-}
-
-// TestRunnerErrorPropagation tests that Runner properly handles and propagates errors
-func TestRunnerErrorPropagation(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	want := []ynabber.Transaction{{
+		ID:     "tx-test",
+		Payee:  "Test",
+		Amount: 10000,
+	}}
+	calls := 0
 	reader := Reader{
-		Config: Config{
-			Interval: 0,
-		},
+		Config: Config{Interval: 0},
 		logger: logger,
+		bulkFn: func(context.Context) ([]ynabber.Transaction, error) {
+			calls++
+			return want, nil
+		},
+	}
+	out := make(chan []ynabber.Transaction, 1)
+
+	if err := reader.Runner(context.Background(), out); err != nil {
+		t.Fatalf("Runner() error = %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("Bulk calls = %d, want 1", calls)
 	}
 
-	ctx := context.Background()
+	select {
+	case got := <-out:
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("batch mismatch (-want +got):\n%s", diff)
+		}
+	default:
+		t.Fatal("Runner() did not send a batch")
+	}
+}
 
-	// Test that retryHandler returns the error
-	testErr := errors.New("test error")
-	returnedErr := reader.retryHandler(ctx, testErr)
-
-	if returnedErr != testErr {
-		t.Errorf("retryHandler should return the same error, got %v want %v", returnedErr, testErr)
+// TestRunnerContinuousMode drives the production runner with a controlled
+// timer, so repeated execution and cancellation need no wall-clock sleeps.
+func TestRunnerContinuousMode(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	interval := 5 * time.Minute
+	ticks := make(chan time.Time)
+	waits := make(chan time.Duration, 2)
+	calls := 0
+	reader := Reader{
+		Config: Config{Interval: interval},
+		logger: logger,
+		bulkFn: func(context.Context) ([]ynabber.Transaction, error) {
+			calls++
+			return []ynabber.Transaction{{ID: ynabber.ID(fmt.Sprintf("tx-%d", calls))}}, nil
+		},
+		afterFn: func(delay time.Duration) <-chan time.Time {
+			waits <- delay
+			return ticks
+		},
 	}
 
-	// Test with nil error
-	nilErr := reader.retryHandler(ctx, nil)
-	if nilErr != nil {
-		t.Errorf("retryHandler should return nil for nil input, got %v", nilErr)
+	ctx, cancel := context.WithCancel(context.Background())
+	out := make(chan []ynabber.Transaction)
+	runnerErr := make(chan error, 1)
+	go func() {
+		runnerErr <- reader.Runner(ctx, out)
+	}()
+
+	for wantCall := 1; wantCall <= 2; wantCall++ {
+		select {
+		case batch := <-out:
+			if len(batch) != 1 || batch[0].ID != ynabber.ID(fmt.Sprintf("tx-%d", wantCall)) {
+				t.Fatalf("batch %d = %+v", wantCall, batch)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("Runner() did not send batch %d", wantCall)
+		}
+
+		select {
+		case got := <-waits:
+			if got != interval {
+				t.Fatalf("wait after batch %d = %v, want %v", wantCall, got, interval)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("Runner() did not wait after batch %d", wantCall)
+		}
+
+		if wantCall == 1 {
+			ticks <- time.Now()
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-runnerErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Runner() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Runner() did not stop after cancellation")
+	}
+	if calls != 2 {
+		t.Fatalf("Bulk calls = %d, want 2", calls)
+	}
+}
+
+// TestRunnerCancellationWhileSending verifies that cancellation releases a
+// runner whose output channel has no receiver.
+func TestRunnerCancellationWhileSending(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	fetched := make(chan struct{})
+	reader := Reader{
+		Config: Config{Interval: 0},
+		logger: logger,
+		bulkFn: func(context.Context) ([]ynabber.Transaction, error) {
+			close(fetched)
+			return []ynabber.Transaction{{ID: "tx-test"}}, nil
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runnerErr := make(chan error, 1)
+	go func() {
+		runnerErr <- reader.Runner(ctx, make(chan []ynabber.Transaction))
+	}()
+
+	select {
+	case <-fetched:
+	case <-time.After(time.Second):
+		t.Fatal("Runner() did not fetch a batch")
+	}
+	cancel()
+
+	select {
+	case err := <-runnerErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Runner() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Runner() remained blocked on output")
+	}
+}
+
+// TestRunnerErrorPropagation verifies that the production runner returns
+// one-shot read failures unchanged.
+func TestRunnerErrorPropagation(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	wantErr := errors.New("test error")
+	reader := Reader{
+		Config: Config{Interval: 0},
+		logger: logger,
+		bulkFn: func(context.Context) ([]ynabber.Transaction, error) {
+			return nil, wantErr
+		},
+	}
+
+	err := reader.Runner(context.Background(), make(chan []ynabber.Transaction))
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Runner() error = %v, want %v", err, wantErr)
+	}
+}
+
+// TestRunnerRetriesHandledError verifies that the production runner retries a
+// handled failure, sends the recovered batch, and resumes its normal interval.
+func TestRunnerRetriesHandledError(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	interval := time.Hour
+	retryDelay := 30 * time.Second
+	ticks := make(chan time.Time)
+	waits := make(chan time.Duration, 2)
+	calls := 0
+	reader := Reader{
+		Config:     Config{Interval: interval},
+		logger:     logger,
+		retryDelay: retryDelay,
+		bulkFn: func(context.Context) ([]ynabber.Transaction, error) {
+			calls++
+			if calls == 1 {
+				return nil, ErrRateLimit
+			}
+			return []ynabber.Transaction{{ID: "recovered"}}, nil
+		},
+		afterFn: func(delay time.Duration) <-chan time.Time {
+			waits <- delay
+			return ticks
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runnerErr := make(chan error, 1)
+	out := make(chan []ynabber.Transaction)
+	go func() {
+		runnerErr <- reader.Runner(ctx, out)
+	}()
+
+	select {
+	case got := <-waits:
+		if got != retryDelay {
+			t.Fatalf("retry wait = %v, want %v", got, retryDelay)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Runner() did not wait before retrying")
+	}
+	ticks <- time.Now()
+
+	select {
+	case batch := <-out:
+		if len(batch) != 1 || batch[0].ID != "recovered" {
+			t.Fatalf("recovered batch = %+v", batch)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Runner() did not send the recovered batch")
+	}
+
+	select {
+	case got := <-waits:
+		if got != interval {
+			t.Fatalf("normal wait = %v, want %v", got, interval)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Runner() did not resume its normal interval")
+	}
+
+	cancel()
+	select {
+	case err := <-runnerErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Runner() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Runner() did not stop after cancellation")
+	}
+	if calls != 2 {
+		t.Fatalf("Bulk calls = %d, want 2", calls)
 	}
 }
 

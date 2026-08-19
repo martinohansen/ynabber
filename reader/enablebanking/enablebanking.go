@@ -166,6 +166,10 @@ type Reader struct {
 	Auth   Auth
 	Client *Client
 	logger *slog.Logger
+	// bulkFn and afterFn let runner tests exercise the production loop without
+	// making network requests or waiting on wall-clock timers.
+	bulkFn  func(context.Context) ([]ynabber.Transaction, error)
+	afterFn func(time.Duration) <-chan time.Time
 	// retryDelay overrides the default backoff between retries.
 	// Zero means use retryBaseDelay. Set in tests to keep them fast.
 	retryDelay time.Duration
