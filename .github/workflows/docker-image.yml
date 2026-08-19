@@ -23,26 +23,108 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Set up Docker
+        uses: docker/setup-docker-action@v5
+        with:
+          daemon-config: |
+            {"features":{"containerd-snapshotter":true}}
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
           platforms: ${{ env.PLATFORMS }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: ${{ env.PLATFORMS }}
-          push: false
+          load: true
+          tags: ynabber:smoke
           cache-to: type=gha,mode=max
           cache-from: type=gha
 
+      - name: Save Docker image
+        run: docker save --output "$RUNNER_TEMP/ynabber.tar" ynabber:smoke
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v6
+        with:
+          name: ynabber-image
+          path: ${{ runner.temp }}/ynabber.tar
+          compression-level: 0
+          retention-days: 1
+
+  smoke-test:
+    name: Smoke test (${{ matrix.platform }})
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+          - linux/arm/v7
+          - linux/arm/v6
+
+    steps:
+      - name: Set up Docker
+        uses: docker/setup-docker-action@v5
+        with:
+          daemon-config: |
+            {"features":{"containerd-snapshotter":true}}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v7
+        with:
+          name: ynabber-image
+          path: ${{ runner.temp }}
+
+      - name: Load Docker image
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: docker load --input "$RUNNER_TEMP/ynabber.tar" --platform "$PLATFORM"
+
+      - name: Run container
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+
+          container_id="$(docker run --detach \
+            --platform "$PLATFORM" \
+            --env YNABBER_READERS=generator \
+            --env YNABBER_WRITERS=json \
+            --env YNABBER_GENERATOR_BULK_SIZE=1 \
+            --env YNABBER_GENERATOR_INTERVAL=1h \
+            ynabber:smoke)"
+          trap 'docker rm --force "$container_id" >/dev/null 2>&1' EXIT
+          sleep 2
+
+          docker logs "$container_id" >output.json 2>container.log
+          cat container.log >&2
+          cat output.json
+
+          if ! jq --exit-status \
+            'length == 1 and (.[0].id | startswith("gen_"))' \
+            output.json >/dev/null ||
+            test "$(docker inspect --format '{{.State.Running}}' "$container_id")" != true; then
+            docker inspect \
+              --format 'status={{.State.Status}} exit_code={{.State.ExitCode}}' \
+              "$container_id" >&2
+            exit 1
+          fi
+
+          echo "Verified $PLATFORM: Ynabber is running and emitted a generated transaction"
+
   push:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, smoke-test]
     if: github.repository == 'martinohansen/ynabber' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: read
