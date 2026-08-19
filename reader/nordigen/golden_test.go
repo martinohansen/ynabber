@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"testing"
-	"time"
 
 	upstream "github.com/frieser/nordigen-go-lib/v2"
 	"github.com/google/go-cmp/cmp"
@@ -42,23 +41,14 @@ func TestTransactionGolden(t *testing.T) {
 		t.Fatalf("map fixture: %v", err)
 	}
 
-	want := []ynabber.Transaction{
-		{
-			Account: account,
-			ID:      "fixture-credit-20240115-001",
-			Date:    time.Date(2024, time.January, 15, 0, 0, 0, 0, time.UTC),
-			Payee:   "Monthly salary",
-			Memo:    "Monthly salary",
-			Amount:  125750,
-		},
-		{
-			Account: account,
-			ID:      "fixture-debit-20240116-001",
-			Date:    time.Date(2024, time.January, 16, 0, 0, 0, 0, time.UTC),
-			Payee:   "Example Grocer",
-			Memo:    "Example Grocer",
-			Amount:  -27450,
-		},
+	wantFixture, err := os.ReadFile("testdata/canonical.json")
+	if err != nil {
+		t.Fatalf("read canonical fixture: %v", err)
+	}
+
+	var want []ynabber.Transaction
+	if err := json.Unmarshal(wantFixture, &want); err != nil {
+		t.Fatalf("decode canonical fixture: %v", err)
 	}
 
 	if diff := cmp.Diff(want, got); diff != "" {

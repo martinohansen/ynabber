@@ -1,0 +1,26 @@
+[
+  {
+    "account": {
+      "ID": "fixture-account",
+      "Name": "Fixture current account",
+      "IBAN": "XX000000000000000000"
+    },
+    "id": "fixture-credit-20240115-001",
+    "date": "2024-01-15T00:00:00Z",
+    "payee": "Monthly salary",
+    "memo": "Monthly salary",
+    "amount": 125750
+  },
+  {
+    "account": {
+      "ID": "fixture-account",
+      "Name": "Fixture current account",
+      "IBAN": "XX000000000000000000"
+    },
+    "id": "fixture-debit-20240116-001",
+    "date": "2024-01-16T00:00:00Z",
+    "payee": "Example Grocer",
+    "memo": "Example Grocer",
+    "amount": -27450
+  }
+]

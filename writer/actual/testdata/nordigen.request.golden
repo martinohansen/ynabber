@@ -1,0 +1,32 @@
+{
+  "method": "POST",
+  "path": "/v1/budgets/fixture-budget/accounts/actual-nordigen-account/transactions/import",
+  "content_type": "application/json",
+  "api_key": "fixture-api-key",
+  "encryption_password": "fixture-encryption-password",
+  "body": {
+    "transactions": [
+      {
+        "account": "actual-nordigen-account",
+        "date": "2024-01-15",
+        "amount": 12575,
+        "payee_name": "Monthly salary",
+        "notes": "Monthly salary",
+        "imported_payee": "Monthly salary",
+        "imported_id": "YA:95c9ab3261c136f68e5edf2b94e2b"
+      },
+      {
+        "account": "actual-nordigen-account",
+        "date": "2024-01-16",
+        "amount": -2745,
+        "payee_name": "Example Grocer",
+        "notes": "Example Grocer",
+        "imported_payee": "Example Grocer",
+        "imported_id": "YA:79d0f51b9d1399f1853fed0158bf6"
+      }
+    ],
+    "defaultCleared": true,
+    "reimportDeleted": true,
+    "dryRun": true
+  }
+}

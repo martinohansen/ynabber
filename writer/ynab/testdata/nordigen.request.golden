@@ -1,0 +1,30 @@
+{
+  "method": "POST",
+  "path": "/v1/budgets/fixture-budget/transactions",
+  "content_type": "application/json",
+  "authorization": "Bearer fixture-token",
+  "body": {
+    "transactions": [
+      {
+        "account_id": "ynab-nordigen-account",
+        "date": "2024-01-15",
+        "amount": "125750",
+        "payee_name": "Monthly salary",
+        "memo": "Monthly salary",
+        "import_id": "YBBR:ac5fbf603aa8259ce14ae2b454a",
+        "cleared": "reconciled",
+        "approved": false
+      },
+      {
+        "account_id": "ynab-nordigen-account",
+        "date": "2024-01-16",
+        "amount": "-27450",
+        "payee_name": "Example Grocer",
+        "memo": "Example Grocer",
+        "import_id": "YBBR:0f3eced7375c71d084fdb8e3215",
+        "cleared": "reconciled",
+        "approved": false
+      }
+    ]
+  }
+}

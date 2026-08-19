@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/martinohansen/ynabber"
@@ -39,28 +38,14 @@ func TestTransactionGolden(t *testing.T) {
 		got = append(got, *mapped)
 	}
 
-	canonicalAccount := ynabber.Account{
-		ID:   "fixture-session-account",
-		Name: "Fixture current account",
-		IBAN: "NO0000000000001",
+	wantFixture, err := os.ReadFile("testdata/canonical.json")
+	if err != nil {
+		t.Fatalf("read canonical fixture: %v", err)
 	}
-	want := []ynabber.Transaction{
-		{
-			Account: canonicalAccount,
-			ID:      "fixture-credit-001",
-			Date:    time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
-			Payee:   "Monthly salary",
-			Memo:    "Monthly salary",
-			Amount:  1250500,
-		},
-		{
-			Account: canonicalAccount,
-			ID:      "fixture-debit-001",
-			Date:    time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC),
-			Payee:   "Example Grocer",
-			Memo:    "Card purchase",
-			Amount:  -27450,
-		},
+
+	var want []ynabber.Transaction
+	if err := json.Unmarshal(wantFixture, &want); err != nil {
+		t.Fatalf("decode canonical fixture: %v", err)
 	}
 
 	if diff := cmp.Diff(want, got); diff != "" {
