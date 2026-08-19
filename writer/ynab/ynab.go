@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 const maxMemoSize int = 200                   // Max size of memo field
 const maxPayeeSize int = 200                  // Max size of payee_name field
 const maxResponseBodyBytes = 10 * 1024 * 1024 // Max response body size to read
+const defaultBaseURL = "https://api.youneedabudget.com/v1"
 
 var space = regexp.MustCompile(`\s+`) // Matches all whitespace characters
 
@@ -41,9 +43,15 @@ type Transactions struct {
 	Transactions []Transaction `json:"transactions"`
 }
 
+type httpClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
 type Writer struct {
-	Config Config
-	logger *slog.Logger
+	Config  Config
+	logger  *slog.Logger
+	client  httpClient
+	baseURL string
 }
 
 // String returns the name of the writer
@@ -65,6 +73,8 @@ func NewWriter() (Writer, error) {
 			"writer", "ynab",
 			"budget_id", cfg.BudgetID,
 		),
+		client:  &http.Client{Timeout: 30 * time.Second},
+		baseURL: defaultBaseURL,
 	}, nil
 }
 
@@ -208,23 +218,33 @@ func (w Writer) Bulk(ctx context.Context, t []ynabber.Transaction) error {
 		return nil
 	}
 
-	url := fmt.Sprintf("https://api.youneedabudget.com/v1/budgets/%s/transactions", w.Config.BudgetID)
+	baseURL := w.baseURL
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
+	requestURL := fmt.Sprintf(
+		"%s/budgets/%s/transactions",
+		strings.TrimRight(baseURL, "/"),
+		url.PathEscape(w.Config.BudgetID),
+	)
 
 	payload, err := json.Marshal(y)
 	if err != nil {
 		return err
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", w.Config.Token))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", w.Config.Token))
 
 	log.Trace(w.logger, "http request", "method", req.Method, "url", req.URL.String(), "body", payload)
+	client := w.client
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
 	res, err := client.Do(req)
 	if err != nil {
 		return err
