@@ -22,7 +22,45 @@ jobs:
           go-version-file: go.mod
 
       - name: Test
-        run: go test -race -v ./...
+        run: go test -race -covermode=atomic -coverprofile=coverage.out -v ./... | tee test-output.txt
+
+      - name: Report coverage
+        run: |
+          coverage_total="$(go tool cover -func=coverage.out | awk 'END {print $NF}')"
+          go tool cover -html=coverage.out -o coverage.html
+
+          {
+            echo "### Test coverage"
+            echo
+            echo "**Total statement coverage: ${coverage_total}**"
+            echo
+            echo "| Package | Coverage |"
+            echo "| --- | ---: |"
+            awk '
+              /coverage:/ {
+                package_name = ($1 == "ok" ? $2 : $1)
+                coverage = $0
+                sub(/^.*coverage: /, "", coverage)
+                sub(/ .*/, "", coverage)
+                sub(/^github.com\/martinohansen\/ynabber\/?/, "", package_name)
+                if (package_name == "") {
+                  package_name = "(root)"
+                }
+                printf "| `%s` | %s |\n", package_name, coverage
+              }
+            ' test-output.txt | sort
+            echo
+            echo "Download the \`coverage-report\` artifact for the HTML report and raw Go profile."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: |
+            coverage.html
+            coverage.out
+          retention-days: 7
 
   vuln:
     runs-on: ubuntu-latest
