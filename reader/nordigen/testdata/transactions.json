@@ -1,0 +1,39 @@
+{
+  "transactions": {
+    "booked": [
+      {
+        "transactionId": "fixture-credit-20240115-001",
+        "internalTransactionId": "fixture-internal-credit-001",
+        "debtorName": "Example Employer",
+        "debtorAccount": {
+          "iban": "XX000000000000000001"
+        },
+        "transactionAmount": {
+          "currency": "EUR",
+          "amount": "125.75"
+        },
+        "bookingDate": "2024-01-15",
+        "valueDate": "2024-01-15",
+        "bankTransactionCode": "PMNT-RCDT",
+        "remittanceInformationUnstructured": "Monthly salary"
+      },
+      {
+        "transactionId": "fixture-debit-20240116-001",
+        "internalTransactionId": "fixture-internal-debit-001",
+        "creditorName": "Example Grocer",
+        "creditorAccount": {
+          "iban": "XX000000000000000002"
+        },
+        "transactionAmount": {
+          "currency": "EUR",
+          "amount": "-27.45"
+        },
+        "bookingDate": "2024-01-16",
+        "valueDate": "2024-01-16",
+        "bankTransactionCode": "PMNT-CCRD",
+        "remittanceInformationUnstructured": "Example Grocer"
+      }
+    ],
+    "pending": []
+  }
+}

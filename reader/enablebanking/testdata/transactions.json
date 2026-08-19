@@ -1,0 +1,62 @@
+{
+  "continuation_key": "fixture-next-page-key",
+  "transactions": [
+    {
+      "entry_reference": "fixture-credit-001",
+      "merchant_category_code": null,
+      "transaction_amount": {
+        "currency": "NOK",
+        "amount": "1250.50"
+      },
+      "creditor": null,
+      "debtor": {
+        "name": "Example Employer"
+      },
+      "bank_transaction_code": {
+        "description": "Credit transfer",
+        "code": "PMNT",
+        "sub_code": "RCDT"
+      },
+      "credit_debit_indicator": "CRDT",
+      "status": "BOOK",
+      "booking_date": "2024-02-01",
+      "value_date": "2024-02-01",
+      "transaction_date": "2024-02-01",
+      "reference_number": null,
+      "remittance_information": [
+        "Monthly salary"
+      ],
+      "note": null,
+      "transaction_id": "fixture-detail-selector-credit"
+    },
+    {
+      "entry_reference": "fixture-debit-001",
+      "merchant_category_code": "5411",
+      "transaction_amount": {
+        "currency": "NOK",
+        "amount": "27.45"
+      },
+      "creditor": {
+        "name": "Example Grocer"
+      },
+      "debtor": null,
+      "bank_transaction_code": {
+        "description": "Debit card purchase",
+        "code": "PMNT",
+        "sub_code": "DCRD"
+      },
+      "credit_debit_indicator": "DBIT",
+      "status": "BOOK",
+      "booking_date": "2024-02-02",
+      "value_date": "2024-02-02",
+      "transaction_date": "2024-02-01",
+      "reference_number": null,
+      "remittance_information": [
+        "Example Grocer",
+        "Card purchase"
+      ],
+      "note": null,
+      "transaction_id": "fixture-detail-selector-debit"
+    }
+  ]
+}

@@ -4,6 +4,7 @@
 *.csv
 *.env
 *.json
+!reader/**/testdata/*.json
 *.pem
 
 ynabber
