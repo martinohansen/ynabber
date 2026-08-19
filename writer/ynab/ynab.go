@@ -52,6 +52,8 @@ type Writer struct {
 	logger  *slog.Logger
 	client  httpClient
 	baseURL string
+	// now keeps date filtering deterministic in tests.
+	now func() time.Time
 }
 
 // String returns the name of the writer
@@ -75,6 +77,7 @@ func NewWriter() (Writer, error) {
 		),
 		client:  &http.Client{Timeout: 30 * time.Second},
 		baseURL: defaultBaseURL,
+		now:     time.Now,
 	}, nil
 }
 
@@ -180,6 +183,9 @@ func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
 // ynabber.Config.
 func (w Writer) checkTransactionDateValidity(date time.Time) bool {
 	now := time.Now()
+	if w.now != nil {
+		now = w.now()
+	}
 	fiveYearsAgo := now.AddDate(-5, 0, 0)
 	fromDate := time.Time(w.Config.FromDate)
 	delay := w.Config.Delay

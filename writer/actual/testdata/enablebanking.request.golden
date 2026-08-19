@@ -1,0 +1,32 @@
+{
+  "method": "POST",
+  "path": "/v1/budgets/fixture-budget/accounts/actual-enablebanking-account/transactions/import",
+  "content_type": "application/json",
+  "api_key": "fixture-api-key",
+  "encryption_password": "fixture-encryption-password",
+  "body": {
+    "transactions": [
+      {
+        "account": "actual-enablebanking-account",
+        "date": "2024-02-01",
+        "amount": 125050,
+        "payee_name": "Monthly salary",
+        "notes": "Monthly salary",
+        "imported_payee": "Monthly salary",
+        "imported_id": "YA:e69b5e926eb1ccc72b83170bec4cb"
+      },
+      {
+        "account": "actual-enablebanking-account",
+        "date": "2024-02-02",
+        "amount": -2745,
+        "payee_name": "Example Grocer",
+        "notes": "Card purchase",
+        "imported_payee": "Card purchase",
+        "imported_id": "YA:740fbdf8779f11a6c6e3531590f36"
+      }
+    ],
+    "defaultCleared": true,
+    "reimportDeleted": true,
+    "dryRun": true
+  }
+}
