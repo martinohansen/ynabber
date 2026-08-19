@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -834,5 +835,67 @@ func TestAccountInfoParsesAccountIDFromSession(t *testing.T) {
 					account.AccountID.Other.SchemeName, tt.wantSchemeName)
 			}
 		})
+	}
+}
+
+func TestPromptForRedirectURLStopsWhileWaitingForInput(t *testing.T) {
+	redirectReader, redirectWriter := io.Pipe()
+	defer redirectReader.Close()
+	defer redirectWriter.Close()
+
+	auth := Auth{redirectInput: redirectReader}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := auth.promptForRedirectURL(ctx, "expected-state")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("promptForRedirectURL() error = %v, want context deadline exceeded", err)
+	}
+}
+
+func TestPromptForRedirectURLStopsDuringEOFBackoff(t *testing.T) {
+	auth := Auth{redirectInput: strings.NewReader("")}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := auth.promptForRedirectURL(ctx, "expected-state")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("promptForRedirectURL() error = %v, want context deadline exceeded", err)
+	}
+}
+
+type eofThenDataReader struct {
+	returnedEOF bool
+	data        *strings.Reader
+}
+
+func (r *eofThenDataReader) Read(p []byte) (int, error) {
+	if !r.returnedEOF {
+		r.returnedEOF = true
+		return 0, io.EOF
+	}
+	return r.data.Read(p)
+}
+
+func TestPromptForRedirectURLReadsAgainAfterEOF(t *testing.T) {
+	const (
+		expectedState = "expected-state"
+		expectedCode  = "authorization-code"
+	)
+
+	input := &eofThenDataReader{
+		data: strings.NewReader("https://callback.example/?code=" + expectedCode +
+			"&state=" + expectedState + "\n"),
+	}
+	auth := Auth{redirectInput: input}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	code, err := auth.promptForRedirectURL(ctx, expectedState)
+	if err != nil {
+		t.Fatalf("promptForRedirectURL() returned error after initial EOF: %v", err)
+	}
+	if code != expectedCode {
+		t.Errorf("promptForRedirectURL() code = %q, want %q", code, expectedCode)
 	}
 }

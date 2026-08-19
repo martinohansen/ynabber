@@ -31,8 +31,8 @@ const (
 	accessRequestDays = 10
 )
 
-// ErrSessionExpired is returned when the API rejects the session (HTTP 401)
-// or when the session's valid_until timestamp has passed.
+// ErrSessionExpired is returned when a replacement session is also rejected
+// by the API and automatic reauthorization cannot safely continue.
 var ErrSessionExpired = errors.New("session expired")
 
 // Claims represents the JWT claims for EnableBanking API
@@ -161,10 +161,11 @@ type GetAspspsResponse struct {
 
 // Auth handles authentication and session management for EnableBanking
 type Auth struct {
-	Config     Config
-	baseURL    string
-	httpClient *http.Client
-	logger     *slog.Logger
+	Config        Config
+	baseURL       string
+	httpClient    *http.Client
+	redirectInput io.Reader
+	logger        *slog.Logger
 }
 
 // NewAuth creates a new Auth handler
@@ -175,7 +176,8 @@ func NewAuth(cfg Config, logger *slog.Logger) Auth {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		logger: logger,
+		redirectInput: os.Stdin,
+		logger:        logger,
 	}
 }
 
@@ -220,27 +222,37 @@ func (a Auth) getMaxConsentDuration(ctx context.Context, jwtToken string) time.D
 // Session attempts to get session from disk, if it fails it will initiate
 // a new authorization flow and create a session
 func (a Auth) Session(ctx context.Context) (Session, error) {
+	session, _, err := a.acquireSession(ctx)
+	return session, err
+}
+
+// acquireSession returns a usable session and reports whether this call had to
+// complete a new authorization flow.
+func (a Auth) acquireSession(ctx context.Context) (Session, bool, error) {
 	// Try to load existing session from disk
 	sessionFile, err := os.ReadFile(a.Config.SessionFile)
 	if errors.Is(err, os.ErrNotExist) {
 		a.logger.Info("session file not found, initiating new authorization")
-		return a.createNewSession(ctx)
+		session, err := a.createNewSession(ctx)
+		return session, true, err
 	} else if err != nil {
-		return Session{}, fmt.Errorf("reading session file: %w", err)
+		return Session{}, false, fmt.Errorf("reading session file: %w", err)
 	}
 
 	var session Session
 	if err := json.Unmarshal(sessionFile, &session); err != nil {
 		a.logger.Error("parsing session file", "error", err)
-		return a.createNewSession(ctx)
+		session, err := a.createNewSession(ctx)
+		return session, true, err
 	}
 
 	if session.IsExpired() {
-		a.logger.Info("session expired (valid_until passed), re-authorization required",
+		a.logger.Info("session expired (valid_until passed), initiating new authorization",
 			"file", a.Config.SessionFile,
 			"valid_until", session.ValidUntil,
 		)
-		return Session{}, fmt.Errorf("%w: valid_until=%s", ErrSessionExpired, session.ValidUntil)
+		session, err := a.createNewSession(ctx)
+		return session, true, err
 	}
 
 	// Placeholder file: accounts are listed but no authorization has been
@@ -249,17 +261,47 @@ func (a Auth) Session(ctx context.Context) (Session, error) {
 		a.logger.Info("session file has no createdAt (placeholder), initiating new authorization",
 			"file", a.Config.SessionFile,
 		)
-		return a.createNewSession(ctx)
+		session, err := a.createNewSession(ctx)
+		return session, true, err
 	}
 
 	jwtToken, err := a.generateJWT()
 	if err != nil {
-		return Session{}, fmt.Errorf("generating JWT: %w", err)
+		return Session{}, false, fmt.Errorf("generating JWT: %w", err)
 	}
 	session.AuthToken = jwtToken
 
 	a.logger.Info("loaded session from disk", "file", a.Config.SessionFile)
-	return session, nil
+	return session, false, nil
+}
+
+// invalidateSession removes a session that the API has rejected. The next
+// call to Session will initiate a new authorization flow. A missing file is
+// already invalidated and is not an error.
+func (a Auth) invalidateSession() error {
+	err := os.Remove(a.Config.SessionFile)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("removing rejected session file: %w", err)
+	}
+
+	a.logger.Info("removed rejected session; new authorization required",
+		"file", a.Config.SessionFile,
+	)
+	return nil
+}
+
+// reauthorize discards a session rejected by the API and creates its
+// replacement. Keeping this operation in Auth makes the session lifecycle
+// explicit instead of using a missing file to signal intent to the runner.
+func (a Auth) reauthorize(ctx context.Context) (Session, error) {
+	if err := a.invalidateSession(); err != nil {
+		return Session{}, err
+	}
+
+	return a.createNewSession(ctx)
 }
 
 // saveSession persists the session to disk
@@ -310,7 +352,7 @@ func (a Auth) createNewSession(ctx context.Context) (Session, error) {
 
 	// Prompt user to paste the full redirect URL; code and state are extracted
 	// and validated inside the function.
-	code, err := a.promptForRedirectURL(state)
+	code, err := a.promptForRedirectURL(ctx, state)
 	if err != nil {
 		return Session{}, fmt.Errorf("reading authorization code: %w", err)
 	}
@@ -461,6 +503,28 @@ func (a Auth) initiateAuthorization(ctx context.Context, jwtToken string) (strin
 	return authResp.URL, stateUUID, nil
 }
 
+type redirectReadResult struct {
+	line string
+	err  error
+}
+
+// readRedirectLine keeps a blocking terminal read from delaying shutdown. The
+// buffered channel lets the read finish after the caller's context is done.
+func readRedirectLine(ctx context.Context, reader *bufio.Reader) (string, error) {
+	result := make(chan redirectReadResult, 1)
+	go func() {
+		line, err := reader.ReadString('\n')
+		result <- redirectReadResult{line: line, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case read := <-result:
+		return read.line, read.err
+	}
+}
+
 // promptForRedirectURL asks the operator to paste the full redirect URL after
 // completing the authorization flow, then extracts and validates the code and
 // state query parameters. Validating the state guards against a code from a
@@ -469,17 +533,28 @@ func (a Auth) initiateAuthorization(ctx context.Context, jwtToken string) (strin
 // When stdin returns EOF (e.g. a container started without an attached
 // terminal), the function waits and retries — allowing the operator to attach
 // to the running container and provide input rather than crashing immediately.
-func (a Auth) promptForRedirectURL(expectedState string) (string, error) {
+func (a Auth) promptForRedirectURL(ctx context.Context, expectedState string) (string, error) {
+	input := a.redirectInput
+	if input == nil {
+		input = os.Stdin
+	}
+	reader := bufio.NewReader(input)
+
 	fmt.Fprint(os.Stderr, "Paste the full redirect URL, then press Enter:\n> ")
 	for {
-		reader := bufio.NewReader(os.Stdin)
-		line, err := reader.ReadString('\n')
+		line, err := readRedirectLine(ctx, reader)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// No terminal attached yet — wait and retry so the operator
 				// can attach to the container (e.g. docker attach) and paste.
-				time.Sleep(2 * time.Second)
-				continue
+				timer := time.NewTimer(2 * time.Second)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return "", ctx.Err()
+				case <-timer.C:
+					continue
+				}
 			}
 			return "", fmt.Errorf("reading from stdin: %w", err)
 		}

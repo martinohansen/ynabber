@@ -20,9 +20,16 @@ import (
 // ErrRateLimit is returned when the API responds with HTTP 429 Too Many Requests.
 var ErrRateLimit = errors.New("rate limited")
 
-// ErrUnauthorized is returned when the API responds with HTTP 401 Unauthorized,
-// indicating the session has been revoked or has expired server-side.
+// ErrUnauthorized is returned when the API reports EXPIRED_SESSION. Enable
+// Banking uses HTTP 401 for other errors too, so the response code alone must
+// not trigger reauthorization.
 var ErrUnauthorized = errors.New("session rejected by API")
+
+const expiredSessionErrorCode = "EXPIRED_SESSION"
+
+type apiErrorResponse struct {
+	Error string `json:"error"`
+}
 
 const (
 	// maxResponseBodyBytes caps how much of an EnableBanking response body we
@@ -136,7 +143,10 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 		return nil, fmt.Errorf("%w: %s", ErrRateLimit, string(respBody))
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("%w: %s", ErrUnauthorized, string(respBody))
+		var apiErr apiErrorResponse
+		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error == expiredSessionErrorCode {
+			return nil, fmt.Errorf("%w: %s", ErrUnauthorized, string(respBody))
+		}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
@@ -203,12 +213,47 @@ func (r Reader) String() string {
 
 // Bulk fetches all accounts and their transactions
 func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
-	// Get or create session
-	session, err := r.Auth.Session(ctx)
+	session, authorized, err := r.Auth.acquireSession(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting session: %w", err)
 	}
 
+	results, err := r.fetchSessionTransactions(ctx, session)
+	if !errors.Is(err, ErrUnauthorized) {
+		return results, err
+	}
+	if authorized {
+		return nil, r.rejectedNewSessionError(err)
+	}
+
+	r.logger.Info("session rejected by API; initiating new authorization")
+	replacement, reauthErr := r.Auth.reauthorize(ctx)
+	if reauthErr != nil {
+		return nil, fmt.Errorf("reauthorizing rejected session: %w", reauthErr)
+	}
+
+	results, err = r.fetchSessionTransactions(ctx, replacement)
+	if !errors.Is(err, ErrUnauthorized) {
+		return results, err
+	}
+
+	return nil, r.rejectedNewSessionError(err)
+}
+
+// rejectedNewSessionError invalidates credentials that failed immediately
+// after authorization. ErrSessionExpired remains available to the runner even
+// when invalidation also fails.
+func (r Reader) rejectedNewSessionError(fetchErr error) error {
+	sessionErr := fmt.Errorf("%w: newly authorized session rejected by API: %w", ErrSessionExpired, fetchErr)
+	if invalidateErr := r.Auth.invalidateSession(); invalidateErr != nil {
+		return fmt.Errorf("%w; discarding rejected session: %w", sessionErr, invalidateErr)
+	}
+	return sessionErr
+}
+
+// fetchSessionTransactions fetches and maps every account in one authorized
+// session. It returns no partial batch when an account request fails.
+func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) ([]ynabber.Transaction, error) {
 	if len(session.Accounts) == 0 {
 		return nil, fmt.Errorf("no accounts found in session")
 	}
@@ -217,7 +262,6 @@ func (r Reader) Bulk(ctx context.Context) ([]ynabber.Transaction, error) {
 
 	r.logger.Info("loaded session", "accounts", len(session.Accounts))
 
-	// Fetch transactions for each account
 	var results []ynabber.Transaction
 	fromDate := time.Time(r.Config.FromDate).Format(dateFormat)
 	toDateTime, err := r.Config.GetToDate()

@@ -14,25 +14,29 @@ import (
 	"time"
 )
 
-func TestBulkPropagatesAccountFetchErrors(t *testing.T) {
+func TestFetchSessionTransactionsPropagatesAccountErrors(t *testing.T) {
 	tests := []struct {
 		name       string
 		statusCode int
+		body       string
 		wantIs     error
 	}{
 		{
-			name:       "unauthorized session",
+			name:       "expired session",
 			statusCode: http.StatusUnauthorized,
+			body:       `{"message":"Session expired","code":401,"error":"EXPIRED_SESSION"}`,
 			wantIs:     ErrUnauthorized,
 		},
 		{
 			name:       "rate limit",
 			statusCode: http.StatusTooManyRequests,
+			body:       `{"error":"rate limited"}`,
 			wantIs:     ErrRateLimit,
 		},
 		{
 			name:       "transient server failure",
 			statusCode: http.StatusServiceUnavailable,
+			body:       `{"error":"temporarily unavailable"}`,
 		},
 	}
 
@@ -40,7 +44,7 @@ func TestBulkPropagatesAccountFetchErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.statusCode)
-				_, _ = fmt.Fprintf(w, `{"error":"status %d"}`, tt.statusCode)
+				_, _ = fmt.Fprint(w, tt.body)
 			}))
 			defer server.Close()
 
@@ -51,15 +55,20 @@ func TestBulkPropagatesAccountFetchErrors(t *testing.T) {
 				},
 			})
 
-			transactions, err := reader.Bulk(context.Background())
+			ctx := context.Background()
+			session, err := reader.Auth.Session(ctx)
+			if err != nil {
+				t.Fatalf("Session() error = %v", err)
+			}
+			transactions, err := reader.fetchSessionTransactions(ctx, session)
 			if err == nil {
-				t.Fatalf("Bulk() error = nil, want HTTP %d error", tt.statusCode)
+				t.Fatalf("fetchSessionTransactions() error = nil, want HTTP %d error", tt.statusCode)
 			}
 			if transactions != nil {
-				t.Fatalf("Bulk() transactions = %#v, want nil after fetch failure", transactions)
+				t.Fatalf("fetchSessionTransactions() transactions = %#v, want nil after fetch failure", transactions)
 			}
 			if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
-				t.Errorf("Bulk() error = %v, want errors.Is(error, %v)", err, tt.wantIs)
+				t.Errorf("fetchSessionTransactions() error = %v, want errors.Is(error, %v)", err, tt.wantIs)
 			}
 			if !strings.Contains(err.Error(), `account "NO98...8901"`) {
 				t.Errorf("Bulk() error = %q, want masked account context", err)
@@ -68,7 +77,53 @@ func TestBulkPropagatesAccountFetchErrors(t *testing.T) {
 	}
 }
 
-func TestBulkDiscardsPartialResultsAfterAccountFetchError(t *testing.T) {
+func TestBulkPreservesSessionForUnrelated401(t *testing.T) {
+	transactionRequests := 0
+	authorizationRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/transactions") {
+			transactionRequests++
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = fmt.Fprint(w, `{"message":"Unauthorized IP","code":401,"error":"UNAUTHORIZED_IP"}`)
+			return
+		}
+
+		authorizationRequests++
+		http.Error(w, "unexpected authorization request", http.StatusConflict)
+	}))
+	defer server.Close()
+
+	reader := newBulkTestReader(t, server, []AccountInfo{
+		{
+			UID:       "account-1",
+			AccountID: AccountID{IBAN: "NO9812345678901"},
+		},
+	})
+	reader.Auth.baseURL = server.URL
+	reader.Auth.httpClient = server.Client()
+
+	transactions, err := reader.Bulk(context.Background())
+	if err == nil {
+		t.Fatal("Bulk() error = nil, want unauthorized IP error")
+	}
+	if transactions != nil {
+		t.Fatalf("Bulk() transactions = %#v, want nil", transactions)
+	}
+	if errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("Bulk() error = %v, must not classify UNAUTHORIZED_IP as expired", err)
+	}
+	if transactionRequests != 1 {
+		t.Fatalf("transaction request count = %d, want 1", transactionRequests)
+	}
+	if authorizationRequests != 0 {
+		t.Fatalf("authorization request count = %d, want 0", authorizationRequests)
+	}
+	if _, statErr := os.Stat(reader.Auth.Config.SessionFile); statErr != nil {
+		t.Fatalf("stored session was removed after unrelated 401: %v", statErr)
+	}
+}
+
+func TestFetchSessionTransactionsDiscardsPartialResults(t *testing.T) {
 	requests := make([]string, 0, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.URL.Path)
@@ -106,12 +161,17 @@ func TestBulkDiscardsPartialResultsAfterAccountFetchError(t *testing.T) {
 		},
 	})
 
-	transactions, err := reader.Bulk(context.Background())
+	ctx := context.Background()
+	session, err := reader.Auth.Session(ctx)
+	if err != nil {
+		t.Fatalf("Session() error = %v", err)
+	}
+	transactions, err := reader.fetchSessionTransactions(ctx, session)
 	if err == nil {
-		t.Fatal("Bulk() error = nil, want second account fetch error")
+		t.Fatal("fetchSessionTransactions() error = nil, want second account fetch error")
 	}
 	if transactions != nil {
-		t.Fatalf("Bulk() returned partial transactions %#v, want nil", transactions)
+		t.Fatalf("fetchSessionTransactions() returned partial transactions %#v, want nil", transactions)
 	}
 	if len(requests) != 2 {
 		t.Fatalf("transaction request count = %d, want 2; paths = %v", len(requests), requests)

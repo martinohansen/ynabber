@@ -775,19 +775,13 @@ func TestClientGetAccountTransactionsRateLimit(t *testing.T) {
 			wantErr:    true,
 			wantIsRL:   false,
 		},
-		{
-			name:       "HTTP 401 returns ErrUnauthorized (not ErrRateLimit)",
-			statusCode: http.StatusUnauthorized,
-			wantErr:    true,
-			wantIsRL:   false,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tt.statusCode)
-				fmt.Fprintf(w, `{"error":"status %d"}`, tt.statusCode)
+				_, _ = fmt.Fprintf(w, `{"error":"status %d"}`, tt.statusCode)
 			}))
 			defer server.Close()
 
@@ -806,9 +800,6 @@ func TestClientGetAccountTransactionsRateLimit(t *testing.T) {
 			}
 			if !tt.wantIsRL && err != nil && errors.Is(err, ErrRateLimit) {
 				t.Errorf("expected errors.Is(err, ErrRateLimit) = false, got true")
-			}
-			if tt.statusCode == http.StatusUnauthorized && !errors.Is(err, ErrUnauthorized) {
-				t.Errorf("HTTP 401: expected errors.Is(err, ErrUnauthorized) = true; err = %v", err)
 			}
 		})
 	}

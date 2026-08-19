@@ -2,9 +2,15 @@ package enablebanking
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -324,6 +330,314 @@ func TestRunnerErrorPropagation(t *testing.T) {
 	}
 }
 
+func TestBulkReauthorizesServerRejectedSession(t *testing.T) {
+	const (
+		rejectedAccountUID    = "rejected-account"
+		replacementAccountUID = "replacement-account"
+		replacementIBAN       = "NO9812345678901"
+	)
+
+	tempDir := t.TempDir()
+	sessionPath := filepath.Join(tempDir, "session.json")
+	keyPath := filepath.Join(tempDir, "key.pem")
+
+	sessionData, err := json.Marshal(Session{
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+		ValidUntil: time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339),
+		Accounts:   []AccountInfo{{UID: rejectedAccountUID}},
+	})
+	if err != nil {
+		t.Fatalf("marshaling session: %v", err)
+	}
+	if err := os.WriteFile(sessionPath, sessionData, 0600); err != nil {
+		t.Fatalf("writing session: %v", err)
+	}
+	if err := os.WriteFile(keyPath, generateTestKeyPair(t), 0600); err != nil {
+		t.Fatalf("writing PEM key: %v", err)
+	}
+
+	redirectReader, redirectWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("creating redirect input pipe: %v", err)
+	}
+	defer redirectReader.Close()
+	defer redirectWriter.Close()
+
+	rejectedTransactionRequests := 0
+	replacementTransactionRequests := 0
+	authorizationRequests := 0
+	sessionRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/accounts/"+rejectedAccountUID+"/transactions"):
+			rejectedTransactionRequests++
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"Session expired","code":401,"error":"EXPIRED_SESSION"}`))
+		case strings.Contains(r.URL.Path, "/accounts/"+replacementAccountUID+"/transactions"):
+			replacementTransactionRequests++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"transactions":[{
+					"entry_reference":"replacement-entry",
+					"transaction_id":"replacement-transaction",
+					"booking_date":"2024-01-15",
+					"credit_debit_indicator":"CRDT",
+					"status":"BOOK",
+					"transaction_amount":{"currency":"NOK","amount":"100.00"},
+					"remittance_information":["Replacement transaction"]
+				}],
+				"pending":[]
+			}`))
+		case r.URL.Path == "/aspsps":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"aspsps":[]}`))
+		case r.URL.Path == "/auth":
+			authorizationRequests++
+			if authorizationRequests > 1 {
+				http.Error(w, "unexpected repeated authorization", http.StatusConflict)
+				return
+			}
+			var request AuthorizationRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decoding authorization request: %v", err)
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			if _, err := fmt.Fprintf(redirectWriter,
+				"https://callback.example/?code=replacement-code&state=%s\n", request.State); err != nil {
+				t.Errorf("writing redirect input: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"url":"https://bank.example/authorize","id":"authorization-1"}`))
+		case r.URL.Path == "/sessions":
+			sessionRequests++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{
+				"createdAt":"%s",
+				"accounts":[{"uid":%q,"account_id":{"iban":%q}}],
+				"access":{"valid_until":"%s"}
+			}`,
+				time.Now().UTC().Format(time.RFC3339),
+				replacementAccountUID,
+				replacementIBAN,
+				time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339),
+			)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	authConfig := Config{
+		AppID:       "test-app",
+		ASPSP:       "test-bank",
+		Country:     "NO",
+		PEMFile:     keyPath,
+		SessionFile: sessionPath,
+	}
+	reader := Reader{
+		Config: Config{
+			FromDate: Date(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
+			ToDate:   Date(time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)),
+		},
+		Auth: Auth{
+			Config:        authConfig,
+			baseURL:       server.URL,
+			httpClient:    server.Client(),
+			redirectInput: redirectReader,
+			logger:        logger,
+		},
+		Client: &Client{
+			BaseURL:    server.URL,
+			HTTPClient: server.Client(),
+			logger:     logger,
+		},
+		logger: logger,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	batch, err := reader.Bulk(ctx)
+	if err != nil {
+		t.Fatalf("Bulk() returned error after successful reauthorization: %v", err)
+	}
+	if len(batch) != 1 {
+		t.Fatalf("output batch transactions = %d, want 1", len(batch))
+	}
+	if batch[0].ID != "replacement-entry" {
+		t.Errorf("output transaction ID = %q, want %q", batch[0].ID, "replacement-entry")
+	}
+	if rejectedTransactionRequests != 1 {
+		t.Errorf("rejected-session transaction requests = %d, want 1", rejectedTransactionRequests)
+	}
+	if replacementTransactionRequests != 1 {
+		t.Errorf("replacement-session transaction requests = %d, want 1", replacementTransactionRequests)
+	}
+	if authorizationRequests != 1 {
+		t.Errorf("authorization requests = %d, want 1", authorizationRequests)
+	}
+	if sessionRequests != 1 {
+		t.Errorf("session requests = %d, want 1", sessionRequests)
+	}
+
+	persistedData, err := os.ReadFile(sessionPath)
+	if err != nil {
+		t.Fatalf("reading replacement session: %v", err)
+	}
+	var persisted Session
+	if err := json.Unmarshal(persistedData, &persisted); err != nil {
+		t.Fatalf("parsing replacement session: %v", err)
+	}
+	if len(persisted.Accounts) != 1 || persisted.Accounts[0].UID != replacementAccountUID {
+		t.Errorf("persisted accounts = %+v, want replacement account %q", persisted.Accounts, replacementAccountUID)
+	}
+}
+
+func TestBulkStopsWhenFreshSessionIsRejected(t *testing.T) {
+	const accountUID = "rejected-account"
+
+	tempDir := t.TempDir()
+	sessionPath := filepath.Join(tempDir, "session.json")
+	keyPath := filepath.Join(tempDir, "key.pem")
+
+	sessionData, err := json.Marshal(Session{
+		CreatedAt:  time.Now().UTC().AddDate(0, 0, -11).Format(time.RFC3339),
+		ValidUntil: time.Now().UTC().Add(-time.Second).Format(time.RFC3339),
+		Accounts:   []AccountInfo{{UID: accountUID}},
+	})
+	if err != nil {
+		t.Fatalf("marshaling session: %v", err)
+	}
+	if err := os.WriteFile(sessionPath, sessionData, 0600); err != nil {
+		t.Fatalf("writing session: %v", err)
+	}
+	if err := os.WriteFile(keyPath, generateTestKeyPair(t), 0600); err != nil {
+		t.Fatalf("writing PEM key: %v", err)
+	}
+
+	redirectReader, redirectWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("creating redirect input pipe: %v", err)
+	}
+	defer redirectReader.Close()
+	defer redirectWriter.Close()
+
+	transactionRequests := 0
+	authorizationRequests := 0
+	sessionRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/transactions"):
+			transactionRequests++
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"Session expired","code":401,"error":"EXPIRED_SESSION"}`))
+		case r.URL.Path == "/aspsps":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"aspsps":[]}`))
+		case r.URL.Path == "/auth":
+			authorizationRequests++
+			if authorizationRequests > 1 {
+				http.Error(w, "unexpected repeated authorization", http.StatusConflict)
+				return
+			}
+			var request AuthorizationRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decoding authorization request: %v", err)
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			if _, err := fmt.Fprintf(redirectWriter,
+				"https://callback.example/?code=replacement-code&state=%s\n", request.State); err != nil {
+				t.Errorf("writing redirect input: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"url":"https://bank.example/authorize","id":"authorization-1"}`))
+		case r.URL.Path == "/sessions":
+			sessionRequests++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{
+				"createdAt":"%s",
+				"accounts":[{"uid":%q}],
+				"access":{"valid_until":"%s"}
+			}`,
+				time.Now().UTC().Format(time.RFC3339),
+				accountUID,
+				time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339),
+			)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	authConfig := Config{
+		AppID:       "test-app",
+		ASPSP:       "test-bank",
+		Country:     "NO",
+		PEMFile:     keyPath,
+		SessionFile: sessionPath,
+	}
+	reader := Reader{
+		Config: Config{
+			FromDate: Date(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
+			ToDate:   Date(time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)),
+		},
+		Auth: Auth{
+			Config:        authConfig,
+			baseURL:       server.URL,
+			httpClient:    server.Client(),
+			redirectInput: redirectReader,
+			logger:        logger,
+		},
+		Client: &Client{
+			BaseURL:    server.URL,
+			HTTPClient: server.Client(),
+			logger:     logger,
+		},
+		logger: logger,
+	}
+
+	_, err = reader.Bulk(context.Background())
+	if !errors.Is(err, ErrSessionExpired) {
+		t.Fatalf("Bulk() error = %v, want ErrSessionExpired after fresh session rejection", err)
+	}
+	if transactionRequests != 1 {
+		t.Errorf("transaction requests = %d, want 1", transactionRequests)
+	}
+	if authorizationRequests != 1 {
+		t.Errorf("authorization requests = %d, want 1", authorizationRequests)
+	}
+	if sessionRequests != 1 {
+		t.Errorf("session requests = %d, want 1", sessionRequests)
+	}
+	if _, statErr := os.Stat(sessionPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf("rejected fresh session file still exists; os.Stat error = %v", statErr)
+	}
+}
+
+func TestRejectedFreshSessionIsFatalWhenInvalidationFails(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session")
+	if err := os.Mkdir(sessionPath, 0700); err != nil {
+		t.Fatalf("creating session directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionPath, "keep"), []byte("test"), 0600); err != nil {
+		t.Fatalf("making session directory non-empty: %v", err)
+	}
+
+	reader := Reader{Auth: Auth{Config: Config{SessionFile: sessionPath}}}
+	err := reader.rejectedNewSessionError(ErrUnauthorized)
+	if !errors.Is(err, ErrSessionExpired) {
+		t.Fatalf("rejectedNewSessionError() error = %v, want ErrSessionExpired", err)
+	}
+	if !strings.Contains(err.Error(), "discarding rejected session") {
+		t.Fatalf("rejectedNewSessionError() error = %v, want invalidation context", err)
+	}
+}
+
 // TestRetryHandlerContinuousMode tests retry/backoff behaviour when running in
 // continuous mode (Interval > 0).
 func TestRetryHandlerContinuousMode(t *testing.T) {
@@ -352,7 +666,7 @@ func TestRetryHandlerContinuousMode(t *testing.T) {
 			wantNil: false,
 		},
 		{
-			name:    "ErrUnauthorized (API 401) is fatal — wraps as ErrSessionExpired",
+			name:    "raw ErrUnauthorized is fatal",
 			err:     ErrUnauthorized,
 			wantNil: false,
 		},
