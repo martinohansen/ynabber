@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
+	"github.com/martinohansen/ynabber/internal/web"
 )
 
 // Config for the generator reader
@@ -18,6 +20,17 @@ type Config struct {
 
 	// BatchSize is the number of transactions to generate in each bulk
 	BatchSize int `envconfig:"YNABBER_GENERATOR_BULK_SIZE" default:"2"`
+}
+
+// Reader generates random transactions for testing purposes.
+type Reader struct {
+	Config Config
+	logger *slog.Logger
+
+	mu             sync.Mutex
+	totalGenerated int
+	lastBatch      int
+	lastRun        time.Time
 }
 
 // NewReader creates a new generator
@@ -34,25 +47,43 @@ func NewReader() (*Reader, error) {
 	}, nil
 }
 
-// Reader generates random transactions for testing purposes
-type Reader struct {
-	Config Config
-	logger *slog.Logger
+// Name implements web.Component.
+func (r *Reader) Name() string { return "generator" }
+
+// String implements fmt.Stringer (used by ynabber.Reader).
+func (r *Reader) String() string { return "generator" }
+
+// Status implements web.StatusProvider.
+func (r *Reader) Status() web.ComponentStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	lastRun := "never"
+	if !r.lastRun.IsZero() {
+		lastRun = r.lastRun.Format(time.RFC3339)
+	}
+
+	return web.ComponentStatus{
+		Healthy: r.totalGenerated > 0 || r.lastRun.IsZero(),
+		Summary: "Generates synthetic transactions for testing",
+		Fields: []web.StatusField{
+			{Label: "interval", Value: r.Config.Interval.String()},
+			{Label: "batch size", Value: fmt.Sprintf("%d", r.Config.BatchSize)},
+			{Label: "total generated", Value: fmt.Sprintf("%d", r.totalGenerated)},
+			{Label: "last batch", Value: fmt.Sprintf("%d", r.lastBatch)},
+			{Label: "last run", Value: lastRun},
+		},
+	}
 }
 
-func (r Reader) String() string {
-	return "generator"
-}
-
-// Bulk generates transactions
-func (r Reader) Bulk() ([]ynabber.Transaction, error) {
+// Bulk generates a batch of random transactions.
+func (r *Reader) Bulk() ([]ynabber.Transaction, error) {
 	account := ynabber.Account{
 		ID:   ynabber.ID("GB33BUKB20201555555555"),
 		Name: "Checking Account",
 		IBAN: "GB33BUKB20201555555555",
 	}
 
-	// Sample payees and memos for realistic transactions
 	payees := []string{
 		"Grocery Store", "Gas Station", "Coffee Shop", "Restaurant",
 		"Online Store", "Utility Company", "Bank Transfer", "ATM Withdrawal",
@@ -67,31 +98,27 @@ func (r Reader) Bulk() ([]ynabber.Transaction, error) {
 
 	transactions := make([]ynabber.Transaction, r.Config.BatchSize)
 	for i := 0; i < r.Config.BatchSize; i++ {
-		// Random payee and memo
-		payee := payees[rand.Intn(len(payees))]
-		memo := memos[rand.Intn(len(memos))]
-
-		// Random amount between -500.00 and 500.00 (in milliunits)
-		amount := ynabber.Milliunits(rand.Intn(1000000) - 500000)
-
-		// Use current time
-		date := time.Now().UTC()
-
 		transactions[i] = ynabber.Transaction{
 			Account: account,
 			ID:      ynabber.ID(fmt.Sprintf("gen_%d_%d", time.Now().UnixNano(), i)),
-			Date:    date,
-			Payee:   payee,
-			Memo:    memo,
-			Amount:  amount,
+			Date:    time.Now().UTC(),
+			Payee:   payees[rand.Intn(len(payees))],
+			Memo:    memos[rand.Intn(len(memos))],
+			Amount:  ynabber.Milliunits(rand.Intn(1000000) - 500000),
 		}
 	}
+
+	r.mu.Lock()
+	r.totalGenerated += len(transactions)
+	r.lastBatch = len(transactions)
+	r.lastRun = time.Now()
+	r.mu.Unlock()
 
 	return transactions, nil
 }
 
-// Runner continuously generates transactions and sends them to out
-func (r Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) error {
+// Runner continuously generates transactions and sends them to out.
+func (r *Reader) Runner(ctx context.Context, out chan<- []ynabber.Transaction) error {
 	for {
 		select {
 		case <-ctx.Done():
