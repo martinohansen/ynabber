@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,6 +58,12 @@ func NewWriter() (Writer, error) {
 	if len(cfg.AccountMap) == 0 {
 		return Writer{}, errors.New("ACTUAL_ACCOUNTMAP is required")
 	}
+	if cfg.MaxRequestBytes <= 0 {
+		return Writer{}, errors.New("ACTUAL_MAX_REQUEST_BYTES must be greater than zero")
+	}
+	if cfg.BatchSize <= 0 {
+		return Writer{}, errors.New("ACTUAL_BATCH_SIZE must be greater than zero")
+	}
 
 	logger := slog.Default().With("writer", "actual", "budget_id", cfg.BudgetID)
 	c := client.NewClient(cfg.BaseURL, cfg.APIKey, cfg.EncryptionPassword, &http.Client{Timeout: 30 * time.Second}, logger)
@@ -69,22 +76,128 @@ func NewWriter() (Writer, error) {
 	}, nil
 }
 
-// Bulk sends a batch of transactions to Actual Budget, grouped by account.
+// importStats is the funnel a Bulk call moves transactions through, from the
+// ones handed to it down to the ones Actual confirmed. Keeping it in one type
+// means the summary is defined in a single place rather than reassembled from
+// counters spread across the import.
+type importStats struct {
+	accounts     int // accounts with at least one eligible transaction
+	eligible     int // mapped successfully and queued for import
+	attempted    int // included in a request that was sent
+	processed    int // included in a request that succeeded
+	added        int // reported as newly created by Actual
+	updated      int // reported as reconciled by Actual
+	skipped      int // outside the configured date range
+	failed       int // could not be mapped
+	importErrors int // accounts that reported a planning or request failure
+}
+
+// unattempted reports eligible transactions that no request covered, either
+// because planning failed for their account or because an earlier batch
+// stopped it.
+func (s importStats) unattempted() int { return s.eligible - s.attempted }
+
+// add folds one account's outcome into the run totals.
+func (s *importStats) add(res accountResult) {
+	s.attempted += res.attempted
+	s.processed += res.processed
+	s.added += res.added
+	s.updated += res.updated
+}
+
+// LogValue implements slog.LogValuer so the summary is emitted as one group
+// instead of a dozen loose attributes.
+func (s importStats) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Int("accounts", s.accounts),
+		slog.Int("eligible", s.eligible),
+		slog.Int("attempted", s.attempted),
+		slog.Int("processed", s.processed),
+		slog.Int("unattempted", s.unattempted()),
+		slog.Int("added", s.added),
+		slog.Int("updated", s.updated),
+		slog.Int("skipped", s.skipped),
+		slog.Int("failed", s.failed),
+		slog.Int("import_errors", s.importErrors),
+	)
+}
+
+// accountResult is what one account's import achieved. The counts describe
+// whatever was committed even when err is set, because Actual can report
+// changes alongside a failure.
+type accountResult struct {
+	attempted int
+	processed int
+	added     int
+	updated   int
+	err       error
+}
+
+// Bulk sends transactions to Actual Budget, grouped by account. Accounts and
+// their batches are processed sequentially. If a request fails, earlier
+// batches may already be committed; the remaining batches for that account are
+// not attempted, but processing continues for other accounts.
 func (w Writer) Bulk(ctx context.Context, transactions []ynabber.Transaction) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if len(transactions) == 0 {
 		w.logger.Info("no transactions received")
 		return nil
 	}
 
-	skipped := 0
-	failed := 0
+	grouped, stats := w.group(transactions)
+	if len(grouped) == 0 {
+		w.logger.Info("all transactions filtered out", "skipped", stats.skipped, "failed", stats.failed)
+		return nil
+	}
 
+	opts := client.ImportTransactionsOptions{
+		DefaultCleared:  w.Config.Cleared,
+		ReimportDeleted: w.Config.ReimportDeleted,
+		DryRun:          w.Config.DryRun,
+	}
+
+	var importErrors []error
+	// The summary describes what actually reached Actual, which is exactly what
+	// an operator needs after an import was cut short. Emit it on every exit
+	// path, including a cancelled context.
+	defer func() {
+		stats.importErrors = len(importErrors)
+		w.logger.Info("transaction import summary", "stats", stats, "dry_run", opts.DryRun)
+	}()
+
+	for _, accountID := range slices.Sorted(maps.Keys(grouped)) {
+		res := w.importAccount(ctx, accountID, grouped[accountID], opts)
+		stats.add(res)
+		if res.err == nil {
+			continue
+		}
+		// A cancelled context ends the whole run and outranks whatever error
+		// the in-flight request happened to report.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		importErrors = append(importErrors, res.err)
+	}
+
+	if len(importErrors) > 0 {
+		return fmt.Errorf("failed to import into %d Actual account(s): %w", len(importErrors), errors.Join(importErrors...))
+	}
+	return nil
+}
+
+// group filters transactions and maps the survivors into per-account Actual
+// payloads. Out-of-range dates and mapping failures are counted rather than
+// returned, so a single unmappable transaction cannot stop an import.
+func (w Writer) group(transactions []ynabber.Transaction) (map[string][]client.Transaction, importStats) {
 	grouped := make(map[string][]client.Transaction)
+	var stats importStats
 
 	for _, src := range transactions {
 		if !w.isDateAllowed(src.Date) {
-			w.logger.Debug("date out of range", "transaction", src)
-			skipped++
+			w.logger.Debug("date out of range", "import_id", makeID(src))
+			stats.skipped++
 			continue
 		}
 
@@ -92,59 +205,75 @@ func (w Writer) Bulk(ctx context.Context, transactions []ynabber.Transaction) er
 		if err != nil {
 			// Mapping failures are intentionally non-fatal so a bad batch
 			// cannot take down the writer. Individual failures are logged.
-			w.logger.Error("mapping transaction", "transaction", src, "error", err)
-			failed++
+			w.logger.Error("mapping transaction", "import_id", makeID(src), "error", err)
+			stats.failed++
 			continue
 		}
 
 		grouped[accountID] = append(grouped[accountID], payload)
+		stats.eligible++
 	}
 
-	if len(grouped) == 0 {
-		w.logger.Info("all transactions filtered out", "skipped", skipped, "failed", failed)
-		return nil
+	stats.accounts = len(grouped)
+	return grouped, stats
+}
+
+// importAccount plans and sends one account's transactions in order. The first
+// failure stops the account: earlier batches may already be committed, and
+// retrying them is safe because Actual reconciles by imported_id, but
+// continuing past a failure would only hammer an endpoint that just failed.
+func (w Writer) importAccount(ctx context.Context, accountID string, payloads []client.Transaction, opts client.ImportTransactionsOptions) accountResult {
+	batches, err := batchTransactions(payloads, opts, w.Config.MaxRequestBytes, w.Config.BatchSize)
+	if err != nil {
+		return accountResult{err: fmt.Errorf("account %s: batching transactions: %w", accountID, err)}
+	}
+	if opts.DryRun && len(batches) > 1 {
+		// Each dry-run request sees the unchanged budget. A real sequential
+		// import lets later batches reconcile against earlier committed ones.
+		w.logger.Warn(
+			"dry run spans multiple request batches; aggregate results may differ from a real import",
+			"account_id", accountID,
+			"batches", len(batches),
+		)
 	}
 
-	accountIDs := make([]string, 0, len(grouped))
-	for accountID := range grouped {
-		accountIDs = append(accountIDs, accountID)
-	}
-	sort.Strings(accountIDs)
-
-	opts := client.ImportTransactionsOptions{
-		DefaultCleared:  w.Config.Cleared,
-		ReimportDeleted: w.Config.ReimportDeleted,
-		DryRun:          w.Config.DryRun,
-	}
-	submitted := 0
-	added := 0
-	updated := 0
-	var importErrors []error
-	for _, accountID := range accountIDs {
-		payloads := grouped[accountID]
-		result, err := w.client.ImportTransactions(ctx, w.Config.BudgetID, accountID, payloads, opts)
-		if err != nil {
-			importErrors = append(importErrors, fmt.Errorf("account %s: %w", accountID, err))
-			continue
+	var res accountResult
+	for i, batch := range batches {
+		if err := ctx.Err(); err != nil {
+			res.err = err
+			return res
 		}
-		submitted += len(payloads)
-		added += result.Added
-		updated += result.Updated
-	}
-	if len(importErrors) > 0 {
-		return fmt.Errorf("failed to import into %d Actual account(s): %w", len(importErrors), errors.Join(importErrors...))
+
+		started := time.Now()
+		res.attempted += len(batch.transactions)
+		result, err := w.client.ImportTransactions(ctx, w.Config.BudgetID, accountID, batch.transactions, opts)
+		// Actual may report changes alongside an error, so bank the counts
+		// before deciding whether the batch succeeded.
+		res.added += result.Added
+		res.updated += result.Updated
+
+		logArgs := []any{
+			"account_id", accountID,
+			"batch", i + 1,
+			"batches", len(batches),
+			"transactions", len(batch.transactions),
+			"request_bytes", batch.requestBytes,
+			"max_request_bytes", w.Config.MaxRequestBytes,
+			"duration", time.Since(started),
+			"added", result.Added,
+			"updated", result.Updated,
+		}
+		if err != nil {
+			w.logger.Error("sending transaction batch", append(logArgs, "error", err)...)
+			res.err = fmt.Errorf("account %s batch %d/%d: %w", accountID, i+1, len(batches), err)
+			return res
+		}
+
+		res.processed += len(batch.transactions)
+		w.logger.Info("sent transaction batch", logArgs...)
 	}
 
-	w.logger.Info(
-		"sent transactions",
-		"accounts", len(grouped),
-		"submitted", submitted,
-		"added", added,
-		"updated", updated,
-		"skipped", skipped,
-		"failed", failed,
-	)
-	return nil
+	return res
 }
 
 // Runner reads batches of transactions from in and writes them using Bulk.
@@ -204,7 +333,23 @@ func accountParser(account ynabber.Account, accountMap map[string]string) (strin
 		}
 	}
 
-	return "", fmt.Errorf("no matching Actual account for ID=%q IBAN=%q", account.ID, account.IBAN)
+	return "", fmt.Errorf("no matching Actual account for ID=%q IBAN=%s", account.ID, maskIBAN(account.IBAN))
+}
+
+// maskIBAN reduces an IBAN to a form that still identifies which account failed
+// to map, so a misconfigured ACTUAL_ACCOUNTMAP is diagnosable, without writing
+// the full number into logs. An absent IBAN is reported as such to distinguish
+// it from a masked one.
+func maskIBAN(iban string) string {
+	const visible = 4
+	switch {
+	case iban == "":
+		return "<none>"
+	case len(iban) <= visible:
+		return strings.Repeat("*", len(iban))
+	default:
+		return strings.Repeat("*", len(iban)-visible) + iban[len(iban)-visible:]
+	}
 }
 
 // makeID returns a unique import ID to avoid duplicate transactions.
@@ -251,13 +396,13 @@ func (w Writer) toActual(src ynabber.Transaction) (client.Transaction, string, e
 
 	payee := strings.TrimSpace(space.ReplaceAllString(src.Payee, " "))
 	if r := []rune(payee); len(r) > maxPayeeSize {
-		w.logger.Warn("payee too long", "transaction", src, "max_size", maxPayeeSize)
+		w.logger.Warn("payee too long", "import_id", makeID(src), "max_size", maxPayeeSize)
 		payee = strings.TrimSpace(string(r[:maxPayeeSize]))
 	}
 
 	memo := strings.TrimSpace(space.ReplaceAllString(src.Memo, " "))
 	if r := []rune(memo); len(r) > maxMemoSize {
-		w.logger.Warn("memo too long", "transaction", src, "max_size", maxMemoSize)
+		w.logger.Warn("memo too long", "import_id", makeID(src), "max_size", maxMemoSize)
 		memo = strings.TrimSpace(string(r[:maxMemoSize]))
 	}
 
@@ -279,7 +424,7 @@ func (w Writer) toActual(src ynabber.Transaction) (client.Transaction, string, e
 		ImportedID:    makeID(src),
 	}
 
-	w.logger.Debug("mapped transaction", "from", src, "to", payload)
+	w.logger.Debug("mapped transaction", "import_id", payload.ImportedID, "account_id", accountID)
 	return payload, accountID, nil
 }
 

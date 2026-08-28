@@ -8,6 +8,14 @@ import (
 	"time"
 )
 
+// defaultMaxRequestBytes and defaultBatchSize mirror the envconfig "default"
+// tags on Config below, which are the single source of the runtime defaults.
+// TestNewWriterAppliesBatchDefaults enforces that the two stay in agreement.
+const (
+	defaultMaxRequestBytes = 80 * 1024
+	defaultBatchSize       = 100
+)
+
 type Date time.Time
 
 // Decode implements envconfig.Decoder, parsing a YYYY-MM-DD string into Date.
@@ -85,4 +93,12 @@ type Config struct {
 	// DryRun simulates the import without persisting any data. Useful for
 	// verifying mappings and deduplication before writing. Default is false.
 	DryRun bool `envconfig:"ACTUAL_DRY_RUN" default:"false"`
+
+	// MaxRequestBytes limits the encoded JSON body sent in one import request.
+	// Default is 80 KiB, leaving headroom below actual-http-api's default limit.
+	MaxRequestBytes int `envconfig:"ACTUAL_MAX_REQUEST_BYTES" default:"81920"`
+
+	// BatchSize limits the number of transactions sent in one import request.
+	// The byte and transaction limits are both enforced. Default is 100.
+	BatchSize int `envconfig:"ACTUAL_BATCH_SIZE" default:"100"`
 }

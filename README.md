@@ -108,6 +108,7 @@ Writers are destinations for fetched transactions.
 | Writer  | Description |
 |:--------|:------------|
 | [YNAB](./writer/ynab/) | Pushes transactions to a YNAB budget |
+| [Actual Budget](./writer/actual/) | Pushes transactions to Actual Budget through actual-http-api |
 | [JSON](./writer/json/) | Writes transactions as JSON to stdout (useful for testing) |
 
 ## Contributing
