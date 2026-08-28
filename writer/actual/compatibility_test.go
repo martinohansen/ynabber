@@ -41,7 +41,7 @@ func (c *compatibilityTransport) RoundTrip(request *http.Request) (*http.Respons
 	c.body = body
 	return &http.Response{
 		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(bytes.NewBufferString(`{"data":{"added":["one","two"],"updated":[]}}`)),
+		Body:       io.NopCloser(bytes.NewBufferString(`{"data":{"added":["one","two"],"updated":[],"errors":[]}}`)),
 		Header:     make(http.Header),
 	}, nil
 }
@@ -80,13 +80,13 @@ func TestCompatibilityMatrix(t *testing.T) {
 			transport := &compatibilityTransport{}
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			writer := Writer{
-				Config: Config{
+				Config: withBatchDefaults(Config{
 					BudgetID:        "fixture-budget",
 					AccountMap:      AccountMap{test.accountKey: test.accountID},
 					Cleared:         true,
 					ReimportDeleted: true,
 					DryRun:          true,
-				},
+				}),
 				logger: logger,
 				now: func() time.Time {
 					return time.Date(2026, time.August, 19, 12, 0, 0, 0, time.UTC)

@@ -17,13 +17,25 @@ writer settings.
   Actual account IDs.
 - `ACTUAL_DELAY` can help avoid duplicates if your bank mutates transaction
   data after booking.
-- Duplicates are reconciled by Actual using `imported_id`.
+- Duplicates are reconciled by Actual using `imported_id`. Repeated IDs in one
+  input are placed in separate requests so reconciliation is independent of the
+  configured batch limits.
 - `ACTUAL_CLEARED` defaults to `false` (transactions are uncleared unless
   configured otherwise).
 - `ACTUAL_REIMPORT_DELETED` defaults to `false` so transactions deleted in
   Actual are not imported again unless explicitly configured.
-- `ACTUAL_DRY_RUN` simulates the import without persisting any data. Useful for
-  verifying mappings and deduplication before writing.
+- `ACTUAL_DRY_RUN` simulates the import without persisting any data. Each batch
+  is evaluated independently against the unchanged budget, so aggregate counts
+  from a multi-batch dry run can differ from a real sequential import.
+- Imports are split sequentially per account. `ACTUAL_MAX_REQUEST_BYTES`
+  defaults to 80 KiB and limits the exact encoded request body;
+  `ACTUAL_BATCH_SIZE` defaults to 100 transactions. Both limits are enforced.
+  All batches for an account are planned before its first request, so an
+  oversized transaction prevents that account from being partially imported.
+- Requests are not atomic across batches. If a request fails, earlier batches
+  for the account may already be committed; later batches for that account are
+  not attempted, while other accounts continue. A retry is normally safe
+  because Actual reconciles transactions by `imported_id`.
 - `imported_payee` is sourced from the transaction memo (which contains the raw
   remittance information from the bank) so that Actual's payee-renaming rules
   can match against the full bank text rather than the already-stripped payee

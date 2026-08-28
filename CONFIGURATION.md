@@ -68,6 +68,8 @@ Package actual provides a writer implementation that sends transactions to an Ac
 | ACTUAL_CLEARED | `bool` | `false` | Cleared sets the transaction cleared flag for newly created transactions.<br>Default is false. |
 | ACTUAL_REIMPORT_DELETED | `bool` | `false` | ReimportDeleted controls whether Actual should reimport transactions that<br>were previously imported and then deleted. Default is false. |
 | ACTUAL_DRY_RUN | `bool` | `false` | DryRun simulates the import without persisting any data. Useful for<br>verifying mappings and deduplication before writing. Default is false. |
+| ACTUAL_MAX_REQUEST_BYTES | `int` | `81920` | MaxRequestBytes limits the encoded JSON body sent in one import request.<br>Default is 80 KiB, leaving headroom below actual-http-api's default limit. |
+| ACTUAL_BATCH_SIZE | `int` | `100` | BatchSize limits the number of transactions sent in one import request.<br>The byte and transaction limits are both enforced. Default is 100. |
 
 ## Ynab
 

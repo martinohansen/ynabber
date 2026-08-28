@@ -1,8 +1,6 @@
 package actual
 
 import (
-	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -10,30 +8,7 @@ import (
 	"time"
 
 	"github.com/martinohansen/ynabber"
-	"github.com/martinohansen/ynabber/writer/actual/client"
 )
-
-type fakeClient struct {
-	calls        []fakeCall
-	err          error
-	errByAccount map[string]error
-}
-
-type fakeCall struct {
-	budgetID     string
-	accountID    string
-	transactions []client.Transaction
-	options      client.ImportTransactionsOptions
-}
-
-func (f *fakeClient) ImportTransactions(ctx context.Context, budgetID, accountID string, transactions []client.Transaction, opts client.ImportTransactionsOptions) (client.ImportTransactionsResult, error) {
-	f.calls = append(f.calls, fakeCall{budgetID: budgetID, accountID: accountID, transactions: transactions, options: opts})
-	// errByAccount takes precedence over err when present.
-	if err := f.errByAccount[accountID]; err != nil {
-		return client.ImportTransactionsResult{}, err
-	}
-	return client.ImportTransactionsResult{}, f.err
-}
 
 func TestMakeID(t *testing.T) {
 	type args struct {
@@ -227,6 +202,48 @@ func TestAccountParser(t *testing.T) {
 	}
 }
 
+// TestAccountParserErrorIdentifiesAccount keeps the unmapped-account error
+// actionable: it has to name which account failed so ACTUAL_ACCOUNTMAP can be
+// corrected, while leaving the full IBAN out of logs.
+func TestAccountParserErrorIdentifiesAccount(t *testing.T) {
+	_, err := accountParser(
+		ynabber.Account{ID: "account-uid-123", IBAN: "NO9999999999"},
+		map[string]string{"foo": "bar"},
+	)
+	if err == nil {
+		t.Fatal("expected an error for an unmapped account")
+	}
+	for _, want := range []string{"account-uid-123", "********9999"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want it to contain %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "NO9999999999") {
+		t.Fatalf("error exposes the full IBAN: %v", err)
+	}
+}
+
+func TestMaskIBAN(t *testing.T) {
+	tests := []struct {
+		name string
+		iban string
+		want string
+	}{
+		{name: "absent", iban: "", want: "<none>"},
+		{name: "shorter than the visible tail", iban: "abc", want: "***"},
+		{name: "exactly the visible tail", iban: "abcd", want: "****"},
+		{name: "masks all but the tail", iban: "NO9876543210", want: "********3210"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := maskIBAN(tt.iban); got != tt.want {
+				t.Fatalf("maskIBAN(%q) = %q, want %q", tt.iban, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestToActualAmount(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -388,205 +405,37 @@ func TestWriterToActual(t *testing.T) {
 	}
 }
 
-func TestBulkGroupsTransactionsByAccount(t *testing.T) {
-	fc := &fakeClient{}
-
-	cfg := Config{
-		BudgetID:   "budget-1",
-		AccountMap: AccountMap{"IBAN1": "account-1", "IBAN2": "account-2"},
-		Cleared:    true,
-	}
-
+func TestWriterToActualDoesNotLogFinancialPayload(t *testing.T) {
+	var logs strings.Builder
 	writer := Writer{
-		Config: cfg,
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		now:    func() time.Time { return time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC) },
-		client: fc,
+		Config: Config{AccountMap: AccountMap{"IBAN1": "account-1"}},
+		logger: slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})),
 	}
 
-	txns := []ynabber.Transaction{
-		{
-			Account: ynabber.Account{IBAN: "IBAN1"},
-			ID:      "1",
-			Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
-			Payee:   "Payee 1",
-			Amount:  ynabber.Milliunits(1000),
-		},
-		{
-			Account: ynabber.Account{IBAN: "IBAN2"},
-			ID:      "2",
-			Date:    time.Date(2024, 5, 11, 0, 0, 0, 0, time.UTC),
-			Payee:   "Payee 2",
-			Amount:  ynabber.Milliunits(2000),
-		},
+	_, _, err := writer.toActual(ynabber.Transaction{
+		Account: ynabber.Account{IBAN: "IBAN1"},
+		ID:      "id-1",
+		Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
+		Payee:   "private-payee",
+		Memo:    "private-note",
+		Amount:  1000,
+	})
+	if err != nil {
+		t.Fatalf("toActual() error = %v", err)
 	}
 
-	if err := writer.Bulk(context.Background(), txns); err != nil {
-		t.Fatalf("Bulk() error = %v", err)
-	}
-
-	if len(fc.calls) != 2 {
-		t.Fatalf("expected 2 client calls, got %d", len(fc.calls))
-	}
-
-	for _, call := range fc.calls {
-		if call.budgetID != "budget-1" {
-			t.Fatalf("unexpected budget ID %s", call.budgetID)
-		}
-		if !call.options.DefaultCleared {
-			t.Fatalf("expected default cleared option")
-		}
-		if call.options.ReimportDeleted {
-			t.Fatalf("expected reimport deleted to default false")
-		}
-		if len(call.transactions) != 1 {
-			t.Fatalf("expected a single transaction per call")
+	got := logs.String()
+	for _, sensitive := range []string{"private-payee", "private-note", "IBAN1"} {
+		if strings.Contains(got, sensitive) {
+			t.Fatalf("debug log contains sensitive value %q: %s", sensitive, got)
 		}
 	}
-}
-
-func TestBulkSkipsMappingErrorsAndSendsValid(t *testing.T) {
-	fc := &fakeClient{}
-
-	writer := Writer{
-		Config: Config{
-			BudgetID:   "budget-1",
-			AccountMap: AccountMap{"IBAN1": "account-1"},
-		},
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		now:    func() time.Time { return time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC) },
-		client: fc,
-	}
-
-	txns := []ynabber.Transaction{
-		{
-			Account: ynabber.Account{IBAN: "IBAN1"},
-			ID:      "1",
-			Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
-			Amount:  ynabber.Milliunits(1000),
-		},
-		{
-			Account: ynabber.Account{IBAN: "UNKNOWN"},
-			ID:      "2",
-			Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
-			Amount:  ynabber.Milliunits(1000),
-		},
-	}
-
-	if err := writer.Bulk(context.Background(), txns); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if len(fc.calls) != 1 {
-		t.Fatalf("expected 1 client call for valid transaction, got %d", len(fc.calls))
-	}
-	if fc.calls[0].accountID != "account-1" {
-		t.Fatalf("expected call to account-1, got %s", fc.calls[0].accountID)
-	}
-	if len(fc.calls[0].transactions) != 1 {
-		t.Fatalf("expected 1 transaction in call, got %d", len(fc.calls[0].transactions))
-	}
-}
-
-func TestBulkReturnsClientError(t *testing.T) {
-	fc := &fakeClient{err: fmt.Errorf("boom")}
-
-	cfg := Config{
-		BudgetID:   "budget-1",
-		AccountMap: AccountMap{"IBAN1": "account-1"},
-	}
-
-	writer := Writer{
-		Config: cfg,
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		now:    func() time.Time { return time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC) },
-		client: fc,
-	}
-
-	txns := []ynabber.Transaction{
-		{
-			Account: ynabber.Account{IBAN: "IBAN1"},
-			ID:      "1",
-			Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
-			Payee:   "Payee 1",
-			Amount:  ynabber.Milliunits(1000),
-		},
-	}
-
-	if err := writer.Bulk(context.Background(), txns); err == nil {
-		t.Fatalf("expected error from client")
-	}
-}
-
-func TestBulkAttemptsAllAccountsWhenOneImportFails(t *testing.T) {
-	fc := &fakeClient{errByAccount: map[string]error{"account-1": fmt.Errorf("boom")}}
-
-	writer := Writer{
-		Config: Config{
-			BudgetID:   "budget-1",
-			AccountMap: AccountMap{"IBAN1": "account-1", "IBAN2": "account-2"},
-		},
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		now:    func() time.Time { return time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC) },
-		client: fc,
-	}
-
-	txns := []ynabber.Transaction{
-		{
-			Account: ynabber.Account{IBAN: "IBAN1"},
-			ID:      "1",
-			Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
-			Amount:  ynabber.Milliunits(1000),
-		},
-		{
-			Account: ynabber.Account{IBAN: "IBAN2"},
-			ID:      "2",
-			Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
-			Amount:  ynabber.Milliunits(2000),
-		},
-	}
-
-	if err := writer.Bulk(context.Background(), txns); err == nil {
-		t.Fatalf("expected import error")
-	}
-	if len(fc.calls) != 2 {
-		t.Fatalf("expected both accounts to be attempted, got %d calls", len(fc.calls))
-	}
-	if fc.calls[0].accountID != "account-1" || fc.calls[1].accountID != "account-2" {
-		t.Fatalf("expected deterministic account order, got %s then %s", fc.calls[0].accountID, fc.calls[1].accountID)
-	}
-}
-
-func TestBulkPassesDryRunOption(t *testing.T) {
-	fc := &fakeClient{}
-
-	writer := Writer{
-		Config: Config{
-			BudgetID:   "budget-1",
-			AccountMap: AccountMap{"IBAN1": "account-1"},
-			DryRun:     true,
-		},
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		now:    func() time.Time { return time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC) },
-		client: fc,
-	}
-
-	txns := []ynabber.Transaction{
-		{
-			Account: ynabber.Account{IBAN: "IBAN1"},
-			ID:      "1",
-			Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
-			Amount:  ynabber.Milliunits(1000),
-		},
-	}
-
-	if err := writer.Bulk(context.Background(), txns); err != nil {
-		t.Fatalf("Bulk() error = %v", err)
-	}
-	if len(fc.calls) != 1 {
-		t.Fatalf("expected 1 call, got %d", len(fc.calls))
-	}
-	if !fc.calls[0].options.DryRun {
-		t.Fatalf("expected DryRun to be true")
+	for _, diagnostic := range []string{"import_id=", "account_id=account-1"} {
+		if !strings.Contains(got, diagnostic) {
+			t.Fatalf("debug log is missing %q: %s", diagnostic, got)
+		}
 	}
 }
 
@@ -637,56 +486,5 @@ func TestIsDateAllowedRejectsFutureDateWithZeroDelay(t *testing.T) {
 
 	if !writer.isDateAllowed(time.Date(2024, 5, 19, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("expected past date to be allowed with Delay=0")
-	}
-}
-
-func TestBulkNoTransactions(t *testing.T) {
-	fc := &fakeClient{}
-
-	writer := Writer{
-		Config: Config{
-			BudgetID:   "budget-1",
-			AccountMap: AccountMap{"IBAN1": "account-1"},
-		},
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		now:    time.Now,
-		client: fc,
-	}
-
-	if err := writer.Bulk(context.Background(), nil); err != nil {
-		t.Fatalf("Bulk(nil) error = %v", err)
-	}
-	if len(fc.calls) != 0 {
-		t.Fatalf("expected no client calls, got %d", len(fc.calls))
-	}
-}
-
-func TestBulkAllFiltered(t *testing.T) {
-	fc := &fakeClient{}
-
-	writer := Writer{
-		Config: Config{
-			BudgetID:   "budget-1",
-			AccountMap: AccountMap{"IBAN1": "account-1"},
-		},
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		now:    func() time.Time { return time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC) },
-		client: fc,
-	}
-
-	txns := []ynabber.Transaction{
-		{
-			Account: ynabber.Account{IBAN: "IBAN1"},
-			ID:      "1",
-			Date:    time.Time{},
-			Amount:  ynabber.Milliunits(1000),
-		},
-	}
-
-	if err := writer.Bulk(context.Background(), txns); err != nil {
-		t.Fatalf("Bulk() error = %v", err)
-	}
-	if len(fc.calls) != 0 {
-		t.Fatalf("expected no client calls when all filtered, got %d", len(fc.calls))
 	}
 }
