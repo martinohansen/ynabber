@@ -22,7 +22,9 @@ jobs:
           go-version-file: go.mod
 
       - name: Test
-        run: go test -race -covermode=atomic -coverprofile=coverage.out -v ./... | tee test-output.txt
+        run: |
+          set -o pipefail
+          go test -race -covermode=atomic -coverprofile=coverage.out -v ./... | tee test-output.txt
 
       - name: Report coverage
         run: |
