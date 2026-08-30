@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -53,7 +54,8 @@ func main() {
 	logger := slog.Default()
 	logger.Info("starting...", "version", versioninfo.Short())
 
-	y := ynabber.NewYnabber(&cfg)
+	var readers []ynabber.Reader
+	var writers []ynabber.Writer
 	for _, reader := range cfg.Readers {
 		switch reader {
 		case "nordigen":
@@ -61,25 +63,25 @@ func main() {
 			if err != nil {
 				log.Fatal(logger, "creating nordigen reader", "error", err)
 			}
-			y.Readers = append(y.Readers, nordigenReader)
+			readers = append(readers, nordigenReader)
 		case "enablebanking":
 			enableBankingReader, err := enablebanking.NewReader(logger, cfg.DataDir)
 			if err != nil {
 				log.Fatal(logger, "creating enablebanking reader", "error", err)
 			}
-			y.Readers = append(y.Readers, enableBankingReader)
+			readers = append(readers, enableBankingReader)
 		case "wealthreader":
 			wealthreaderReader, err := wealthreader.NewReader(logger, cfg.DataDir)
 			if err != nil {
 				log.Fatal(logger, "creating wealthreader reader", "error", err)
 			}
-			y.Readers = append(y.Readers, wealthreaderReader)
+			readers = append(readers, wealthreaderReader)
 		case "generator":
 			generatorReader, err := generator.NewReader()
 			if err != nil {
 				log.Fatal(logger, "creating generator reader", "error", err)
 			}
-			y.Readers = append(y.Readers, generatorReader)
+			readers = append(readers, generatorReader)
 		default:
 			log.Fatal(logger, "unknown reader", "name", reader)
 		}
@@ -91,22 +93,26 @@ func main() {
 			if err != nil {
 				log.Fatal(logger, "creating actual writer", "error", err)
 			}
-			y.Writers = append(y.Writers, actualWriter)
+			writers = append(writers, actualWriter)
 		case "ynab":
-			ynabWriter, err := ynab.NewWriter()
+			ynabWriter, err := ynab.NewWriterFromEnv()
 			if err != nil {
 				log.Fatal(logger, "creating ynab writer", "error", err)
 			}
-			y.Writers = append(y.Writers, ynabWriter)
+			writers = append(writers, ynabWriter)
 		case "json":
-			y.Writers = append(y.Writers, json.Writer{})
+			writers = append(writers, json.Writer{})
 		default:
 			log.Fatal(logger, "unknown writer", "name", writer)
 		}
 	}
 
 	// Run Ynabber
-	if err := y.Run(); err != nil {
+	y, err := ynabber.New(readers, writers, logger)
+	if err != nil {
+		log.Fatal(logger, "creating pipeline", "error", err)
+	}
+	if err := y.Run(context.Background()); err != nil {
 		log.Fatal(logger, "pipeline failed", "error", err)
 	}
 }
