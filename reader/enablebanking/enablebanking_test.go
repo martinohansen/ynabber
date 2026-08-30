@@ -829,6 +829,26 @@ func TestMaskIdentifier(t *testing.T) {
 	}
 }
 
+func TestAccountIdentifierForLog(t *testing.T) {
+	tests := []struct {
+		name    string
+		account AccountInfo
+		want    string
+	}{
+		{name: "IBAN", account: AccountInfo{UID: "provider-id", AccountID: AccountID{IBAN: "NO9812345678901"}}, want: "NO98...8901"},
+		{name: "other bank identifier", account: AccountInfo{UID: "provider-id", AccountID: AccountID{Other: AccountIDOther{Identification: "540111******9999"}}}, want: "5401...9999"},
+		{name: "provider ID", account: AccountInfo{UID: "provider-account-id"}, want: "provider-account-id"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := accountIdentifierForLog(tt.account); got != tt.want {
+				t.Fatalf("accountIdentifierForLog() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestBulkMapsStableIDFromSession verifies the end-to-end behaviour of Bulk()
 // after the #152 fix: the IBAN stored in account_id.iban in the session file
 // must flow through to the mapped transaction's Account.IBAN.

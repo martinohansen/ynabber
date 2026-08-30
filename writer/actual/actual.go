@@ -16,6 +16,7 @@ import (
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
+	internallog "github.com/martinohansen/ynabber/internal/log"
 	"github.com/martinohansen/ynabber/writer/actual/client"
 )
 
@@ -65,7 +66,10 @@ func NewWriter() (Writer, error) {
 		return Writer{}, errors.New("ACTUAL_BATCH_SIZE must be greater than zero")
 	}
 
-	logger := slog.Default().With("writer", "actual", "budget_id", cfg.BudgetID)
+	logger := slog.Default().With(
+		"writer", "actual",
+		"budget_id", cfg.BudgetID,
+	)
 	c := client.NewClient(cfg.BaseURL, cfg.APIKey, cfg.EncryptionPassword, &http.Client{Timeout: 30 * time.Second}, logger)
 
 	return Writer{
@@ -205,7 +209,10 @@ func (w Writer) group(transactions []ynabber.Transaction) (map[string][]client.T
 		if err != nil {
 			// Mapping failures are intentionally non-fatal so a bad batch
 			// cannot take down the writer. Individual failures are logged.
-			w.logger.Error("mapping transaction", "import_id", makeID(src), "error", err)
+			w.logger.Error("mapping transaction",
+				"import_id", makeID(src),
+				"error", err,
+			)
 			stats.failed++
 			continue
 		}
@@ -396,13 +403,21 @@ func (w Writer) toActual(src ynabber.Transaction) (client.Transaction, string, e
 
 	payee := strings.TrimSpace(space.ReplaceAllString(src.Payee, " "))
 	if r := []rune(payee); len(r) > maxPayeeSize {
-		w.logger.Warn("payee too long", "import_id", makeID(src), "max_size", maxPayeeSize)
+		w.logger.Warn("payee too long",
+			"import_id", makeID(src),
+			"length", len(r),
+			"max_size", maxPayeeSize,
+		)
 		payee = strings.TrimSpace(string(r[:maxPayeeSize]))
 	}
 
 	memo := strings.TrimSpace(space.ReplaceAllString(src.Memo, " "))
 	if r := []rune(memo); len(r) > maxMemoSize {
-		w.logger.Warn("memo too long", "import_id", makeID(src), "max_size", maxMemoSize)
+		w.logger.Warn("memo too long",
+			"import_id", makeID(src),
+			"length", len(r),
+			"max_size", maxMemoSize,
+		)
 		memo = strings.TrimSpace(string(r[:maxMemoSize]))
 	}
 
@@ -424,7 +439,11 @@ func (w Writer) toActual(src ynabber.Transaction) (client.Transaction, string, e
 		ImportedID:    makeID(src),
 	}
 
-	w.logger.Debug("mapped transaction", "import_id", payload.ImportedID, "account_id", accountID)
+	w.logger.Debug("mapped transaction",
+		"import_id", payload.ImportedID,
+		"account_id", accountID,
+	)
+	internallog.Trace(w.logger, "mapped transaction data", "from", src, "to", payload)
 	return payload, accountID, nil
 }
 

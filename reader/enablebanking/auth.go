@@ -20,6 +20,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	internallog "github.com/martinohansen/ynabber/internal/log"
 )
 
 const (
@@ -85,6 +86,17 @@ type Session struct {
 	ValidUntil string        `json:"valid_until,omitempty"` // set when the API returns it
 	Accounts   []AccountInfo `json:"accounts"`
 	AuthToken  string        `json:"-"` // Not persisted
+}
+
+// LogValue exposes session diagnostics at trace level without exposing the
+// short-lived authentication token.
+func (s Session) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("created_at", s.CreatedAt),
+		slog.String("valid_until", s.ValidUntil),
+		slog.Any("accounts", s.Accounts),
+		slog.Any("auth_token", internallog.SecretString(s.AuthToken)),
+	)
 }
 
 // IsExpired reports whether the session has definitely expired.
@@ -491,7 +503,7 @@ func (a Auth) initiateAuthorization(ctx context.Context, jwtToken string) (strin
 				a.Config.RedirectURL,
 			)
 		}
-		return "", "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
+		return "", "", authenticationResponseError(resp.StatusCode, respBody, stateUUID, jwtToken)
 	}
 
 	// Parse response
@@ -574,12 +586,12 @@ func (a Auth) promptForRedirectURL(ctx context.Context, expectedState string) (s
 func extractCodeFromRedirectURL(rawURL, expectedState string) (string, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return "", fmt.Errorf("parsing redirect URL: %w", err)
+		return "", errors.New("parsing redirect URL: invalid URL")
 	}
 
 	state := parsed.Query().Get("state")
 	if state != expectedState {
-		return "", fmt.Errorf("state mismatch: possible CSRF — expected %s, got %s", expectedState, state)
+		return "", errors.New("state mismatch: possible CSRF")
 	}
 
 	code := parsed.Query().Get("code")
@@ -626,7 +638,7 @@ func (a Auth) createSessionWithCode(ctx context.Context, jwtToken, code string) 
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return Session{}, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
+		return Session{}, authenticationResponseError(resp.StatusCode, respBody, code, jwtToken)
 	}
 
 	// Parse response
@@ -661,4 +673,16 @@ func (a Auth) createSessionWithCode(ctx context.Context, jwtToken, code string) 
 	}
 
 	return session, nil
+}
+
+// authenticationResponseError preserves provider diagnostics while removing
+// the authentication material that was sent with the failed request.
+func authenticationResponseError(statusCode int, body []byte, authMaterial ...string) error {
+	message := string(body)
+	for _, value := range authMaterial {
+		if value != "" {
+			message = strings.ReplaceAll(message, value, "REDACTED")
+		}
+	}
+	return fmt.Errorf("API returned status %d: %s", statusCode, message)
 }

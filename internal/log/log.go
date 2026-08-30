@@ -65,6 +65,29 @@ func NewLoggerWithTrace(minLevel slog.Level, addSource bool, format string) (*sl
 	return slog.New(handler), nil
 }
 
+// SecretString prevents a string from being written by a slog handler.
+type SecretString string
+
+func (s SecretString) LogValue() slog.Value {
+	return slog.StringValue("REDACTED")
+}
+
+// MaskedBankIdentifier retains enough of an IBAN, BBAN, or CPAN to correlate
+// log entries without recording the complete bank identifier.
+type MaskedBankIdentifier string
+
+func (id MaskedBankIdentifier) LogValue() slog.Value {
+	return slog.StringValue(id.String())
+}
+
+func (id MaskedBankIdentifier) String() string {
+	runes := []rune(id)
+	if len(runes) <= 8 {
+		return "****"
+	}
+	return string(runes[:4]) + "..." + string(runes[len(runes)-4:])
+}
+
 // Trace logs a message at trace level using the provided logger.
 func Trace(logger *slog.Logger, msg string, args ...any) {
 	logger.Log(context.Background(), LevelTrace, msg, args...)

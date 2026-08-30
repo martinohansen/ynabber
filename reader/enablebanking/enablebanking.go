@@ -14,7 +14,7 @@ import (
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
-	"github.com/martinohansen/ynabber/internal/log"
+	internallog "github.com/martinohansen/ynabber/internal/log"
 )
 
 // ErrRateLimit is returned when the API responds with HTTP 429 Too Many Requests.
@@ -140,16 +140,16 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("%w: %s", ErrRateLimit, string(respBody))
+		return nil, fmt.Errorf("%w: HTTP %d", ErrRateLimit, resp.StatusCode)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		var apiErr apiErrorResponse
 		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error == expiredSessionErrorCode {
-			return nil, fmt.Errorf("%w: %s", ErrUnauthorized, string(respBody))
+			return nil, fmt.Errorf("%w: HTTP %d", ErrUnauthorized, resp.StatusCode)
 		}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
 	var transactions TransactionsResponse
@@ -262,8 +262,7 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 		return nil, fmt.Errorf("no accounts found in session")
 	}
 
-	log.Trace(r.logger, "session", "data", session)
-
+	internallog.Trace(r.logger, "session", "data", session)
 	r.logger.Info("loaded session", "accounts", len(session.Accounts))
 
 	var results []ynabber.Transaction
@@ -275,8 +274,11 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 	toDate := toDateTime.Format(dateFormat)
 
 	for i, account := range session.Accounts {
-		accountLogger := r.logger.With("account", account.UID, "stable_id_hint", maskIdentifier(account.StableID()))
-		log.Trace(accountLogger, "stable id", "stable_id", account.StableID())
+		accountLogger := r.logger.With(
+			"account", accountIdentifierForLog(account),
+			"account_index", i,
+		)
+		internallog.Trace(accountLogger, "stable id", "stable_id", account.StableID())
 
 		// Warn when the session file predates the account_id fix (issue #152).
 		// In that case StableID() falls back to the session-scoped UID, which
@@ -288,11 +290,10 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 
 		txResp, err := r.Client.GetAccountTransactions(ctx, session.AuthToken, account.UID, fromDate, toDate)
 		if err != nil {
-			return nil, fmt.Errorf("fetching transactions for account %q: %w", maskIdentifier(account.StableID()), err)
+			return nil, fmt.Errorf("fetching transactions for account %q: %w", accountIdentifierForLog(account), err)
 		}
 
-		log.Trace(accountLogger, "transactions", "data", txResp)
-
+		internallog.Trace(accountLogger, "transactions", "data", txResp)
 		accountLogger.Info("fetched transactions", "booked", len(txResp.Transactions), "pending", len(txResp.Pending))
 
 		// Process booked transactions
@@ -321,11 +322,19 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 // showing only the first 4 and last 4 characters (e.g. "NO98...8901").
 // This avoids emitting full IBANs or BBANs to log aggregators.
 func maskIdentifier(id string) string {
-	r := []rune(id)
-	if len(r) <= 8 {
-		return "****"
+	return internallog.MaskedBankIdentifier(id).String()
+}
+
+// accountIdentifierForLog masks bank account numbers but leaves the provider's
+// opaque account UID visible when no bank number is available.
+func accountIdentifierForLog(account AccountInfo) string {
+	if account.AccountID.IBAN != "" {
+		return maskIdentifier(account.AccountID.IBAN)
 	}
-	return string(r[:4]) + "..." + string(r[len(r)-4:])
+	if account.AccountID.Other.Identification != "" {
+		return maskIdentifier(account.AccountID.Other.Identification)
+	}
+	return account.UID
 }
 
 // loadEnvConfig loads config from environment variables using kelseyhightower/envconfig

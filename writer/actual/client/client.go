@@ -116,8 +116,10 @@ func (c *Client) ImportTransactions(ctx context.Context, budgetID, accountID str
 		c.logger,
 		"http request",
 		"method", req.Method,
+		"budget_id", budgetID,
 		"account_id", accountID,
 		"transactions", len(transactions),
+		"body", payload,
 		"request_bytes", len(payload),
 	)
 
@@ -137,6 +139,7 @@ func (c *Client) ImportTransactions(ctx context.Context, budgetID, accountID str
 		"http response",
 		"account_id", accountID,
 		"status", res.StatusCode,
+		"body", resPayload,
 		"response_bytes", len(resPayload),
 	)
 

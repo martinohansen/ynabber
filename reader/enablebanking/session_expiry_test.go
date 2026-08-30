@@ -154,8 +154,10 @@ func TestAuthSessionReauthorizesExpiredSessionFile(t *testing.T) {
 	if errors.Is(err, ErrSessionExpired) {
 		t.Fatalf("Auth.Session() returned ErrSessionExpired instead of starting authorization: %v", err)
 	}
-	if !strings.Contains(err.Error(), "authorization unavailable") {
-		t.Errorf("Auth.Session() error = %q; want authorization endpoint error", err)
+	for _, want := range []string{"status 503", "authorization unavailable"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Auth.Session() error = %q; want %q", err, want)
+		}
 	}
 	if authorizationRequests != 1 {
 		t.Errorf("authorization requests = %d, want 1", authorizationRequests)

@@ -138,7 +138,7 @@ func TestImportTransactionsReturnsImportErrors(t *testing.T) {
 		t.Fatalf("expected import error")
 	}
 	if !strings.Contains(err.Error(), "bad import") {
-		t.Fatalf("expected Actual import error, got %v", err)
+		t.Fatalf("expected Actual import error message, got %v", err)
 	}
 	if result.Added != 1 || result.Updated != 1 {
 		t.Fatalf("result = %+v, want reported partial counts", result)
@@ -240,8 +240,11 @@ func TestImportTransactionsReturnsMiddlewareError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected middleware error")
 	}
+	if !strings.Contains(err.Error(), "actual api response 404") {
+		t.Fatalf("expected middleware status, got %v", err)
+	}
 	if !strings.Contains(err.Error(), "Account not found") {
-		t.Fatalf("expected middleware error message, got %v", err)
+		t.Fatalf("middleware error omits provider message: %v", err)
 	}
 }
 
@@ -265,11 +268,9 @@ func TestImportTransactionsSanitizesUnexpectedErrorBody(t *testing.T) {
 	if strings.Contains(err.Error(), body) {
 		t.Fatalf("error exposes unexpected response body: %v", err)
 	}
-	// The shape of the body is what lets an operator tell a proxy's HTML error
-	// page from a malformed JSON response, so it has to survive sanitizing.
-	for _, want := range []string{"unexpected response", fmt.Sprintf("%d byte", len(body)), "text/html"} {
+	for _, want := range []string{"actual api response 500", "21 byte text/html body"} {
 		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error = %v, want it to contain %q", err, want)
+			t.Fatalf("error = %v, want %q", err, want)
 		}
 	}
 }
@@ -315,7 +316,7 @@ func TestImportTransactionsEscapesPathComponents(t *testing.T) {
 	}
 }
 
-func TestImportTransactionsDoesNotLogPayloads(t *testing.T) {
+func TestImportTransactionsLogsPayloadsAtTrace(t *testing.T) {
 	transport := &capturingTransport{}
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: log.LevelTrace}))
@@ -334,9 +335,9 @@ func TestImportTransactionsDoesNotLogPayloads(t *testing.T) {
 	}
 
 	got := logs.String()
-	for _, sensitive := range []string{"private-payee", "private-note"} {
-		if strings.Contains(got, sensitive) {
-			t.Fatalf("trace log contains sensitive value %q: %s", sensitive, got)
+	for _, private := range []string{"private-payee", "private-note"} {
+		if !strings.Contains(got, private) {
+			t.Fatalf("trace log is missing private value %q: %s", private, got)
 		}
 	}
 	for _, diagnostic := range []string{"transactions=1", "request_bytes=", "response_bytes="} {
