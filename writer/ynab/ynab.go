@@ -56,29 +56,78 @@ type Writer struct {
 	now func() time.Time
 }
 
+// WriterOptions supplies caller-owned runtime dependencies.
+type WriterOptions struct {
+	Logger     *slog.Logger
+	HTTPClient *http.Client
+	BaseURL    string
+}
+
+// APIError reports a non-success response from the YNAB API.
+type APIError struct {
+	StatusCode int
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("YNAB request failed: status %d", e.StatusCode)
+}
+
 // String returns the name of the writer
 func (w Writer) String() string {
 	return "ynab"
 }
 
-// NewWriter returns a new YNAB writer
-func NewWriter() (Writer, error) {
-	cfg := Config{}
+// NewWriter returns a writer from explicit configuration and dependencies.
+func NewWriter(config Config, options WriterOptions) (Writer, error) {
+	if strings.TrimSpace(config.BudgetID) == "" {
+		return Writer{}, fmt.Errorf("YNAB budget ID is required")
+	}
+	if strings.TrimSpace(config.Token) == "" {
+		return Writer{}, fmt.Errorf("YNAB token is required")
+	}
+	if len(config.AccountMap) == 0 {
+		return Writer{}, fmt.Errorf("YNAB account map is required")
+	}
+	if config.Cleared == "" {
+		config.Cleared = Cleared
+	}
+	switch config.Cleared {
+	case Cleared, Uncleared, Reconciled:
+	default:
+		return Writer{}, fmt.Errorf("invalid YNAB transaction status")
+	}
+	logger := options.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	client := options.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	baseURL := strings.TrimRight(options.BaseURL, "/")
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
+	return Writer{
+		Config: config,
+		logger: logger.With(
+			"writer", "ynab",
+			"budget_id", config.BudgetID,
+		),
+		client:  client,
+		baseURL: baseURL,
+		now:     time.Now,
+	}, nil
+}
+
+// NewWriterFromEnv preserves the command-line environment adapter.
+func NewWriterFromEnv() (Writer, error) {
+	var cfg Config
 	err := envconfig.Process("", &cfg)
 	if err != nil {
 		return Writer{}, fmt.Errorf("processing YNAB config: %w", err)
 	}
-
-	return Writer{
-		Config: cfg,
-		logger: slog.Default().With(
-			"writer", "ynab",
-			"budget_id", cfg.BudgetID,
-		),
-		client:  &http.Client{Timeout: 30 * time.Second},
-		baseURL: defaultBaseURL,
-		now:     time.Now,
-	}, nil
+	return NewWriter(cfg, WriterOptions{Logger: slog.Default()})
 }
 
 // accountParser takes an Account and returns the matching YNAB account ID in
@@ -285,7 +334,7 @@ func (w Writer) Bulk(ctx context.Context, t []ynabber.Transaction) error {
 	)
 
 	if res.StatusCode != http.StatusCreated {
-		return fmt.Errorf("failed to send request: %s", res.Status)
+		return &APIError{StatusCode: res.StatusCode}
 	} else {
 		w.logger.Info(
 			"sent transactions",
