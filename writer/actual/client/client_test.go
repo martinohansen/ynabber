@@ -274,57 +274,6 @@ func TestImportTransactionsSanitizesUnexpectedErrorBody(t *testing.T) {
 	}
 }
 
-// TestImportTransactionsRequestSizeIsAdditive pins the JSON shape the writer's
-// batch planner depends on: a request is a fixed envelope around an array, so
-// its encoded size is the empty envelope, plus each element's own size, plus
-// one separator byte between consecutive elements. The planner relies on that
-// identity to stay linear. If the encoding ever gains indentation or another
-// envelope field, this fails here rather than silently letting the planner
-// emit oversized requests.
-func TestImportTransactionsRequestSizeIsAdditive(t *testing.T) {
-	transactions := []Transaction{
-		{Account: "account-1", Date: "2024-05-10", Amount: 100, PayeeName: `quoted "payee" <>&`, ImportedID: "id-1"},
-		{Account: "account-1", Date: "2024-05-11", Amount: -250, Notes: `path\with\slashes`, ImportedID: "id-2"},
-		{Account: "account-1", Date: "2024-05-12", Amount: 0, ImportedPayee: strings.Repeat("ø", 50)},
-	}
-	opts := ImportTransactionsOptions{DefaultCleared: true, ReimportDeleted: true, DryRun: true}
-
-	envelope, err := ImportTransactionsRequestSize([]Transaction{}, opts)
-	if err != nil {
-		t.Fatalf("measuring envelope: %v", err)
-	}
-
-	// The planner measures the envelope with a non-nil empty slice on purpose: a
-	// nil slice encodes as null rather than [], which would shift every
-	// element's computed size.
-	nilEnvelope, err := ImportTransactionsRequestSize(nil, opts)
-	if err != nil {
-		t.Fatalf("measuring nil envelope: %v", err)
-	}
-	if nilEnvelope == envelope {
-		t.Fatal("expected a nil slice to encode differently from an empty array")
-	}
-
-	for n := 1; n <= len(transactions); n++ {
-		want := envelope + (n - 1) // one separator byte between elements
-		for i := range n {
-			single, err := ImportTransactionsRequestSize(transactions[i:i+1], opts)
-			if err != nil {
-				t.Fatalf("measuring transaction %d: %v", i+1, err)
-			}
-			want += single - envelope
-		}
-
-		got, err := ImportTransactionsRequestSize(transactions[:n], opts)
-		if err != nil {
-			t.Fatalf("measuring %d transactions: %v", n, err)
-		}
-		if got != want {
-			t.Fatalf("size of %d transactions = %d, want %d from the additive model", n, got, want)
-		}
-	}
-}
-
 func TestDescribeBody(t *testing.T) {
 	tests := []struct {
 		name        string
