@@ -190,7 +190,7 @@ func (w Writer) checkTransactionDateValidity(date time.Time) bool {
 	fromDate := time.Time(w.Config.FromDate)
 	delay := w.Config.Delay
 
-	return date.After(fiveYearsAgo) && date.After(fromDate) && date.Before(now.Add(-delay))
+	return !date.Before(fiveYearsAgo) && !date.Before(fromDate) && date.Before(now.Add(-delay))
 }
 
 func (w Writer) Bulk(ctx context.Context, t []ynabber.Transaction) error {

@@ -331,6 +331,40 @@ func TestValidTransaction(t *testing.T) {
 	}
 }
 
+func TestTransactionDateBoundaries(t *testing.T) {
+	now := time.Date(2026, time.August, 25, 12, 0, 0, 0, time.UTC)
+	from := time.Date(2026, time.August, 24, 0, 0, 0, 0, time.UTC)
+	writer := Writer{
+		Config: Config{FromDate: Date(from)},
+		now:    func() time.Time { return now },
+	}
+
+	tests := []struct {
+		name string
+		date time.Time
+		want bool
+	}{
+		{name: "inclusive first import date", date: from, want: true},
+		{name: "before first import date", date: from.Add(-time.Nanosecond), want: false},
+		{name: "current time remains exclusive", date: now, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := writer.checkTransactionDateValidity(test.date); got != test.want {
+				t.Fatalf("checkTransactionDateValidity() = %v, want %v", got, test.want)
+			}
+		})
+	}
+
+	writer.Config.FromDate = Date(now.AddDate(-10, 0, 0))
+	if !writer.checkTransactionDateValidity(now.AddDate(-5, 0, 0)) {
+		t.Fatal("exact five-year boundary was excluded")
+	}
+	if writer.checkTransactionDateValidity(now.AddDate(-5, 0, 0).Add(-time.Nanosecond)) {
+		t.Fatal("date before five-year boundary was included")
+	}
+}
+
 // TestToYNABPayeeAndMemo covers payee/memo truncation and whitespace
 // normalisation in Writer.toYNAB.
 func TestToYNABPayeeAndMemo(t *testing.T) {
