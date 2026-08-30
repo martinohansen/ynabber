@@ -66,7 +66,7 @@ func NewWriter() (Writer, error) {
 	cfg := Config{}
 	err := envconfig.Process("", &cfg)
 	if err != nil {
-		return Writer{}, fmt.Errorf("processing config: %w", err)
+		return Writer{}, fmt.Errorf("processing YNAB config: %w", err)
 	}
 
 	return Writer{
@@ -100,11 +100,8 @@ func accountParser(account ynabber.Account, accountMap map[string]string) (strin
 	}
 
 	// If neither ID nor IBAN matched, return error with hint about both options
-	identifier := string(account.ID)
-	if identifier == "" {
-		identifier = account.IBAN
-	}
-	return "", fmt.Errorf("no matching YNAB account for ID=%s IBAN=%s in map: %v", account.ID, account.IBAN, accountMap)
+	return "", fmt.Errorf("no matching YNAB account for ID=%s IBAN=%s",
+		account.ID, log.MaskedBankIdentifier(account.IBAN).String())
 }
 
 // makeID returns a unique YNAB import ID to avoid duplicate transactions.
@@ -143,14 +140,22 @@ func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
 	// Trim consecutive spaces from memo and truncate if too long
 	memo := strings.TrimSpace(space.ReplaceAllString(source.Memo, " "))
 	if r := []rune(memo); len(r) > maxMemoSize {
-		w.logger.Warn("memo too long", "transaction", source, "max_size", maxMemoSize)
+		w.logger.Warn("memo too long",
+			"import_id", makeID(source),
+			"length", len(r),
+			"max_size", maxMemoSize,
+		)
 		memo = string(r[:maxMemoSize])
 	}
 
 	// Trim consecutive spaces from payee and truncate if too long
 	payee := strings.TrimSpace(space.ReplaceAllString(string(source.Payee), " "))
 	if r := []rune(payee); len(r) > maxPayeeSize {
-		w.logger.Warn("payee too long", "transaction", source, "max_size", maxPayeeSize)
+		w.logger.Warn("payee too long",
+			"import_id", makeID(source),
+			"length", len(r),
+			"max_size", maxPayeeSize,
+		)
 		payee = string(r[:maxPayeeSize])
 	}
 
@@ -175,7 +180,8 @@ func (w Writer) toYNAB(source ynabber.Transaction) (Transaction, error) {
 		Cleared:   string(w.Config.Cleared),
 		Approved:  false,
 	}
-	w.logger.Debug("mapped transaction", "from", source, "to", transaction)
+	w.logger.Debug("mapped transaction", "import_id", transaction.ImportID, "account_id", accountID)
+	log.Trace(w.logger, "mapped transaction data", "from", source, "to", transaction)
 	return transaction, nil
 }
 
@@ -203,7 +209,8 @@ func (w Writer) Bulk(ctx context.Context, t []ynabber.Transaction) error {
 	for _, v := range t {
 		// Skip transactions that are not within the valid date range.
 		if !w.checkTransactionDateValidity(v.Date) {
-			w.logger.Debug("date out of range", "transaction", v)
+			w.logger.Debug("date out of range", "import_id", makeID(v))
+			log.Trace(w.logger, "out-of-range transaction data", "transaction", v)
 			skipped += 1
 			continue
 		}
@@ -212,7 +219,12 @@ func (w Writer) Bulk(ctx context.Context, t []ynabber.Transaction) error {
 		if err != nil {
 			// If we fail to parse a single transaction we log it but move on so
 			// we don't halt the entire program.
-			w.logger.Error("mapping to YNAB", "transaction", transaction, "err", err)
+			w.logger.Error("mapping to YNAB",
+				"transaction", "REDACTED",
+				"err", err,
+				"import_id", makeID(v),
+			)
+			log.Trace(w.logger, "failed transaction data", "transaction", v, "error", err)
 			failed += 1
 			continue
 		}
@@ -241,26 +253,36 @@ func (w Writer) Bulk(ctx context.Context, t []ynabber.Transaction) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return fmt.Errorf("creating YNAB transaction request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", w.Config.Token))
+	log.Trace(w.logger, "http request",
+		"method", req.Method,
+		"url", req.URL.String(),
+		"body", payload,
+		"transactions", len(y.Transactions),
+		"request_bytes", len(payload),
+	)
 
-	log.Trace(w.logger, "http request", "method", req.Method, "url", req.URL.String(), "body", payload)
 	client := w.client
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("sending YNAB transaction request: %w", err)
 	}
 	defer res.Body.Close()
 	resPayload, err := io.ReadAll(io.LimitReader(res.Body, maxResponseBodyBytes))
 	if err != nil {
-		return fmt.Errorf("reading response body: %w", err)
+		return fmt.Errorf("reading YNAB transaction response: %w", err)
 	}
-	log.Trace(w.logger, "http response", "status", res.Status, "body", resPayload)
+	log.Trace(w.logger, "http response",
+		"status", res.Status,
+		"body", resPayload,
+		"response_bytes", len(resPayload),
+	)
 
 	if res.StatusCode != http.StatusCreated {
 		return fmt.Errorf("failed to send request: %s", res.Status)

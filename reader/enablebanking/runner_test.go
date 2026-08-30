@@ -1,6 +1,7 @@
 package enablebanking
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,26 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/martinohansen/ynabber"
 )
+
+func TestRunnerLogsErrorText(t *testing.T) {
+	var output bytes.Buffer
+	wantErr := errors.New("complete diagnostic detail")
+	reader := Reader{
+		Config: Config{Interval: 0},
+		logger: slog.New(slog.NewTextHandler(&output, nil)),
+		bulkFn: func(context.Context) ([]ynabber.Transaction, error) {
+			return nil, wantErr
+		},
+	}
+
+	err := reader.Runner(context.Background(), make(chan []ynabber.Transaction))
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Runner() error = %v, want %v", err, wantErr)
+	}
+	if !strings.Contains(output.String(), wantErr.Error()) {
+		t.Fatalf("runner log omits error text: %s", output.String())
+	}
+}
 
 // TestReaderRetryHandler tests the retry handler for error handling
 func TestReaderRetryHandler(t *testing.T) {
