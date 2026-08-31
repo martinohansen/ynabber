@@ -50,6 +50,15 @@ ENABLEBANKING_COUNTRY=<country code>
 ENABLEBANKING_ASPSP=<bank identifier>
 ENABLEBANKING_PEM_FILE=<private key pem file>
 EOT
+
+# Or Wealth Reader
+cat <<EOT >> ynabber.env
+YNAB_ACCOUNTMAP={"<account uuid or IBAN>": "<YNAB_account_ID>"}
+WEALTHREADER_API_KEY=<api_key>
+WEALTHREADER_CODE=<institution code>
+WEALTHREADER_REDIRECT_URL=<registered oauth redirect>
+WEALTHREADER_FROM_DATE=2024-01-01
+EOT
 ```
 
 Run Ynabber locally:
@@ -100,6 +109,7 @@ Readers fetches transactions from your bank(s) and pushes them to writers.
 |:-------|:------------|
 | [Nordigen](./reader/nordigen/) | Now known as [GoCardless](https://developer.gocardless.com/bank-account-data/overview/), this is for their "Bank Account Data" product |
 | [EnableBanking](./reader/enablebanking/) | Supports lots of financial institutions [across Europe](https://enablebanking.com/docs/markets/) |
+| [Wealth Reader](./reader/wealthreader/) | European AIS aggregator ([docs](https://www.wealthreader.com/docs/en/)); BYO `api_key`, OAuth + token refresh |
 
 ## Writers
 

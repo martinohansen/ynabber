@@ -1,0 +1,30 @@
+{
+  "method": "POST",
+  "path": "/v1/budgets/fixture-budget/transactions",
+  "content_type": "application/json",
+  "authorization": "Bearer fixture-token",
+  "body": {
+    "transactions": [
+      {
+        "account_id": "ynab-wealthreader-account",
+        "date": "2024-02-01",
+        "amount": "1250500",
+        "payee_name": "Monthly salary",
+        "memo": "Monthly salary",
+        "import_id": "YBBR:64e3985e73d3bcbd54f25e75f79",
+        "cleared": "reconciled",
+        "approved": false
+      },
+      {
+        "account_id": "ynab-wealthreader-account",
+        "date": "2024-02-02",
+        "amount": "-27450",
+        "payee_name": "Example Grocer",
+        "memo": "Card purchase",
+        "import_id": "YBBR:c70ec047a5932634e4328a698e6",
+        "cleared": "reconciled",
+        "approved": false
+      }
+    ]
+  }
+}

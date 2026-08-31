@@ -69,6 +69,13 @@ func TestCompatibilityMatrix(t *testing.T) {
 			accountKey:    "XX000000000000000000",
 			accountID:     "ynab-nordigen-account",
 		},
+		{
+			name:          "wealthreader",
+			canonicalPath: "../../reader/wealthreader/testdata/canonical.json",
+			goldenPath:    "testdata/wealthreader.request.golden",
+			accountKey:    "8076932f04f73e27fe608fee4d12fca8708dec8c",
+			accountID:     "ynab-wealthreader-account",
+		},
 	}
 
 	for _, test := range tests {

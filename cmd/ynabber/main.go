@@ -12,6 +12,7 @@ import (
 	"github.com/martinohansen/ynabber/reader/enablebanking"
 	"github.com/martinohansen/ynabber/reader/generator"
 	"github.com/martinohansen/ynabber/reader/nordigen"
+	"github.com/martinohansen/ynabber/reader/wealthreader"
 	"github.com/martinohansen/ynabber/writer/actual"
 	"github.com/martinohansen/ynabber/writer/json"
 	"github.com/martinohansen/ynabber/writer/ynab"
@@ -67,6 +68,12 @@ func main() {
 				log.Fatal(logger, "creating enablebanking reader", "error", err)
 			}
 			y.Readers = append(y.Readers, enableBankingReader)
+		case "wealthreader":
+			wealthreaderReader, err := wealthreader.NewReader(logger, cfg.DataDir)
+			if err != nil {
+				log.Fatal(logger, "creating wealthreader reader", "error", err)
+			}
+			y.Readers = append(y.Readers, wealthreaderReader)
 		case "generator":
 			generatorReader, err := generator.NewReader()
 			if err != nil {

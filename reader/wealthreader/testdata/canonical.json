@@ -1,0 +1,26 @@
+[
+  {
+    "account": {
+      "ID": "8076932f04f73e27fe608fee4d12fca8708dec8c",
+      "Name": "Cuenta NOMINA",
+      "IBAN": "ES4914651234561234567890"
+    },
+    "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "date": "2024-02-01T00:00:00Z",
+    "payee": "Monthly salary",
+    "memo": "Monthly salary",
+    "amount": 1250500
+  },
+  {
+    "account": {
+      "ID": "8076932f04f73e27fe608fee4d12fca8708dec8c",
+      "Name": "Cuenta NOMINA",
+      "IBAN": "ES4914651234561234567890"
+    },
+    "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "date": "2024-02-02T00:00:00Z",
+    "payee": "Example Grocer",
+    "memo": "Card purchase",
+    "amount": -27450
+  }
+]

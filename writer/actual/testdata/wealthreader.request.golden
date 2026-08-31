@@ -1,0 +1,32 @@
+{
+  "method": "POST",
+  "path": "/v1/budgets/fixture-budget/accounts/actual-wealthreader-account/transactions/import",
+  "content_type": "application/json",
+  "api_key": "fixture-api-key",
+  "encryption_password": "fixture-encryption-password",
+  "body": {
+    "transactions": [
+      {
+        "account": "actual-wealthreader-account",
+        "date": "2024-02-01",
+        "amount": 125050,
+        "payee_name": "Monthly salary",
+        "notes": "Monthly salary",
+        "imported_payee": "Monthly salary",
+        "imported_id": "YA:10508f596b5c73a67f9a804fb896a"
+      },
+      {
+        "account": "actual-wealthreader-account",
+        "date": "2024-02-02",
+        "amount": -2745,
+        "payee_name": "Example Grocer",
+        "notes": "Card purchase",
+        "imported_payee": "Card purchase",
+        "imported_id": "YA:d0ad836bb17b27082f44a976d1c27"
+      }
+    ],
+    "defaultCleared": true,
+    "reimportDeleted": true,
+    "dryRun": true
+  }
+}

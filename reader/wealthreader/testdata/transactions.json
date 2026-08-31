@@ -1,0 +1,50 @@
+{
+  "success": true,
+  "payload": {
+    "user_information": {
+      "ID": "12345678Z",
+      "name": "LUIS GARCIA BAQUERO"
+    },
+    "accounts": [
+      {
+        "uuid": "8076932f04f73e27fe608fee4d12fca8708dec8c",
+        "subtype": "checking",
+        "code": "ES4914651234561234567890",
+        "name": "Cuenta NOMINA",
+        "currency": "EUR",
+        "balances": {
+          "available": 14302.07,
+          "current": 14302.07
+        },
+        "transactions": [
+          {
+            "uuid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "operation_date": "2024-02-01",
+            "value_date": "2024-02-01",
+            "amount": 1250.50,
+            "description": "Monthly salary"
+          },
+          {
+            "uuid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "operation_date": "2024-02-02",
+            "value_date": "2024-02-02",
+            "amount": -27.45,
+            "description": "Example Grocer",
+            "transfer_details": {
+              "sender_receiver": "Example Grocer SL",
+              "account_number": "ES0000000000000000000000",
+              "concept": "Card purchase"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "statistics": {
+    "SESSION": "A1B2C3D4E5F67890",
+    "operation_id": "8f1c2a6e-4b0d-4c3a-9e21-0d5b7a91c4e2",
+    "token": "FRJ0mHlaqZwLzu",
+    "code": "bbva",
+    "warnings": []
+  }
+}
