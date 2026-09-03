@@ -54,7 +54,7 @@ Nordigen reads bank transactions through the Nordigen/GoCardless API. It connect
 
 ## Wealthreader
 
-Wealthreader reads bank transactions through the Wealth Reader AIS API (https://www.wealthreader.com/docs/en/). The self-hoster brings their own api_key (BYO). First run does an OAuth redirect; later runs refresh with POST /entities/ using the stored token + institution code.
+Wealthreader reads bank transactions through the Wealth Reader AIS API (https://www.wealthreader.com/docs/en/oauth-integration-backend/). The self-hoster brings their own api_key (BYO). First run does an OAuth redirect; later runs refresh with POST /entities/ using the stored token + institution code.
 
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|

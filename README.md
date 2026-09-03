@@ -109,7 +109,7 @@ Readers fetches transactions from your bank(s) and pushes them to writers.
 |:-------|:------------|
 | [Nordigen](./reader/nordigen/) | Now known as [GoCardless](https://developer.gocardless.com/bank-account-data/overview/), this is for their "Bank Account Data" product |
 | [EnableBanking](./reader/enablebanking/) | Supports lots of financial institutions [across Europe](https://enablebanking.com/docs/markets/) |
-| [Wealth Reader](./reader/wealthreader/) | European AIS aggregator ([docs](https://www.wealthreader.com/docs/en/)); BYO `api_key`, OAuth + token refresh |
+| [Wealth Reader](./reader/wealthreader/) | European AIS aggregator ([docs](https://www.wealthreader.com/docs/en/oauth-integration-backend/)); BYO `api_key`, OAuth + token refresh |
 
 ## Writers
 

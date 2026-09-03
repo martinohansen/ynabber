@@ -2,7 +2,7 @@
 
 Wealth Reader is a European AIS aggregator (Spain and other EU markets). This
 reader talks to the public API documented at
-<https://www.wealthreader.com/docs/en/>.
+<https://www.wealthreader.com/docs/en/oauth-integration-backend/>.
 
 It is **not** a replacement for GoCardless; it is an additional aggregator, the
 same way Enable Banking is.
@@ -11,9 +11,7 @@ same way Enable Banking is.
 
 ### 1. Get an API key
 
-1. Sign up at <https://www.wealthreader.com/> and complete onboarding.
-2. Copy the `api_key` from the [client area](https://www.wealthreader.com/clients/).
-3. Book the technical onboarding session if you have not already (required by Wealth Reader).
+There is no public self-serve signup. Email [david@wealthreader.com](mailto:david@wealthreader.com) or book onboarding at <https://help.wealthreader.com/> and we send you an `api_key`.
 
 ### 2. Register the OAuth redirect URL
 

@@ -4,7 +4,7 @@ import "encoding/json"
 
 // Response is the envelope returned by POST /token/ and POST /entities/.
 // Same schema as the iframe callback: success + payload + statistics.
-// See https://www.wealthreader.com/docs/en/iframe-backend/ and OpenAPI 8.1.7.
+// See https://www.wealthreader.com/docs/en/iframe-integration-2-of-2-backend/ and OpenAPI 8.1.7.
 type Response struct {
 	Success    bool       `json:"success"`
 	Payload    Payload    `json:"payload"`
