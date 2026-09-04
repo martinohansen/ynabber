@@ -52,6 +52,25 @@ Nordigen reads bank transactions through the Nordigen/GoCardless API. It connect
 | NORDIGEN_REQUISITION_FILE | `string` | - | RequisitionFile specifies the filename for storing requisition data.<br>The file is stored in the directory defined by YNABBER_DATADIR. |
 | NORDIGEN_INTERVAL | `time.Duration` | `6h` | Interval determines how often to fetch new transactions.<br>Set to 0 to run only once instead of continuously. |
 
+## Wealthreader
+
+Wealthreader reads bank transactions through the Wealth Reader AIS API (https://www.wealthreader.com/docs/en/oauth-integration-backend/). The self-hoster brings their own api_key (BYO). First run does an OAuth redirect; later runs refresh with POST /entities/ using the stored token + institution code.
+
+| Environment variable | Type | Default | Description |
+|:---------------------|:-----|:--------|:------------|
+| WEALTHREADER_API_KEY | `string` | - | ApiKey is the Wealth Reader API key (client area / onboarding). |
+| WEALTHREADER_CODE | `string` | - | Code is the institution code (e.g. bbva, caixabank). Same value as<br>statistics.code and the `code` field of POST /entities/. |
+| WEALTHREADER_REDIRECT_URL | `string` | - | RedirectURL is the OAuth return URL. It must match the domain registered<br>with method=add&access_type=oauth on https://api.wealthreader.com/domains/. |
+| WEALTHREADER_SESSION_FILE | `string` | - | SessionFile is the path where the token + institution code are stored. |
+| WEALTHREADER_FROM_DATE | `Date` | - | FromDate is the start date for transaction retrieval (YYYY-MM-DD).<br>Sent as date_from on POST /entities/. Wealth Reader defaults to yesterday<br>when the field is omitted; we always send it so the window is explicit. |
+| WEALTHREADER_TO_DATE | `Date` | - | ToDate is the end date for transaction retrieval.<br>When omitted, it resolves dynamically to the current UTC date on each run. |
+| WEALTHREADER_INTERVAL | `time.Duration` | - | Interval is the time between fetches (0 means run once and exit). |
+| WEALTHREADER_PRODUCT_TYPES | `string` | `accounts` | ProductTypes is the comma-separated product_types sent on refresh<br>(accounts, portfolios, cards, …). Default is accounts-only. |
+| WEALTHREADER_API_BASE | `string` | `https://api.wealthreader.com` | ApiBase overrides https://api.wealthreader.com (dev/mock). |
+| WEALTHREADER_OAUTH_BASE | `string` | `https://oauth.wealthreader.com` | OAuthBase overrides https://oauth.wealthreader.com (dev/mock). |
+| WEALTHREADER_PAYEE_STRIP | `[]string` | - | PayeeStrip contains words to remove from payee names. |
+| WEALTHREADER_PAYEE_STRIP_REGEX | `PayeeRegex` | - | PayeeStripRegex is a comma-separated list of regular expressions whose<br>matches are removed from payee names. Patterns cannot contain a comma. |
+
 ## Actual
 
 Package actual provides a writer implementation that sends transactions to an Actual Budget HTTP API instance.
