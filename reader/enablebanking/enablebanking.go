@@ -139,17 +139,20 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("%w: HTTP %d", ErrRateLimit, resp.StatusCode)
-	}
-	if resp.StatusCode == http.StatusUnauthorized {
-		var apiErr apiErrorResponse
-		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error == expiredSessionErrorCode {
-			return nil, fmt.Errorf("%w: HTTP %d", ErrUnauthorized, resp.StatusCode)
-		}
-	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+		code := safeAPIErrorCode(respBody)
+		message := fmt.Sprintf("API returned status %d", resp.StatusCode)
+		if code != "" {
+			message += ": " + code
+		}
+		switch {
+		case resp.StatusCode == http.StatusTooManyRequests:
+			return nil, fmt.Errorf("%w: %s", ErrRateLimit, message)
+		case resp.StatusCode == http.StatusUnauthorized && code == expiredSessionErrorCode:
+			return nil, fmt.Errorf("%w: %s", ErrUnauthorized, message)
+		default:
+			return nil, errors.New(message)
+		}
 	}
 
 	var transactions TransactionsResponse
@@ -158,6 +161,64 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 	}
 
 	return &transactions, nil
+}
+
+// safeAPIErrorCode retains only documented codes, since arbitrary response
+// fields can contain credentials or financial data, even in the error field.
+// https://enablebanking.com/docs/api/reference/#errorcode
+func safeAPIErrorCode(body []byte) string {
+	var response apiErrorResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return ""
+	}
+	switch response.Error {
+	case "ACCESS_DENIED",
+		"ACCOUNT_DOES_NOT_EXIST",
+		"ALREADY_AUTHORIZED",
+		"ASPSP_ACCOUNT_NOT_ACCESSIBLE",
+		"ASPSP_ERROR",
+		"ASPSP_PAYMENT_NOT_ACCESSIBLE",
+		"ASPSP_PSU_ACTION_REQUIRED",
+		"ASPSP_RATE_LIMIT_EXCEEDED",
+		"ASPSP_TIMEOUT",
+		"AUTHORIZATION_NOT_PROVIDED",
+		"CLOSED_SESSION",
+		"DATE_FROM_IN_FUTURE",
+		"DATE_TO_WITHOUT_DATE_FROM",
+		"EXPIRED_AUTHORIZATION_CODE",
+		"EXPIRED_SESSION",
+		"INVALID_ACCOUNT_ID",
+		"INVALID_HOST",
+		"INVALID_PAYMENT",
+		"NO_ACCOUNTS_ADDED",
+		"PAYMENT_LIMIT_EXCEEDED",
+		"PAYMENT_NOT_AUTHORIZED",
+		"PAYMENT_NOT_FINALIZED",
+		"PAYMENT_NOT_FOUND",
+		"PAYMENT_SUBMISSION_NOT_DEFERRED",
+		"PAYMENT_SUBMISSION_NOT_SUPPORTED",
+		"PSU_HEADER_INVALID",
+		"PSU_HEADER_NOT_PROVIDED",
+		"REDIRECT_URI_NOT_ALLOWED",
+		"REVOKED_SESSION",
+		"SESSION_DOES_NOT_EXIST",
+		"TRANSACTION_DOES_NOT_EXIST",
+		"UNAUTHORIZED_ACCESS",
+		"UNAUTHORIZED_IP",
+		"UNTRUSTED_PAYMENT_PARTY",
+		"WEBHOOK_URI_NOT_ALLOWED",
+		"WRONG_ASPSP_PROVIDED",
+		"WRONG_AUTHORIZATION_CODE",
+		"WRONG_CONTINUATION_KEY",
+		"WRONG_CREDENTIALS_PROVIDED",
+		"WRONG_DATE_INTERVAL",
+		"WRONG_REQUEST_PARAMETERS",
+		"WRONG_SESSION_STATUS",
+		"WRONG_TRANSACTIONS_PERIOD":
+		return response.Error
+	default:
+		return ""
+	}
 }
 
 // Reader represents an EnableBanking reader instance
