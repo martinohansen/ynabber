@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -93,19 +94,33 @@ func TestBulkHTTPContract(t *testing.T) {
 func TestBulkReturnsAPIError(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
-		response.WriteHeader(http.StatusTooManyRequests)
-		_, _ = response.Write([]byte(`{"error":{"id":"429","name":"too_many_requests"}}`))
-	}))
-	t.Cleanup(server.Close)
+	for _, status := range []int{
+		http.StatusUnauthorized,
+		http.StatusForbidden,
+		http.StatusUnprocessableEntity,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+	} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+				response.WriteHeader(status)
+				_, _ = response.Write([]byte(`{"error":"response must not leak"}`))
+			}))
+			t.Cleanup(server.Close)
 
-	writer, source := testHTTPWriter(server.Client(), server.URL)
-	err := writer.Bulk(context.Background(), []ynabber.Transaction{source})
-	if err == nil {
-		t.Fatal("Bulk() error = nil, want API error")
-	}
-	if got, want := err.Error(), "failed to send request: 429 Too Many Requests"; got != want {
-		t.Errorf("Bulk() error = %q, want %q", got, want)
+			writer, source := testHTTPWriter(server.Client(), server.URL)
+			err := writer.Bulk(context.Background(), []ynabber.Transaction{source})
+			if err == nil {
+				t.Fatal("Bulk() error = nil, want API error")
+			}
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("Bulk() error = %T, want *APIError", err)
+			}
+			if apiErr.StatusCode != status || strings.Contains(err.Error(), "response must not leak") {
+				t.Errorf("Bulk() error = %q, status = %d", err, apiErr.StatusCode)
+			}
+		})
 	}
 }
 
@@ -117,6 +132,18 @@ func TestBulkReturnsHTTPClientError(t *testing.T) {
 	err := writer.Bulk(context.Background(), []ynabber.Transaction{source})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Bulk() error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestBulkPreservesTransportErrorAfterCancellation(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("transport failed")
+	writer, source := testHTTPWriter(errorHTTPClient{err: wantErr}, "https://ynab.invalid/v1")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := writer.Bulk(ctx, []ynabber.Transaction{source}); !errors.Is(err, wantErr) {
+		t.Fatalf("Bulk() error = %v, want transport error %v", err, wantErr)
 	}
 }
 
@@ -138,6 +165,111 @@ func TestBulkUsesProductionHTTPDefaults(t *testing.T) {
 	}
 	if got, want := client.request.URL.String(), defaultBaseURL+"/budgets/budget-id/transactions"; got != want {
 		t.Errorf("request URL = %q, want %q", got, want)
+	}
+}
+
+func TestNewWriterUsesExplicitDependencies(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Timeout: time.Second}
+	config := Config{
+		BudgetID:   "budget",
+		Token:      "token",
+		AccountMap: AccountMap{"bank": "ynab"},
+	}
+	writer, err := NewWriter(config, WriterOptions{
+		Logger: slog.Default(), HTTPClient: client, BaseURL: "https://ynab.example/v1/",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if writer.client != client || writer.baseURL != "https://ynab.example/v1" {
+		t.Fatalf("writer dependencies were not retained")
+	}
+	if writer.Config.Cleared != Cleared {
+		t.Fatalf("Cleared = %q, want %q", writer.Config.Cleared, Cleared)
+	}
+}
+
+func TestNewWriterUsesRuntimeDefaults(t *testing.T) {
+	t.Parallel()
+
+	config := Config{
+		BudgetID:   "budget",
+		Token:      "token",
+		AccountMap: AccountMap{"bank": "ynab"},
+	}
+	writer, err := NewWriter(config, WriterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, ok := writer.client.(*http.Client)
+	if !ok || client.Timeout != 30*time.Second {
+		t.Fatalf("HTTP client = %#v, want 30 second default timeout", writer.client)
+	}
+	if writer.logger == nil || writer.baseURL != defaultBaseURL {
+		t.Fatal("NewWriter() did not apply logger or base URL defaults")
+	}
+}
+
+func TestNewWriterValidatesConfig(t *testing.T) {
+	t.Parallel()
+
+	valid := Config{
+		BudgetID:   "budget",
+		Token:      "token",
+		AccountMap: AccountMap{"bank": "ynab"},
+	}
+	tests := []struct {
+		name   string
+		change func(*Config)
+	}{
+		{name: "budget ID", change: func(config *Config) { config.BudgetID = " " }},
+		{name: "token", change: func(config *Config) { config.Token = " " }},
+		{name: "account map", change: func(config *Config) { config.AccountMap = nil }},
+		{name: "transaction status", change: func(config *Config) { config.Cleared = "invalid" }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			config := valid
+			test.change(&config)
+			if _, err := NewWriter(config, WriterOptions{}); err == nil {
+				t.Fatalf("NewWriter() accepted invalid %s", test.name)
+			}
+		})
+	}
+}
+
+func TestNewWriterFromEnv(t *testing.T) {
+	tests := []struct {
+		name       string
+		clearedEnv string
+		want       TransactionStatus
+	}{
+		{name: "configured status", clearedEnv: "reconciled", want: Reconciled},
+		{name: "default status", want: Cleared},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("YNAB_BUDGETID", "budget")
+			t.Setenv("YNAB_TOKEN", "token")
+			t.Setenv("YNAB_ACCOUNTMAP", `{"bank":"ynab"}`)
+			if test.clearedEnv == "" {
+				t.Setenv("YNAB_CLEARED", "")
+				if err := os.Unsetenv("YNAB_CLEARED"); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				t.Setenv("YNAB_CLEARED", test.clearedEnv)
+			}
+
+			writer, err := NewWriterFromEnv()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if writer.Config.BudgetID != "budget" || writer.Config.Cleared != test.want {
+				t.Fatalf("NewWriterFromEnv() config = %#v", writer.Config)
+			}
+		})
 	}
 }
 

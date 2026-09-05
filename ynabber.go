@@ -2,6 +2,7 @@ package ynabber
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -9,19 +10,27 @@ import (
 )
 
 type Ynabber struct {
-	Readers []Reader
-	Writers []Writer
-
-	config *Config
-	logger slog.Logger
+	readers []Reader
+	writers []Writer
+	logger  *slog.Logger
 }
 
-// NewYnabber creates a new Ynabber instance
-func NewYnabber(config *Config) *Ynabber {
-	return &Ynabber{
-		config: config,
-		logger: *slog.Default(),
+// New creates a Ynabber pipeline from caller-owned readers and writers.
+func New(readers []Reader, writers []Writer, logger *slog.Logger) (*Ynabber, error) {
+	if len(readers) == 0 {
+		return nil, fmt.Errorf("ynabber: at least one reader is required")
 	}
+	if len(writers) == 0 {
+		return nil, fmt.Errorf("ynabber: at least one writer is required")
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Ynabber{
+		readers: append([]Reader(nil), readers...),
+		writers: append([]Writer(nil), writers...),
+		logger:  logger,
+	}, nil
 }
 
 type Reader interface {
@@ -35,24 +44,23 @@ type Writer interface {
 }
 
 // Run starts Ynabber by reading transactions from all readers into a channel to
-// fan out to all writers. Returns immediately on first error from any reader or
-// writer.
-func (y *Ynabber) Run() error {
-	g, ctx := errgroup.WithContext(context.Background())
+// fan out to all writers. An error cancels the other pipeline components.
+func (y *Ynabber) Run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
 
 	// Move transactions from reader to writer in batches on this channel.
 	// Multiple readers and writer can be used
 	batches := make(chan []Transaction)
 
 	// Create a channel for each writer and fan out transactions to each one
-	channels := make([]chan []Transaction, len(y.Writers))
+	channels := make([]chan []Transaction, len(y.writers))
 	for c := range channels {
 		channels[c] = make(chan []Transaction)
 	}
 
 	// Track when all readers are done
 	var readerWg sync.WaitGroup
-	readerWg.Add(len(y.Readers))
+	readerWg.Add(len(y.readers))
 
 	// Close batches channel when all readers are done
 	go func() {
@@ -87,14 +95,14 @@ func (y *Ynabber) Run() error {
 	})
 
 	// Start all writers
-	for c, writer := range y.Writers {
+	for c, writer := range y.writers {
 		g.Go(func() error {
 			return writer.Runner(ctx, channels[c])
 		})
 	}
 
 	// Start all readers
-	for _, reader := range y.Readers {
+	for _, reader := range y.readers {
 		g.Go(func() error {
 			defer readerWg.Done()
 			return reader.Runner(ctx, batches)
@@ -102,7 +110,7 @@ func (y *Ynabber) Run() error {
 	}
 
 	// Wait for all goroutines to complete or first error
-	if err := g.Wait(); err != nil && err != context.Canceled {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 
