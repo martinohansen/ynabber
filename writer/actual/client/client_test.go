@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -137,8 +136,8 @@ func TestImportTransactionsReturnsImportErrors(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected import error")
 	}
-	if !strings.Contains(err.Error(), "bad import") {
-		t.Fatalf("expected Actual import error message, got %v", err)
+	if got, want := err.Error(), "actual import errors: 1"; got != want {
+		t.Fatalf("import error = %q, want %q", got, want)
 	}
 	if result.Added != 1 || result.Updated != 1 {
 		t.Fatalf("result = %+v, want reported partial counts", result)
@@ -240,58 +239,39 @@ func TestImportTransactionsReturnsMiddlewareError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected middleware error")
 	}
-	if !strings.Contains(err.Error(), "actual api response 404") {
+	if !strings.Contains(err.Error(), "actual import request returned status 404") {
 		t.Fatalf("expected middleware status, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "Account not found") {
-		t.Fatalf("middleware error omits provider message: %v", err)
+	if strings.Contains(err.Error(), "Account not found") {
+		t.Fatalf("middleware error includes response text: %v", err)
 	}
 }
 
-func TestImportTransactionsSanitizesUnexpectedErrorBody(t *testing.T) {
-	const body = "private-response-body"
-	header := make(http.Header)
-	header.Set("Content-Type", "text/html; charset=utf-8")
-	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusInternalServerError,
-			Body:       io.NopCloser(strings.NewReader(body)),
-			Header:     header,
-		}, nil
-	})
-	c := NewClient("https://actual.example.com", "key", "pass", &http.Client{Transport: transport}, nil)
-
-	_, err := c.ImportTransactions(context.Background(), "budget-1", "account-1", []Transaction{}, ImportTransactionsOptions{})
-	if err == nil {
-		t.Fatal("expected middleware error")
-	}
-	if strings.Contains(err.Error(), body) {
-		t.Fatalf("error exposes unexpected response body: %v", err)
-	}
-	for _, want := range []string{"actual api response 500", "21 byte text/html body"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error = %v, want %q", err, want)
-		}
-	}
-}
-
-func TestDescribeBody(t *testing.T) {
-	tests := []struct {
-		name        string
-		payload     string
-		contentType string
-		want        string
+func TestImportErrorsKeepResponseDataAtTrace(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		status     int
+		body, want string
 	}{
-		{name: "empty", payload: "", contentType: "text/html", want: "empty body"},
-		{name: "media type parameters stripped", payload: "abc", contentType: "application/json; charset=utf-8", want: "3 byte application/json body"},
-		{name: "missing content type", payload: "abc", contentType: "", want: "3 byte unknown content type body"},
-		{name: "oversized content type capped", payload: "ab", contentType: strings.Repeat("x", maxMediaTypeLen+10), want: fmt.Sprintf("2 byte %s... body", strings.Repeat("x", maxMediaTypeLen))},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := describeBody([]byte(tt.payload), tt.contentType); got != tt.want {
-				t.Fatalf("describeBody() = %q, want %q", got, tt.want)
+		{"HTML", 500, "<html>private-key private-password</html>", "actual import request returned status 500"},
+		{"JSON error", 400, `{"error":"private-key private-password"}`, "actual import request returned status 400"},
+		{"import errors", 200, `{"data":{"added":["added-id"],"updated":[],"errors":[{"message":"private-key"},"private-password"]}}`, "actual import errors: 2"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			transport := roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: test.status, Body: io.NopCloser(strings.NewReader(test.body)), Header: make(http.Header)}, nil
+			})
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: log.LevelTrace}))
+			c := NewClient("https://actual.example.com", "private-key", "private-password", &http.Client{Transport: transport}, logger)
+			_, err := c.ImportTransactions(context.Background(), "budget", "account", nil, ImportTransactionsOptions{})
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+			for _, value := range []string{"private-key", "private-password"} {
+				if !strings.Contains(logs.String(), value) {
+					t.Errorf("trace omits %q: %s", value, logs.String())
+				}
 			}
 		})
 	}

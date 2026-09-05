@@ -18,12 +18,12 @@ import (
 
 func TestRunnerPreservesNordigenAPIError(t *testing.T) {
 	var output bytes.Buffer
-	wantErr := &nordigen.APIError{StatusCode: 400, Body: `{"detail":"invalid requisition"}`}
+	wantErr := &nordigen.APIError{StatusCode: 400, Body: `{"detail":"private-response-data"}`}
 	reader := Reader{
 		Config: Config{Interval: 0},
 		logger: slog.New(slog.NewTextHandler(&output, nil)),
 		bulkFn: func() ([]ynabber.Transaction, error) {
-			return nil, wantErr
+			return nil, fmt.Errorf("getting transactions: %w", apiResponseError(wantErr))
 		},
 	}
 
@@ -31,8 +31,11 @@ func TestRunnerPreservesNordigenAPIError(t *testing.T) {
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Runner() error = %v, want %v", err, wantErr)
 	}
-	if !strings.Contains(output.String(), "invalid requisition") {
-		t.Fatalf("runner log omits API error body: %s", output.String())
+	if strings.Contains(output.String(), "private-response-data") || strings.Contains(err.Error(), "private-response-data") {
+		t.Fatalf("runner exposes response data: error=%v logs=%s", err, output.String())
+	}
+	if !strings.Contains(output.String(), "getting transactions: nordigen API returned status 400") {
+		t.Fatalf("runner log omits operation or status: %s", output.String())
 	}
 }
 

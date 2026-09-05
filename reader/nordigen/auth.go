@@ -83,7 +83,7 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 		InstitutionId: r.Config.BankID,
 	})
 	if err != nil {
-		return nordigen.Requisition{}, fmt.Errorf("CreateRequisition: %w", err)
+		return nordigen.Requisition{}, fmt.Errorf("CreateRequisition: %w", apiResponseError(err))
 	}
 
 	if err := r.requisitionHook(requisition); err != nil {
@@ -95,7 +95,7 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 	for requisition.Status != "LN" {
 		requisition, err = r.Client.GetRequisition(requisition.Id)
 		if err != nil {
-			return nordigen.Requisition{}, fmt.Errorf("GetRequisition: %w", err)
+			return nordigen.Requisition{}, fmt.Errorf("GetRequisition: %w", apiResponseError(err))
 		}
 		time.Sleep(2 * time.Second)
 	}

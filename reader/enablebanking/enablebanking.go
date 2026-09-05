@@ -141,17 +141,14 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 
 	if resp.StatusCode != http.StatusOK {
 		code := safeAPIErrorCode(respBody)
-		message := fmt.Sprintf("API returned status %d", resp.StatusCode)
-		if code != "" {
-			message += ": " + code
-		}
+		err := apiResponseError(resp.StatusCode, respBody)
 		switch {
 		case resp.StatusCode == http.StatusTooManyRequests:
-			return nil, fmt.Errorf("%w: %s", ErrRateLimit, message)
+			return nil, fmt.Errorf("%w: %w", ErrRateLimit, err)
 		case resp.StatusCode == http.StatusUnauthorized && code == expiredSessionErrorCode:
-			return nil, fmt.Errorf("%w: %s", ErrUnauthorized, message)
+			return nil, fmt.Errorf("%w: %w", ErrUnauthorized, err)
 		default:
-			return nil, errors.New(message)
+			return nil, err
 		}
 	}
 
@@ -161,6 +158,14 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 	}
 
 	return &transactions, nil
+}
+
+// apiResponseError reports only the HTTP status and a documented provider code.
+func apiResponseError(statusCode int, body []byte) error {
+	if code := safeAPIErrorCode(body); code != "" {
+		return fmt.Errorf("API returned status %d: %s", statusCode, code)
+	}
+	return fmt.Errorf("API returned status %d", statusCode)
 }
 
 // safeAPIErrorCode retains only documented codes, since arbitrary response

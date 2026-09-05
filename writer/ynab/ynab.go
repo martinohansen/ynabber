@@ -285,7 +285,7 @@ func (w Writer) Bulk(ctx context.Context, t []ynabber.Transaction) error {
 	)
 
 	if res.StatusCode != http.StatusCreated {
-		return fmt.Errorf("failed to send request: %s", res.Status)
+		return fmt.Errorf("YNAB transaction request returned status %d", res.StatusCode)
 	} else {
 		w.logger.Info(
 			"sent transactions",

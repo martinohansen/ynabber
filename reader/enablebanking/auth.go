@@ -496,14 +496,7 @@ func (a Auth) initiateAuthorization(ctx context.Context, jwtToken string) (strin
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		// Check for specific errors
-		if resp.StatusCode == http.StatusBadRequest && bytes.Contains(respBody, []byte("REDIRECT_URI_NOT_ALLOWED")) {
-			return "", "", fmt.Errorf(
-				"Redirect URI not allowed. The URL '%s' must be registered in your EnableBanking application settings",
-				a.Config.RedirectURL,
-			)
-		}
-		return "", "", authenticationResponseError(resp.StatusCode, respBody, stateUUID, jwtToken)
+		return "", "", apiResponseError(resp.StatusCode, respBody)
 	}
 
 	// Parse response
@@ -591,7 +584,7 @@ func extractCodeFromRedirectURL(rawURL, expectedState string) (string, error) {
 
 	state := parsed.Query().Get("state")
 	if state != expectedState {
-		return "", errors.New("state mismatch: possible CSRF")
+		return "", errors.New("state mismatch")
 	}
 
 	code := parsed.Query().Get("code")
@@ -638,7 +631,7 @@ func (a Auth) createSessionWithCode(ctx context.Context, jwtToken, code string) 
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return Session{}, authenticationResponseError(resp.StatusCode, respBody, code, jwtToken)
+		return Session{}, apiResponseError(resp.StatusCode, respBody)
 	}
 
 	// Parse response
@@ -673,16 +666,4 @@ func (a Auth) createSessionWithCode(ctx context.Context, jwtToken, code string) 
 	}
 
 	return session, nil
-}
-
-// authenticationResponseError preserves provider diagnostics while removing
-// the authentication material that was sent with the failed request.
-func authenticationResponseError(statusCode int, body []byte, authMaterial ...string) error {
-	message := string(body)
-	for _, value := range authMaterial {
-		if value != "" {
-			message = strings.ReplaceAll(message, value, "REDACTED")
-		}
-	}
-	return fmt.Errorf("API returned status %d: %s", statusCode, message)
 }

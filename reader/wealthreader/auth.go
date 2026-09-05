@@ -151,7 +151,7 @@ func (a Auth) createNewSession(ctx context.Context) (Session, error) {
 		return Session{}, err
 	}
 	if nonce != challenge.Nonce {
-		return Session{}, fmt.Errorf("nonce mismatch: possible CSRF")
+		return Session{}, fmt.Errorf("nonce mismatch")
 	}
 
 	resp, err := a.exchangeCode(ctx, challenge, code)
@@ -161,7 +161,7 @@ func (a Auth) createNewSession(ctx context.Context) (Session, error) {
 
 	token := resp.Statistics.Token
 	if token == "" {
-		return Session{}, fmt.Errorf("token exchange returned no statistics.token — register the domain with tokenize=1")
+		return Session{}, fmt.Errorf("token exchange returned no statistics.token")
 	}
 	codeValue := resp.Statistics.Code
 	if codeValue == "" {
@@ -220,7 +220,7 @@ func (a Auth) exchangeCode(ctx context.Context, challenge pkceChallenge, code st
 		return Response{}, fmt.Errorf("reading token response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return Response{}, fmt.Errorf("token endpoint returned status %d: %s", resp.StatusCode, string(body))
+		return Response{}, fmt.Errorf("token endpoint returned status %d", resp.StatusCode)
 	}
 
 	parsed, err := parseResponse(body)
@@ -355,11 +355,11 @@ func extractCodeFromRedirectURL(rawURL, expectedNonce, expectedState string) (co
 		return "", "", errors.New("no nonce parameter found in redirect URL")
 	}
 	if nonce != expectedNonce {
-		return "", "", fmt.Errorf("nonce mismatch: possible CSRF")
+		return "", "", fmt.Errorf("nonce mismatch")
 	}
 
 	if state := parsed.Query().Get("state"); state != "" && expectedState != "" && state != expectedState {
-		return "", "", fmt.Errorf("state mismatch: possible CSRF")
+		return "", "", fmt.Errorf("state mismatch")
 	}
 
 	code = parsed.Query().Get("code")

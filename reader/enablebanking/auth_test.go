@@ -374,30 +374,30 @@ func TestRedirectErrorsDoNotContainCodeOrState(t *testing.T) {
 	}
 }
 
-func TestAuthenticationResponseErrorPreservesDiagnosticsWithoutAuthMaterial(t *testing.T) {
-	const (
-		code  = "private-code"
-		state = "private-state"
-		jwt   = "private-jwt"
-	)
-	err := authenticationResponseError(
-		http.StatusUnauthorized,
-		[]byte("authorization unavailable: code="+code+" state="+state+" token="+jwt),
-		code,
-		state,
-		jwt,
-	)
-
-	got := err.Error()
-	for _, want := range []string{"status 401", "authorization unavailable", "REDACTED"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("authentication error omits %q: %v", want, err)
-		}
-	}
-	for _, secret := range []string{code, state, jwt} {
-		if strings.Contains(got, secret) {
-			t.Fatalf("authentication error contains %q: %v", secret, err)
-		}
+func TestAuthenticationErrorsDoNotDumpResponses(t *testing.T) {
+	for _, test := range []struct{ name, body, want string }{
+		{"provider code", `{"error":"WRONG_REQUEST_PARAMETERS","detail":{"iban":"private-iban","token":"private-token"}}`, "API returned status 400: WRONG_REQUEST_PARAMETERS"},
+		{"unknown code", `{"error":"private-token"}`, "API returned status 400"},
+		{"redirect code", `{"error":"REDIRECT_URI_NOT_ALLOWED"}`, "API returned status 400: REDIRECT_URI_NOT_ALLOWED"},
+		{"redirect text is not a code", `{"detail":"REDIRECT_URI_NOT_ALLOWED"}`, "API returned status 400"},
+		{"free text", "private-token private-iban", "API returned status 400"},
+		{"malformed JSON", `{"error":"WRONG_REQUEST_PARAMETERS",`, "API returned status 400"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			t.Cleanup(server.Close)
+			auth := Auth{baseURL: server.URL, httpClient: server.Client()}
+			_, _, authErr := auth.initiateAuthorization(context.Background(), "private-jwt")
+			_, sessionErr := auth.createSessionWithCode(context.Background(), "private-jwt", "private-code")
+			for endpoint, err := range map[string]error{"auth": authErr, "sessions": sessionErr} {
+				if err == nil || err.Error() != test.want {
+					t.Errorf("%s error = %v, want %q", endpoint, err, test.want)
+				}
+			}
+		})
 	}
 }
 
