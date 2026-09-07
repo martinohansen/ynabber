@@ -12,6 +12,13 @@ import (
 
 const dateFormat = "2006-01-02"
 
+// PSU types accepted by the EnableBanking authorization endpoint. Which ones a
+// given bank supports is listed as psu_types in GET /aspsps.
+const (
+	psuTypePersonal = "personal"
+	psuTypeBusiness = "business"
+)
+
 type Date time.Time
 
 // Decode implements envconfig.Decoder, parsing a YYYY-MM-DD string into Date.
@@ -79,6 +86,17 @@ type Config struct {
 
 	// PSUUserAgent is the User-Agent value sent in the PSU-User-Agent header.
 	PSUUserAgent string `envconfig:"ENABLEBANKING_PSU_USER_AGENT" default:"Mozilla/5.0 (compatible; Ynabber/1.0)"`
+
+	// PSUType is the payment service user type requested when creating a
+	// session: "personal" or "business". Banks expose company accounts only
+	// under "business", so a personal consent returns the private accounts
+	// even for a user who also signs for a company. GET /aspsps lists which
+	// types each bank supports as psu_types.
+	//
+	// Changing this for an existing connection requires deleting the session
+	// file first, because the stored session holds the accounts granted by
+	// the previous consent.
+	PSUType string `envconfig:"ENABLEBANKING_PSU_TYPE" default:"personal"`
 }
 
 // Validate checks config semantics and sets defaults for optional fields.
@@ -89,7 +107,30 @@ func (c *Config) Validate(dataDir string) error {
 		c.SessionFile = filepath.Join(dataDir, defaultSessionFile(c.ASPSP, c.Country))
 	}
 
+	// Normalize the PSU type and reject anything the API would refuse, so a
+	// typo fails here instead of after the user has completed a bank login.
+	switch psuType := strings.ToLower(strings.TrimSpace(c.PSUType)); psuType {
+	case "":
+		c.PSUType = psuTypePersonal
+	case psuTypePersonal, psuTypeBusiness:
+		c.PSUType = psuType
+	default:
+		return fmt.Errorf(
+			"invalid PSU type %q: must be %q or %q",
+			c.PSUType, psuTypePersonal, psuTypeBusiness,
+		)
+	}
+
 	return nil
+}
+
+// psuTypeOrDefault returns the configured PSU type, falling back to "personal"
+// for a Config built without Validate.
+func (c Config) psuTypeOrDefault() string {
+	if c.PSUType == "" {
+		return psuTypePersonal
+	}
+	return c.PSUType
 }
 
 // GetFromDate returns FromDate as a time.Time. It is always valid after Validate.

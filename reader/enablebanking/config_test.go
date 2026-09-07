@@ -501,3 +501,62 @@ func TestDefaultSessionFile(t *testing.T) {
 		})
 	}
 }
+
+// TestConfigValidatePSUType verifies that Validate normalizes the PSU type,
+// defaults it to "personal", and rejects values the API would refuse.
+func TestConfigValidatePSUType(t *testing.T) {
+	tests := []struct {
+		name    string
+		psuType string
+		want    string
+		wantErr bool
+	}{
+		{name: "empty defaults to personal", psuType: "", want: psuTypePersonal},
+		{name: "personal is kept", psuType: "personal", want: psuTypePersonal},
+		{name: "business is kept", psuType: "business", want: psuTypeBusiness},
+		{name: "case is normalized", psuType: "Business", want: psuTypeBusiness},
+		{name: "surrounding space is trimmed", psuType: " personal ", want: psuTypePersonal},
+		{name: "unknown value is rejected", psuType: "corporate", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{ASPSP: "SEB", Country: "SE", PSUType: tt.psuType}
+
+			err := cfg.Validate(t.TempDir())
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("Validate() with PSUType %q returned nil, want an error", tt.psuType)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Validate() with PSUType %q returned unexpected error: %v", tt.psuType, err)
+			}
+			if cfg.PSUType != tt.want {
+				t.Errorf("PSUType = %q, want %q", cfg.PSUType, tt.want)
+			}
+		})
+	}
+}
+
+// TestEnvconfigPSUTypeDefault verifies the documented default applies when
+// ENABLEBANKING_PSU_TYPE is absent, so existing setups keep asking for
+// personal consent after upgrading.
+func TestEnvconfigPSUTypeDefault(t *testing.T) {
+	t.Setenv("ENABLEBANKING_APP_ID", "test-app")
+	t.Setenv("ENABLEBANKING_COUNTRY", "SE")
+	t.Setenv("ENABLEBANKING_ASPSP", "SEB")
+	t.Setenv("ENABLEBANKING_PEM_FILE", "test.pem")
+	t.Setenv("ENABLEBANKING_FROM_DATE", "2024-01-01")
+
+	var cfg Config
+	if err := envconfig.Process("", &cfg); err != nil {
+		t.Fatalf("envconfig.Process returned unexpected error: %v", err)
+	}
+
+	if cfg.PSUType != psuTypePersonal {
+		t.Errorf("PSUType = %q, want %q", cfg.PSUType, psuTypePersonal)
+	}
+}
