@@ -437,7 +437,7 @@ func (a Auth) initiateAuthorization(ctx context.Context, jwtToken string) (strin
 
 	// Create authorization request
 	authReq := AuthorizationRequest{
-		PSUType: "personal",
+		PSUType: a.Config.psuTypeOrDefault(),
 		State:   stateUUID,
 		ASPSP: struct {
 			Name    string `json:"name"`

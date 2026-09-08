@@ -899,3 +899,85 @@ func TestPromptForRedirectURLReadsAgainAfterEOF(t *testing.T) {
 		t.Errorf("promptForRedirectURL() code = %q, want %q", code, expectedCode)
 	}
 }
+
+// TestInitiateAuthorizationSendsConfiguredPSUType verifies that the configured
+// PSU type reaches the authorization request. Banks expose company accounts
+// only under "business", so a hardcoded "personal" makes them unreachable.
+func TestInitiateAuthorizationSendsConfiguredPSUType(t *testing.T) {
+	tests := []struct {
+		name    string
+		psuType string
+		want    string
+	}{
+		{name: "business is forwarded", psuType: "business", want: "business"},
+		{name: "personal is forwarded", psuType: "personal", want: "personal"},
+		{name: "unset falls back to personal", psuType: "", want: "personal"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var (
+				mu           sync.Mutex
+				capturedBody []byte
+			)
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+
+				switch {
+				case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/aspsps"):
+					w.WriteHeader(http.StatusOK)
+					fmt.Fprint(w, `{"aspsps":[{"name":"SEB","country":"SE","maximum_consent_validity":15552000}]}`)
+
+				case r.Method == http.MethodPost && r.URL.Path == "/auth":
+					body, err := io.ReadAll(r.Body)
+					if err != nil {
+						t.Errorf("reading /auth request body: %v", err)
+					}
+					mu.Lock()
+					capturedBody = body
+					mu.Unlock()
+					w.WriteHeader(http.StatusOK)
+					fmt.Fprint(w, `{"url":"https://bank.example/auth","id":"session-1"}`)
+
+				default:
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+
+			a := Auth{
+				Config: Config{
+					ASPSP:   "SEB",
+					Country: "SE",
+					PSUType: tt.psuType,
+				},
+				baseURL:    server.URL,
+				httpClient: server.Client(),
+				logger:     slog.New(slog.NewTextHandler(os.Stderr, nil)),
+			}
+
+			if _, _, err := a.initiateAuthorization(context.Background(), "test-jwt-token"); err != nil {
+				t.Fatalf("initiateAuthorization returned unexpected error: %v", err)
+			}
+
+			mu.Lock()
+			body := capturedBody
+			mu.Unlock()
+
+			if len(body) == 0 {
+				t.Fatal("no request body was captured from POST /auth")
+			}
+
+			var authReq AuthorizationRequest
+			if err := json.Unmarshal(body, &authReq); err != nil {
+				t.Fatalf("parsing captured POST /auth body: %v", err)
+			}
+
+			if authReq.PSUType != tt.want {
+				t.Errorf("psu_type = %q, want %q", authReq.PSUType, tt.want)
+			}
+		})
+	}
+}
