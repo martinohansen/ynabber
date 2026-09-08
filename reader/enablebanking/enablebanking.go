@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -185,8 +186,8 @@ func NewReader(logger *slog.Logger, dataDir string) (Reader, error) {
 		return Reader{}, fmt.Errorf("loading config: %w", err)
 	}
 
-	if err := cfg.Validate(dataDir); err != nil {
-		return Reader{}, fmt.Errorf("validating config: %w", err)
+	if cfg.SessionFile == "" {
+		cfg.SessionFile = filepath.Join(dataDir, defaultSessionFile(cfg.ASPSP, cfg.Country))
 	}
 
 	logger.Debug("config loaded", "aspsp", cfg.ASPSP, "country", cfg.Country)

@@ -1,7 +1,12 @@
 package enablebanking
 
 import (
+	"errors"
+	"io"
+	"log/slog"
+	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -9,63 +14,17 @@ import (
 	"github.com/kelseyhightower/envconfig"
 )
 
-// TestEnvconfigRequiredFields verifies that each field tagged required:"true"
-// causes envconfig.Process to error when the env var is absent or empty.
-// NOTE: This test uses os.Unsetenv directly. The t.Setenv call below locks
-// the test against t.Parallel(), giving the same protection as using t.Setenv
-// exclusively and preventing future accidental data races on the process env.
-func TestEnvconfigRequiredFields(t *testing.T) {
-	t.Setenv("_PARALLEL_GUARD", "") // prevents t.Parallel() in this test or subtests
-	allVars := map[string]string{
-		"ENABLEBANKING_APP_ID":    "test-app",
-		"ENABLEBANKING_COUNTRY":   "NO",
-		"ENABLEBANKING_ASPSP":     "DNB",
-		"ENABLEBANKING_PEM_FILE":  "test.pem",
-		"ENABLEBANKING_FROM_DATE": "2024-01-01",
+// setConfigEnv isolates both envconfig field names and explicit environment
+// names, then supplies the required Enable Banking settings.
+func setConfigEnv(t *testing.T) {
+	t.Helper()
+	configType := reflect.TypeFor[Config]()
+	for i := 0; i < configType.NumField(); i++ {
+		field := configType.Field(i)
+		for _, key := range []string{strings.ToUpper(field.Name), field.Tag.Get("envconfig")} {
+			unsetConfigEnv(t, key)
+		}
 	}
-
-	tests := []struct {
-		name    string
-		omit    string // env var to leave empty; "" means set all
-		wantErr bool
-	}{
-		{name: "all required fields set", omit: "", wantErr: false},
-		{name: "missing APP_ID", omit: "ENABLEBANKING_APP_ID", wantErr: true},
-		{name: "missing COUNTRY", omit: "ENABLEBANKING_COUNTRY", wantErr: true},
-		{name: "missing ASPSP", omit: "ENABLEBANKING_ASPSP", wantErr: true},
-		{name: "missing PEM_FILE", omit: "ENABLEBANKING_PEM_FILE", wantErr: true},
-		{name: "missing FROM_DATE", omit: "ENABLEBANKING_FROM_DATE", wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			for k, v := range allVars {
-				if k == tt.omit {
-					// Must fully unset — envconfig required:"true" only errors
-					// when os.LookupEnv returns false, not on empty string.
-					prev, had := os.LookupEnv(k)
-					os.Unsetenv(k)
-					t.Cleanup(func() {
-						if had {
-							os.Setenv(k, prev)
-						} else {
-							os.Unsetenv(k)
-						}
-					})
-				} else {
-					t.Setenv(k, v)
-				}
-			}
-			var cfg Config
-			err := envconfig.Process("", &cfg)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("envconfig.Process() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestEnvconfigPSUSettings(t *testing.T) {
 	for key, value := range map[string]string{
 		"ENABLEBANKING_APP_ID":    "test-app",
 		"ENABLEBANKING_COUNTRY":   "NO",
@@ -75,24 +34,37 @@ func TestEnvconfigPSUSettings(t *testing.T) {
 	} {
 		t.Setenv(key, value)
 	}
+}
 
+func unsetConfigEnv(t *testing.T, key string) {
+	t.Helper()
+	// Setenv registers restoration and prevents parallel environment changes.
+	t.Setenv(key, "")
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("unset %s: %v", key, err)
+	}
+}
+
+// TestEnvconfigRequiredFields verifies that required settings cannot be absent.
+// envconfig permits empty strings; the Date decoder rejects an empty date.
+func TestEnvconfigRequiredFields(t *testing.T) {
 	for _, key := range []string{
-		"ENABLEBANKING_PSU_IP_ADDRESS",
-		"ENABLEBANKING_PSU_USER_AGENT",
-		"ENABLEBANKING_PSU_HEADERS",
+		"ENABLEBANKING_APP_ID", "ENABLEBANKING_COUNTRY", "ENABLEBANKING_ASPSP",
+		"ENABLEBANKING_PEM_FILE", "ENABLEBANKING_FROM_DATE",
 	} {
-		previous, existed := os.LookupEnv(key)
-		if err := os.Unsetenv(key); err != nil {
-			t.Fatalf("unset %s: %v", key, err)
-		}
-		t.Cleanup(func() {
-			if existed {
-				_ = os.Setenv(key, previous)
-			} else {
-				_ = os.Unsetenv(key)
+		t.Run(key, func(t *testing.T) {
+			setConfigEnv(t)
+			unsetConfigEnv(t, key)
+			var cfg Config
+			if err := envconfig.Process("", &cfg); err == nil {
+				t.Fatalf("expected an error for missing %s", key)
 			}
 		})
 	}
+}
+
+func TestEnvconfigPSUSettings(t *testing.T) {
+	setConfigEnv(t)
 
 	var defaults Config
 	if err := envconfig.Process("", &defaults); err != nil {
@@ -186,51 +158,9 @@ func TestConfigGetToDate(t *testing.T) {
 	}
 }
 
-func TestConfigValidateDefaultsToDate(t *testing.T) {
-	config := Config{
-		AppID:    "test-app",
-		Country:  "NO",
-		ASPSP:    "DNB",
-		PEMFile:  "test.pem",
-		FromDate: mustDate(t, "2024-01-01"),
-		// ToDate left as zero Date — should remain unset and resolve dynamically
-	}
-
-	err := config.Validate(".")
-	if err != nil {
-		t.Fatalf("Validate() failed: %v", err)
-	}
-
-	// ToDate should remain zero so future runs can resolve it dynamically.
-	got := time.Time(config.ToDate)
-	if !got.IsZero() {
-		t.Errorf("ToDate should remain zero when omitted, got %v", got)
-	}
-}
-
-func TestConfigValidateDefaultsSessionFile(t *testing.T) {
-	config := Config{
-		AppID:       "test-app",
-		Country:     "NO",
-		ASPSP:       "DNB",
-		PEMFile:     "test.pem",
-		FromDate:    mustDate(t, "2024-01-01"),
-		SessionFile: "",
-	}
-
-	err := config.Validate(".")
-	if err != nil {
-		t.Fatalf("Validate() failed: %v", err)
-	}
-
-	if config.SessionFile != "enablebanking_dnb_no_session.json" {
-		t.Errorf("SessionFile not set to default: got %s, expected enablebanking_dnb_no_session.json", config.SessionFile)
-	}
-}
-
 func TestConfigWithEnvironmentVariables(t *testing.T) {
-	// Set test environment variables
-	testEnvVars := map[string]string{
+	setConfigEnv(t)
+	for key, value := range map[string]string{
 		"ENABLEBANKING_APP_ID":       "test-app-123",
 		"ENABLEBANKING_COUNTRY":      "SE",
 		"ENABLEBANKING_ASPSP":        "Nordea",
@@ -239,98 +169,41 @@ func TestConfigWithEnvironmentVariables(t *testing.T) {
 		"ENABLEBANKING_FROM_DATE":    "2024-02-01",
 		"ENABLEBANKING_TO_DATE":      "2024-12-31",
 		"ENABLEBANKING_INTERVAL":     "24h",
+	} {
+		t.Setenv(key, value)
 	}
-
-	// Note: In a real test, you would use envconfig.Process() to load these.
-	// This is just a demonstration of the structure.
-	config := Config{
-		AppID:       "test-app-123",
-		Country:     "SE",
-		ASPSP:       "Nordea",
-		PEMFile:     "./test.pem",
-		SessionFile: "custom_session.json",
-		FromDate:    mustDate(t, "2024-02-01"),
-		ToDate:      mustDate(t, "2024-12-31"),
-		Interval:    24 * time.Hour,
+	var cfg Config
+	if err := envconfig.Process("", &cfg); err != nil {
+		t.Fatal(err)
 	}
-
-	err := config.Validate(".")
-	if err != nil {
-		t.Fatalf("Validate() failed: %v", err)
-	}
-
-	if config.Country != "SE" {
-		t.Errorf("Country not set correctly: got %s, expected SE", config.Country)
-	}
-
-	if config.ASPSP != "Nordea" {
-		t.Errorf("ASPSP not set correctly: got %s, expected Nordea", config.ASPSP)
-	}
-
-	_ = testEnvVars // silence unused variable warning
-}
-
-func TestConfigdateFormatsAccepted(t *testing.T) {
-	validFormats := []string{
-		"2024-01-01",
-		"2024-12-31",
-		"2025-06-15",
-	}
-
-	for _, dateStr := range validFormats {
-		config := Config{
-			AppID:    "test",
-			Country:  "NO",
-			ASPSP:    "DNB",
-			PEMFile:  "test.pem",
-			FromDate: mustDate(t, dateStr),
-		}
-
-		err := config.Validate(".")
-		if err != nil {
-			t.Errorf("Validate() failed for valid date %s: %v", dateStr, err)
-		}
+	if cfg.AppID != "test-app-123" || cfg.Country != "SE" || cfg.ASPSP != "Nordea" ||
+		cfg.PEMFile != "./test.pem" || cfg.SessionFile != "custom_session.json" ||
+		cfg.FromDate != mustDate(t, "2024-02-01") || cfg.ToDate != mustDate(t, "2024-12-31") ||
+		cfg.Interval != 24*time.Hour {
+		t.Fatalf("unexpected parsed configuration: %+v", cfg)
 	}
 }
 
 func TestConfigIntervalParsing(t *testing.T) {
-	config := Config{
-		AppID:    "test",
-		Country:  "NO",
-		ASPSP:    "DNB",
-		PEMFile:  "test.pem",
-		FromDate: mustDate(t, "2024-01-01"),
-		Interval: 12 * time.Hour,
-	}
-
-	err := config.Validate(".")
-	if err != nil {
-		t.Fatalf("Validate() failed: %v", err)
-	}
-
-	if config.Interval != 12*time.Hour {
-		t.Errorf("Interval not set correctly: got %v, expected 12h", config.Interval)
-	}
-}
-
-func TestConfig_String(t *testing.T) {
-	config := Config{
-		AppID:    "test-app",
-		Country:  "NO",
-		ASPSP:    "DNB",
-		PEMFile:  "test.pem",
-		FromDate: mustDate(t, "2024-01-01"),
-	}
-
-	// Create a simple string representation (not required but good practice)
-	result := strings.Join([]string{
-		config.AppID,
-		config.Country,
-		config.ASPSP,
-	}, "-")
-
-	if result != "test-app-NO-DNB" {
-		t.Errorf("config string representation failed: got %s", result)
+	for _, value := range []string{"12h", "invalid"} {
+		t.Run(value, func(t *testing.T) {
+			setConfigEnv(t)
+			t.Setenv("ENABLEBANKING_INTERVAL", value)
+			var cfg Config
+			err := envconfig.Process("", &cfg)
+			if value == "invalid" {
+				if err == nil {
+					t.Fatal("expected invalid duration to fail")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Interval != 12*time.Hour {
+				t.Fatalf("Interval = %v, want 12h", cfg.Interval)
+			}
+		})
 	}
 }
 
@@ -399,17 +272,8 @@ func TestSanitizeSessionPart(t *testing.T) {
 	}
 }
 
-// TestConfigValidateSessionFilePath verifies that Validate places the default
-// session file under dataDir, and that an explicit SessionFile is never
-// overridden regardless of dataDir.
-func TestConfigValidateSessionFilePath(t *testing.T) {
-	base := Config{
-		AppID:    "test-app",
-		Country:  "NO",
-		ASPSP:    "DNB",
-		PEMFile:  "test.pem",
-		FromDate: mustDate(t, "2024-01-01"),
-	}
+// TestNewReaderSessionFilePath checks derived defaults and explicit overrides.
+func TestNewReaderSessionFilePath(t *testing.T) {
 
 	tests := []struct {
 		name        string
@@ -453,13 +317,21 @@ func TestConfigValidateSessionFilePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := base
-			cfg.SessionFile = tt.sessionFile
-			if err := cfg.Validate(tt.dataDir); err != nil {
-				t.Fatalf("Validate() unexpected error: %v", err)
+			setConfigEnv(t)
+			t.Setenv("ENABLEBANKING_SESSION_FILE", tt.sessionFile)
+			t.Setenv("ENABLEBANKING_PSU_HEADERS", "false")
+			reader, err := NewReader(slog.New(slog.NewTextHandler(io.Discard, nil)), tt.dataDir)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if cfg.SessionFile != tt.wantPath {
-				t.Errorf("SessionFile = %q, want %q", cfg.SessionFile, tt.wantPath)
+			if reader.Config.SessionFile != tt.wantPath {
+				t.Errorf("SessionFile = %q, want %q", reader.Config.SessionFile, tt.wantPath)
+			}
+			if reader.Auth.Config.SessionFile != tt.wantPath || reader.Client.config.SessionFile != tt.wantPath {
+				t.Fatal("session path was not propagated to auth and client")
+			}
+			if !time.Time(reader.Config.ToDate).IsZero() {
+				t.Fatal("omitted ToDate must remain unset after reader construction")
 			}
 		})
 	}
@@ -502,37 +374,43 @@ func TestDefaultSessionFile(t *testing.T) {
 	}
 }
 
-// TestConfigValidatePSUType verifies that Validate normalizes the PSU type,
-// defaults it to "personal", and rejects values the API would refuse.
-func TestConfigValidatePSUType(t *testing.T) {
+func TestEnvconfigPSUType(t *testing.T) {
 	tests := []struct {
 		name    string
-		psuType string
-		want    string
+		value   string
+		omitted bool
+		want    PSUType
 		wantErr bool
 	}{
-		{name: "empty defaults to personal", psuType: "", want: psuTypePersonal},
-		{name: "personal is kept", psuType: "personal", want: psuTypePersonal},
-		{name: "business is kept", psuType: "business", want: psuTypeBusiness},
-		{name: "case is normalized", psuType: "Business", want: psuTypeBusiness},
-		{name: "surrounding space is trimmed", psuType: " personal ", want: psuTypePersonal},
-		{name: "unknown value is rejected", psuType: "corporate", wantErr: true},
+		{name: "omitted", omitted: true, want: psuTypePersonal},
+		{name: "empty", want: psuTypePersonal},
+		{name: "whitespace", value: " \t ", want: psuTypePersonal},
+		{name: "personal", value: "personal", want: psuTypePersonal},
+		{name: "business", value: "business", want: psuTypeBusiness},
+		{name: "mixed case", value: "Business", want: psuTypeBusiness},
+		{name: "surrounding space", value: " personal ", want: psuTypePersonal},
+		{name: "invalid", value: "corporate", wantErr: true},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{ASPSP: "SEB", Country: "SE", PSUType: tt.psuType}
-
-			err := cfg.Validate(t.TempDir())
-
+			setConfigEnv(t)
+			if !tt.omitted {
+				t.Setenv("ENABLEBANKING_PSU_TYPE", tt.value)
+			}
+			var cfg Config
+			err := envconfig.Process("", &cfg)
 			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("Validate() with PSUType %q returned nil, want an error", tt.psuType)
+				var parseErr *envconfig.ParseError
+				if !errors.As(err, &parseErr) {
+					t.Fatalf("expected envconfig.ParseError, got %v", err)
+				}
+				if parseErr.FieldName != "PSUType" || parseErr.Value != tt.value {
+					t.Fatalf("unexpected parse error: %+v", parseErr)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("Validate() with PSUType %q returned unexpected error: %v", tt.psuType, err)
+				t.Fatal(err)
 			}
 			if cfg.PSUType != tt.want {
 				t.Errorf("PSUType = %q, want %q", cfg.PSUType, tt.want)
@@ -541,22 +419,27 @@ func TestConfigValidatePSUType(t *testing.T) {
 	}
 }
 
-// TestEnvconfigPSUTypeDefault verifies the documented default applies when
-// ENABLEBANKING_PSU_TYPE is absent, so existing setups keep asking for
-// personal consent after upgrading.
-func TestEnvconfigPSUTypeDefault(t *testing.T) {
-	t.Setenv("ENABLEBANKING_APP_ID", "test-app")
-	t.Setenv("ENABLEBANKING_COUNTRY", "SE")
-	t.Setenv("ENABLEBANKING_ASPSP", "SEB")
-	t.Setenv("ENABLEBANKING_PEM_FILE", "test.pem")
-	t.Setenv("ENABLEBANKING_FROM_DATE", "2024-01-01")
+type unexpectedConfigTransport struct{ t *testing.T }
 
-	var cfg Config
-	if err := envconfig.Process("", &cfg); err != nil {
-		t.Fatalf("envconfig.Process returned unexpected error: %v", err)
+func (tr unexpectedConfigTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	tr.t.Errorf("unexpected HTTP request before config rejection: %s", req.URL)
+	return nil, errors.New("unexpected HTTP request")
+}
+
+func TestNewReaderRejectsInvalidPSUTypeBeforeDiscovery(t *testing.T) {
+	setConfigEnv(t)
+	t.Setenv("ENABLEBANKING_PSU_TYPE", "corporate")
+	t.Setenv("ENABLEBANKING_PSU_HEADERS", "true")
+	previous := http.DefaultTransport
+	http.DefaultTransport = unexpectedConfigTransport{t: t}
+	t.Cleanup(func() { http.DefaultTransport = previous })
+
+	_, err := NewReader(slog.New(slog.NewTextHandler(io.Discard, nil)), t.TempDir())
+	var parseErr *envconfig.ParseError
+	if !errors.As(err, &parseErr) || parseErr.FieldName != "PSUType" {
+		t.Fatalf("expected PSUType parse error, got %v", err)
 	}
-
-	if cfg.PSUType != psuTypePersonal {
-		t.Errorf("PSUType = %q, want %q", cfg.PSUType, psuTypePersonal)
+	if !strings.HasPrefix(err.Error(), "loading config:") {
+		t.Fatalf("unexpected error context: %v", err)
 	}
 }
