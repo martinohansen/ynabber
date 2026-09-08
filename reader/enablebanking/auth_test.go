@@ -951,7 +951,7 @@ func TestInitiateAuthorizationSendsConfiguredPSUType(t *testing.T) {
 				Config: Config{
 					ASPSP:   "SEB",
 					Country: "SE",
-					PSUType: tt.psuType,
+					PSUType: PSUType(tt.psuType),
 				},
 				baseURL:    server.URL,
 				httpClient: server.Client(),

@@ -5,7 +5,6 @@ package enablebanking
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -18,6 +17,26 @@ const (
 	psuTypePersonal = "personal"
 	psuTypeBusiness = "business"
 )
+
+// PSUType is the payment service user type used for bank consent.
+type PSUType string
+
+// Decode parses the payment service user type used for bank consent.
+func (p *PSUType) Decode(value string) error {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "":
+		*p = PSUType(psuTypePersonal)
+	case psuTypePersonal, psuTypeBusiness:
+		*p = PSUType(normalized)
+	default:
+		return fmt.Errorf(
+			"invalid PSU type %q: must be %q or %q",
+			value, psuTypePersonal, psuTypeBusiness,
+		)
+	}
+	return nil
+}
 
 type Date time.Time
 
@@ -96,44 +115,19 @@ type Config struct {
 	// Changing this for an existing connection requires deleting the session
 	// file first, because the stored session holds the accounts granted by
 	// the previous consent.
-	PSUType string `envconfig:"ENABLEBANKING_PSU_TYPE" default:"personal"`
-}
-
-// Validate checks config semantics and sets defaults for optional fields.
-// dataDir is the base directory for the session file (from YNABBER_DATADIR).
-func (c *Config) Validate(dataDir string) error {
-	// Set default session file if not provided
-	if c.SessionFile == "" {
-		c.SessionFile = filepath.Join(dataDir, defaultSessionFile(c.ASPSP, c.Country))
-	}
-
-	// Normalize the PSU type and reject anything the API would refuse, so a
-	// typo fails here instead of after the user has completed a bank login.
-	switch psuType := strings.ToLower(strings.TrimSpace(c.PSUType)); psuType {
-	case "":
-		c.PSUType = psuTypePersonal
-	case psuTypePersonal, psuTypeBusiness:
-		c.PSUType = psuType
-	default:
-		return fmt.Errorf(
-			"invalid PSU type %q: must be %q or %q",
-			c.PSUType, psuTypePersonal, psuTypeBusiness,
-		)
-	}
-
-	return nil
+	PSUType PSUType `envconfig:"ENABLEBANKING_PSU_TYPE" default:"personal"`
 }
 
 // psuTypeOrDefault returns the configured PSU type, falling back to "personal"
-// for a Config built without Validate.
+// for a Config constructed directly in Go.
 func (c Config) psuTypeOrDefault() string {
 	if c.PSUType == "" {
 		return psuTypePersonal
 	}
-	return c.PSUType
+	return string(c.PSUType)
 }
 
-// GetFromDate returns FromDate as a time.Time. It is always valid after Validate.
+// GetFromDate returns FromDate as a time.Time. Environment loading parses and validates the date.
 func (c Config) GetFromDate() (time.Time, error) {
 	return time.Time(c.FromDate), nil
 }
