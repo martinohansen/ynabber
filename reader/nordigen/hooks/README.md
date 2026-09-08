@@ -1,6 +1,9 @@
-# Hooks
+# Nordigen requisition hooks
 
-This directory contains example `NORDIGEN_REQUISITION_HOOK` scripts.
+Ynabber logs a requisition URL for bank authorization. When access expires,
+complete authorization again. A requisition hook can notify you when action
+is needed.
 
-See [Nordigen](../README.md#requisition-hook) and
-[Configuration](../../../CONFIGURATION.md#nordigen) for setup details.
+This directory contains example hook scripts. See
+[Configuration](../../../CONFIGURATION.md#nordigen) for the hook setting,
+arguments, and exit-code behavior.
