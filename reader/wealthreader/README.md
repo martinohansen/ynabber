@@ -1,26 +1,15 @@
-# Wealth Reader
+# Wealth Reader setup
 
-Wealth Reader is a European AIS aggregator (Spain and other EU markets). This
-reader talks to the public API documented at
-<https://www.wealthreader.com/docs/en/oauth-integration-backend/>.
+Obtain an API key through [Wealth Reader onboarding](https://help.wealthreader.com/).
+See [Configuration](../../CONFIGURATION.md#wealthreader) for Ynabber settings.
 
-It is **not** a replacement for GoCardless; it is an additional aggregator, the
-same way Enable Banking is.
+## Register the OAuth redirect
 
-## Setup
+Register the URL you will use with Ynabber. Enable tokenization so later runs
+can use a saved token:
 
-### 1. Get an API key
-
-There is no public self-serve signup. Email [david@wealthreader.com](mailto:david@wealthreader.com) or book onboarding at <https://help.wealthreader.com/> and we send you an `api_key`.
-
-### 2. Register the OAuth redirect URL
-
-The redirect URL must be **exactly** the value of `WEALTHREADER_REDIRECT_URL`.
-Register it with `access_type=oauth` and tokenisation on:
-
-```bash
-curl --location 'https://api.wealthreader.com/domains/' \
-  --header 'Content-Type: application/x-www-form-urlencoded' \
+```sh
+curl 'https://api.wealthreader.com/domains/' \
   --data-urlencode 'method=add' \
   --data-urlencode 'api_key=YOUR_API_KEY' \
   --data-urlencode 'domain=https://example.com/oauth/success' \
@@ -29,51 +18,15 @@ curl --location 'https://api.wealthreader.com/domains/' \
   --data-urlencode 'tokenize=1'
 ```
 
-`tokenize=1` is required: later refreshes use `statistics.token`, not the user's
-password.
+Find institution codes with `curl 'https://api.wealthreader.com/entities/'`.
+Use the account UUID or IBAN when mapping accounts to a writer.
 
-You can use the same GitHub Pages helper as Enable Banking
-(`https://martinohansen.github.io/ynabber/ok.html`) if you register that URL.
+## First authorization
 
-### 3. Pick an institution
+Run Ynabber interactively, open the printed OAuth URL, and complete the login.
+Paste the full redirect URL, including `nonce` and `code`, at the prompt.
+Later runs use the saved token. If a password change or a new authentication
+challenge makes the token unusable, delete the session file and authorize again.
 
-```bash
-curl 'https://api.wealthreader.com/entities/'
-```
-
-Set `WEALTHREADER_CODE` to the institution `code` (`bbva`, `caixabank`, …).
-
-### 4. Environment
-
-```sh
-YNABBER_READERS=wealthreader
-WEALTHREADER_API_KEY=<api_key>
-WEALTHREADER_CODE=<institution code>
-WEALTHREADER_REDIRECT_URL=https://example.com/oauth/success
-WEALTHREADER_FROM_DATE=2024-01-01
-```
-
-Account matching in YNAB/Actual uses the Wealth Reader account `uuid` (as
-`YNAB_ACCOUNTMAP` key) or the IBAN in `code`.
-
-## Authentication
-
-On first run Ynabber prints the Wealth Reader OAuth URL, waits for you to log
-in, and asks you to paste the full redirect URL (`?nonce=…&code=…`). The token
-is saved under `YNABBER_DATADIR` and later runs are non-interactive:
-
-```
-POST https://api.wealthreader.com/entities/
-  api_key + code + token + date_from + product_types
-```
-
-Sandbox users from the Wealth Reader docs:
-
-| Username   | Result                          |
-|------------|---------------------------------|
-| `MOCKDATA` | Successful anonymised read      |
-| `MOCKOTP`  | Recreates a 2FA challenge       |
-| `MOCKLOGINKO` | Recreates a login error      |
-
-If the token stops working (password change or new 2FA), delete the session
-file and run again so the user can re-authenticate.
+Sandbox login names are `MOCKDATA` for a successful read, `MOCKOTP` for an
+additional authentication challenge, and `MOCKLOGINKO` for a login error.
