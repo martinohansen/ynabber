@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	internallog "github.com/martinohansen/ynabber/internal/log"
 )
 
 // PayeeGroups is a slice of PayeeSources which can be one or more sources. If a
@@ -130,12 +132,13 @@ type Config struct {
 	Interval time.Duration `envconfig:"NORDIGEN_INTERVAL" default:"6h"`
 }
 
-// LogValue returns config with sensitive information redacted
-func (c *Config) LogValue() slog.Value {
+// LogValue keeps credentials out of structured logs while retaining useful
+// operational settings.
+func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("bank_id", c.BankID),
-		slog.String("secret_id", "******"),
-		slog.String("secret_key", "******"),
+		slog.Any("secret_id", internallog.SecretString(c.SecretID)),
+		slog.Any("secret_key", internallog.SecretString(c.SecretKey)),
 		slog.String("payee_source", c.PayeeSource.String()),
 		slog.String("payee_strip", strings.Join(c.PayeeStrip, ",")),
 		slog.String("payee_strip_regex", c.PayeeStripRegex.String()),

@@ -76,13 +76,13 @@ func (c *Client) Fetch(ctx context.Context, session Session) (Response, error) {
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return Response{}, fmt.Errorf("%w: %s", ErrRateLimit, string(body))
+		return Response{}, fmt.Errorf("%w: HTTP status %d", ErrRateLimit, resp.StatusCode)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return Response{}, fmt.Errorf("%w: %s", ErrUnauthorized, string(body))
+		return Response{}, fmt.Errorf("%w: HTTP status %d", ErrUnauthorized, resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return Response{}, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		return Response{}, fmt.Errorf("fetching accounts: HTTP status %d", resp.StatusCode)
 	}
 
 	parsed, err := parseResponse(body)
@@ -100,9 +100,9 @@ func parseResponse(body []byte) (Response, error) {
 	if !parsed.Success {
 		if parsed.Error != nil {
 			if _, auth := authErrorCodes[parsed.Error.Code]; auth {
-				return Response{}, fmt.Errorf("%w: %d %s", ErrUnauthorized, parsed.Error.Code, parsed.Error.Message)
+				return Response{}, fmt.Errorf("%w: provider code %d", ErrUnauthorized, parsed.Error.Code)
 			}
-			return Response{}, fmt.Errorf("wealthreader error %d: %s", parsed.Error.Code, parsed.Error.Message)
+			return Response{}, fmt.Errorf("wealthreader returned error code %d", parsed.Error.Code)
 		}
 		return Response{}, errors.New("wealthreader returned success=false")
 	}

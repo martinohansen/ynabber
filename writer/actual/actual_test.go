@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/martinohansen/ynabber"
+	internallog "github.com/martinohansen/ynabber/internal/log"
 )
 
 func TestMakeID(t *testing.T) {
@@ -405,36 +406,71 @@ func TestWriterToActual(t *testing.T) {
 	}
 }
 
-func TestWriterToActualDoesNotLogFinancialPayload(t *testing.T) {
-	var logs strings.Builder
-	writer := Writer{
-		Config: Config{AccountMap: AccountMap{"IBAN1": "account-1"}},
-		logger: slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		})),
-	}
-
-	_, _, err := writer.toActual(ynabber.Transaction{
+func TestWriterToActualLogsFinancialPayloadOnlyAtTrace(t *testing.T) {
+	source := ynabber.Transaction{
 		Account: ynabber.Account{IBAN: "IBAN1"},
 		ID:      "id-1",
 		Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
 		Payee:   "private-payee",
 		Memo:    "private-note",
 		Amount:  1000,
-	})
-	if err != nil {
-		t.Fatalf("toActual() error = %v", err)
 	}
 
-	got := logs.String()
-	for _, sensitive := range []string{"private-payee", "private-note", "IBAN1"} {
-		if strings.Contains(got, sensitive) {
-			t.Fatalf("debug log contains sensitive value %q: %s", sensitive, got)
-		}
+	for _, test := range []struct {
+		name    string
+		level   slog.Level
+		wantRaw bool
+	}{
+		{name: "debug", level: slog.LevelDebug},
+		{name: "trace", level: internallog.LevelTrace, wantRaw: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var logs strings.Builder
+			writer := Writer{
+				Config: Config{AccountMap: AccountMap{"IBAN1": "account-1"}},
+				logger: slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: test.level})),
+			}
+
+			if _, _, err := writer.toActual(source); err != nil {
+				t.Fatalf("toActual() error = %v", err)
+			}
+
+			got := logs.String()
+			for _, private := range []string{"private-payee", "private-note", "IBAN1"} {
+				if strings.Contains(got, private) != test.wantRaw {
+					t.Fatalf("raw value %q presence = %t, want %t: %s", private, strings.Contains(got, private), test.wantRaw, got)
+				}
+			}
+			for _, diagnostic := range []string{"import_id=", "account_id=account-1"} {
+				if !strings.Contains(got, diagnostic) {
+					t.Fatalf("log is missing %q: %s", diagnostic, got)
+				}
+			}
+		})
 	}
-	for _, diagnostic := range []string{"import_id=", "account_id=account-1"} {
-		if !strings.Contains(got, diagnostic) {
-			t.Fatalf("debug log is missing %q: %s", diagnostic, got)
+}
+
+func TestActualTruncationWarningsIncludeImportID(t *testing.T) {
+	var output strings.Builder
+	writer := Writer{
+		Config: Config{AccountMap: AccountMap{"bank-id": "account-id"}},
+		logger: slog.New(slog.NewTextHandler(&output, nil)),
+	}
+	source := ynabber.Transaction{
+		Account: ynabber.Account{ID: "bank-id"},
+		ID:      "transaction-id",
+		Date:    time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC),
+		Payee:   strings.Repeat("p", maxPayeeSize+1),
+		Memo:    strings.Repeat("m", maxMemoSize+1),
+	}
+
+	if _, _, err := writer.toActual(source); err != nil {
+		t.Fatal(err)
+	}
+	got := output.String()
+	for _, want := range []string{"memo too long", "payee too long", "import_id=" + makeID(source)} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("truncation log omits %q: %s", want, got)
 		}
 	}
 }

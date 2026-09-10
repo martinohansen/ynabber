@@ -17,9 +17,6 @@ import (
 
 const maxResponseBodyBytes = 10 * 1024 * 1024
 
-// maxMediaTypeLen bounds the server-supplied media type echoed into errors.
-const maxMediaTypeLen = 64
-
 type Transaction struct {
 	Account       string `json:"account"`
 	Date          string `json:"date"`
@@ -116,8 +113,10 @@ func (c *Client) ImportTransactions(ctx context.Context, budgetID, accountID str
 		c.logger,
 		"http request",
 		"method", req.Method,
+		"budget_id", budgetID,
 		"account_id", accountID,
 		"transactions", len(transactions),
+		"body", payload,
 		"request_bytes", len(payload),
 	)
 
@@ -137,11 +136,12 @@ func (c *Client) ImportTransactions(ctx context.Context, budgetID, accountID str
 		"http response",
 		"account_id", accountID,
 		"status", res.StatusCode,
+		"body", resPayload,
 		"response_bytes", len(resPayload),
 	)
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return ImportTransactionsResult{}, fmt.Errorf("actual api response %d: %s", res.StatusCode, responseError(resPayload, res.Header.Get("Content-Type")))
+		return ImportTransactionsResult{}, fmt.Errorf("actual import request returned status %d", res.StatusCode)
 	}
 
 	var response importTransactionsResponse
@@ -172,14 +172,10 @@ func (c *Client) ImportTransactions(ctx context.Context, budgetID, accountID str
 		Updated: countIDs(response.Data.Updated),
 	}
 	if len(*response.Data.Errors) > 0 {
-		parts := make([]string, 0, len(*response.Data.Errors))
-		for _, importErr := range *response.Data.Errors {
-			parts = append(parts, importErrorMessage(importErr))
-		}
 		// Actual normally reports no changes alongside import errors, but its
 		// contract does not guarantee atomicity. Preserve any reported counts so
 		// callers can describe a partial result accurately.
-		return result, fmt.Errorf("actual import errors: %s", strings.Join(parts, "; "))
+		return result, fmt.Errorf("actual import errors: %d", len(*response.Data.Errors))
 	}
 
 	return result, nil
@@ -211,45 +207,4 @@ func countIDs(ids *[]string) int {
 		return 0
 	}
 	return len(*ids)
-}
-
-func importErrorMessage(raw json.RawMessage) string {
-	var importErr struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(raw, &importErr); err == nil && importErr.Message != "" {
-		return importErr.Message
-	}
-	return fmt.Sprintf("unrecognized import error (%d byte element)", len(raw))
-}
-
-func responseError(payload []byte, contentType string) string {
-	var response struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(payload, &response); err == nil && response.Error != "" {
-		return response.Error
-	}
-	return fmt.Sprintf("unexpected response (%s)", describeBody(payload, contentType))
-}
-
-// describeBody summarizes a payload that carried no recognizable error
-// message. It reports the shape of the body rather than its content, so an
-// operator can tell a proxy's HTML error page from a malformed JSON response
-// without the error text echoing anything the response happened to contain.
-func describeBody(payload []byte, contentType string) string {
-	if len(payload) == 0 {
-		return "empty body"
-	}
-
-	mediaType, _, _ := strings.Cut(contentType, ";")
-	mediaType = strings.TrimSpace(mediaType)
-	switch {
-	case mediaType == "":
-		mediaType = "unknown content type"
-	case len(mediaType) > maxMediaTypeLen:
-		// The value is server-controlled, so cap it before it reaches a log.
-		mediaType = mediaType[:maxMediaTypeLen] + "..."
-	}
-	return fmt.Sprintf("%d byte %s body", len(payload), mediaType)
 }

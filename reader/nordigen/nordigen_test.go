@@ -1,7 +1,9 @@
 package nordigen
 
 import (
+	"bytes"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +12,25 @@ import (
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 )
+
+func TestConfigLogValueRedactsCredentials(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&output, nil))
+	logger.Info("config", "value", Config{
+		BankID: "bank-id", SecretID: "private-id", SecretKey: "private-key",
+		PayeeStrip: []string{"visible-payee-setting"},
+	})
+
+	got := output.String()
+	for _, secret := range []string{"private-id", "private-key"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("log contains credential %q: %s", secret, got)
+		}
+	}
+	if !strings.Contains(got, "bank-id") || !strings.Contains(got, "visible-payee-setting") || !strings.Contains(got, "REDACTED") {
+		t.Fatalf("log omits useful sanitized config: %s", got)
+	}
+}
 
 // getAccountTransactions returns a nordigen.AccountTransactions with a single
 // transaction for testing purposes.
