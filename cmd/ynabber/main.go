@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
 	"github.com/martinohansen/ynabber/internal/log"
+	"github.com/martinohansen/ynabber/processor/prefix"
 	"github.com/martinohansen/ynabber/reader/enablebanking"
 	"github.com/martinohansen/ynabber/reader/generator"
 	"github.com/martinohansen/ynabber/reader/nordigen"
@@ -52,8 +55,13 @@ func main() {
 
 	logger := slog.Default()
 	logger.Info("starting...", "version", versioninfo.Short())
+	processors, err := setupProcessors(cfg.Processors)
+	if err != nil {
+		log.Fatal(logger, "creating processors", "error", err)
+	}
 
-	y := ynabber.NewYnabber(&cfg)
+	var readers []ynabber.Reader
+	var writers []ynabber.Writer
 	for _, reader := range cfg.Readers {
 		switch reader {
 		case "nordigen":
@@ -61,25 +69,25 @@ func main() {
 			if err != nil {
 				log.Fatal(logger, "creating nordigen reader", "error", err)
 			}
-			y.Readers = append(y.Readers, nordigenReader)
+			readers = append(readers, nordigenReader)
 		case "enablebanking":
 			enableBankingReader, err := enablebanking.NewReader(logger, cfg.DataDir)
 			if err != nil {
 				log.Fatal(logger, "creating enablebanking reader", "error", err)
 			}
-			y.Readers = append(y.Readers, enableBankingReader)
+			readers = append(readers, enableBankingReader)
 		case "wealthreader":
 			wealthreaderReader, err := wealthreader.NewReader(logger, cfg.DataDir)
 			if err != nil {
 				log.Fatal(logger, "creating wealthreader reader", "error", err)
 			}
-			y.Readers = append(y.Readers, wealthreaderReader)
+			readers = append(readers, wealthreaderReader)
 		case "generator":
 			generatorReader, err := generator.NewReader()
 			if err != nil {
 				log.Fatal(logger, "creating generator reader", "error", err)
 			}
-			y.Readers = append(y.Readers, generatorReader)
+			readers = append(readers, generatorReader)
 		default:
 			log.Fatal(logger, "unknown reader", "name", reader)
 		}
@@ -91,22 +99,43 @@ func main() {
 			if err != nil {
 				log.Fatal(logger, "creating actual writer", "error", err)
 			}
-			y.Writers = append(y.Writers, actualWriter)
+			writers = append(writers, actualWriter)
 		case "ynab":
 			ynabWriter, err := ynab.NewWriter()
 			if err != nil {
 				log.Fatal(logger, "creating ynab writer", "error", err)
 			}
-			y.Writers = append(y.Writers, ynabWriter)
+			writers = append(writers, ynabWriter)
 		case "json":
-			y.Writers = append(y.Writers, json.Writer{})
+			writers = append(writers, json.Writer{})
 		default:
 			log.Fatal(logger, "unknown writer", "name", writer)
 		}
 	}
 
 	// Run Ynabber
-	if err := y.Run(); err != nil {
-		log.Fatal(logger, err.Error())
+	y, err := ynabber.New(readers, writers, logger, ynabber.WithProcessors(processors...))
+	if err != nil {
+		log.Fatal(logger, "creating pipeline", "error", err)
 	}
+	if err := y.Run(context.Background()); err != nil {
+		log.Fatal(logger, "pipeline failed", "error", err)
+	}
+}
+
+func setupProcessors(names []string) ([]ynabber.Processor, error) {
+	var processors []ynabber.Processor
+	for _, name := range names {
+		switch strings.TrimSpace(name) {
+		case "prefix":
+			processor, err := prefix.NewProcessor()
+			if err != nil {
+				return nil, fmt.Errorf("creating prefix processor: %w", err)
+			}
+			processors = append(processors, processor)
+		default:
+			return nil, fmt.Errorf("unknown processor %q", name)
+		}
+	}
+	return processors, nil
 }

@@ -4,7 +4,7 @@ This document is generated from configuration structs in the source code using `
 
 ## Ynabber
 
-Ynabber moves transactions from reader to writer in a fan-out fashion. Every writer will receive all transactions from all readers.
+Ynabber reads transactions, applies optional processors, and sends each processed batch to every writer.
 
 | Environment variable | Type | Default | Description |
 |:---------------------|:-----|:--------|:------------|
@@ -13,6 +13,7 @@ Ynabber moves transactions from reader to writer in a fan-out fashion. Every wri
 | YNABBER_LOG_FORMAT | `string` | `text` | LogFormat sets the logging format (text, json) |
 | YNABBER_READERS | `[]string` | `nordigen` | Readers is a list of sources to read transactions from. |
 | YNABBER_WRITERS | `[]string` | `ynab` | Writers is a list of destinations to write transactions to. |
+| YNABBER_PROCESSORS | `[]string` | - | Processors is a comma-separated list applied in order before writers.<br>Leave unset or empty to disable processing. Available processors: prefix. |
 
 ## Enablebanking
 
@@ -34,7 +35,7 @@ EnableBanking reads bank transactions through the EnableBanking Open Banking API
 | ENABLEBANKING_PSU_HEADERS | `*bool` | - | PSUHeaders controls whether PSU headers are sent to EnableBanking.<br>Leave it unset to enable them only for banks that require them, such as<br>Bulder and Sparebanken Vest. Set it to true to always enable the headers,<br>or false to always disable them. |
 | ENABLEBANKING_PSU_IP_ADDRESS | `string` | - | PSUIPAddress is an optional end-user IP address sent to EnableBanking.<br>The value is sent as configured. When PSU headers are enabled, Ynabber<br>discovers the public IP address if this value is empty. |
 | ENABLEBANKING_PSU_USER_AGENT | `string` | `Mozilla/5.0 (compatible; Ynabber/1.0)` | PSUUserAgent is the User-Agent value sent in the PSU-User-Agent header. |
-| ENABLEBANKING_PSU_TYPE | `string` | `personal` | PSUType is the payment service user type requested when creating a<br>session: "personal" or "business". Banks expose company accounts only<br>under "business", so a personal consent returns the private accounts<br>even for a user who also signs for a company. GET /aspsps lists which<br>types each bank supports as psu_types.<br><br>Changing this for an existing connection requires deleting the session<br>file first, because the stored session holds the accounts granted by<br>the previous consent. |
+| ENABLEBANKING_PSU_TYPE | `PSUType` | `personal` | PSUType is the payment service user type requested when creating a<br>session: "personal" or "business". Banks expose company accounts only<br>under "business", so a personal consent returns the private accounts<br>even for a user who also signs for a company. GET /aspsps lists which<br>types each bank supports as psu_types.<br><br>Changing this for an existing connection requires deleting the session<br>file first, because the stored session holds the accounts granted by<br>the previous consent. |
 
 ## Nordigen
 
@@ -71,6 +72,14 @@ Wealthreader reads bank transactions through the Wealth Reader AIS API (https://
 | WEALTHREADER_OAUTH_BASE | `string` | `https://oauth.wealthreader.com` | OAuthBase overrides https://oauth.wealthreader.com (dev/mock). |
 | WEALTHREADER_PAYEE_STRIP | `[]string` | - | PayeeStrip contains words to remove from payee names. |
 | WEALTHREADER_PAYEE_STRIP_REGEX | `PayeeRegex` | - | PayeeStripRegex is a comma-separated list of regular expressions whose<br>matches are removed from payee names. Patterns cannot contain a comma. |
+
+## Prefix
+
+Package prefix provides a payee prefix processor for testing pipelines.
+
+| Environment variable | Type | Default | Description |
+|:---------------------|:-----|:--------|:------------|
+| YNABBER_PREFIX_PAYEE_PREFIX | `string` | `[test] ` | Prefix is prepended verbatim, including whitespace, to every payee.<br>Set explicitly to an empty string to leave payees unchanged. |
 
 ## Actual
 

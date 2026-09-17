@@ -1,8 +1,8 @@
-// Ynabber moves transactions from reader to writer in a fan-out fashion. Every
-// writer will receive all transactions from all readers.
+// Ynabber reads transactions, applies optional processors, and sends each
+// processed batch to every writer.
 package ynabber
 
-//go:generate go run ./cmd/gendocs -file config.go -file reader/*/config.go -file writer/*/config.go -o CONFIGURATION.md
+//go:generate go run ./cmd/gendocs -file config.go -file reader/*/config.go -file processor/*/config.go -file writer/*/config.go -o CONFIGURATION.md
 
 type Config struct {
 	// DataDir is the path for storing files
@@ -19,4 +19,8 @@ type Config struct {
 
 	// Writers is a list of destinations to write transactions to.
 	Writers []string `envconfig:"YNABBER_WRITERS" default:"ynab"`
+
+	// Processors is a comma-separated list applied in order before writers.
+	// Leave unset or empty to disable processing. Available processors: prefix.
+	Processors []string `envconfig:"YNABBER_PROCESSORS"`
 }

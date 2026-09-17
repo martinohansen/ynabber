@@ -7,6 +7,4 @@
 !reader/**/testdata/*.json
 *.pem
 
-ynabber
-
-ynabber
+/ynabber
