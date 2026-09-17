@@ -121,6 +121,16 @@ Writers are destinations for fetched transactions.
 | [Actual Budget](./writer/actual/) | Pushes transactions to Actual Budget through actual-http-api |
 | [JSON](./writer/json/) | Writes transactions as JSON to stdout (useful for testing) |
 
+## Processors
+
+Processors transform payees and memos after reading transactions and before
+sending them to every writer. Set `YNABBER_PROCESSORS` to a comma-separated
+list to apply processors in that order. Processing is disabled by default.
+
+| Processor | Description |
+|:----------|:------------|
+| [Prefix](./processor/prefix/) | Prepends text to payees for testing |
+
 ## Contributing
 
 Pull requests welcome. Found a bug or have ideas? [Open an
