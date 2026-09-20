@@ -53,6 +53,10 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 	// Extract payee and memo
 	payee := r.extractPayee(tx)
 	memo := r.extractMemo(tx)
+	rawPayee := payee
+	if strings.TrimSpace(memo) == "" && hasPayeeData(tx) {
+		memo = rawPayee
+	}
 
 	// Remove elements in payee that is defined in config
 	if r.Config.PayeeStrip != nil {
@@ -236,6 +240,28 @@ func (r Reader) extractPayee(tx EBTransaction) string {
 
 	// Fallback to transaction ID
 	return tx.TransactionID
+}
+
+func hasPayeeData(tx EBTransaction) bool {
+	for _, info := range tx.RemittanceInformation {
+		if strings.TrimSpace(info) != "" {
+			return true
+		}
+	}
+
+	if debtor, ok := tx.Debtor.(map[string]interface{}); ok {
+		if name, ok := debtor["name"].(string); ok && strings.TrimSpace(name) != "" {
+			return true
+		}
+	}
+
+	if creditor, ok := tx.Creditor.(map[string]interface{}); ok {
+		if name, ok := creditor["name"].(string); ok && strings.TrimSpace(name) != "" {
+			return true
+		}
+	}
+
+	return false
 }
 
 func isDigitsOnly(value string) bool {

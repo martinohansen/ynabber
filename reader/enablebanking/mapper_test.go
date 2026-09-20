@@ -155,6 +155,84 @@ func TestDefaultMapperDebit(t *testing.T) {
 	}
 }
 
+func TestDefaultMapperCopiesRawPayeeToEmptyMemo(t *testing.T) {
+	reader := Reader{
+		logger: slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		Config: Config{PayeeStrip: []string{"Acme "}},
+	}
+
+	account := AccountInfo{
+		UID:         "acc-123",
+		AccountID:   AccountID{IBAN: randomTestIBAN(t)},
+		DisplayName: "My Account",
+	}
+
+	tests := []struct {
+		name        string
+		transaction EBTransaction
+		wantPayee   string
+		wantMemo    string
+	}{
+		{
+			name: "structured payee is copied before stripping",
+			transaction: EBTransaction{
+				TransactionID: "tx-debtor",
+				BookingDate:   "2024-01-15",
+				TransactionAmount: struct {
+					Currency string `json:"currency"`
+					Amount   string `json:"amount"`
+				}{Amount: "100.00"},
+				Debtor: map[string]interface{}{"name": "Acme Market"},
+			},
+			wantPayee: "Market",
+			wantMemo:  "Acme Market",
+		},
+		{
+			name: "explicit memo is preserved",
+			transaction: EBTransaction{
+				TransactionID: "tx-creditor",
+				BookingDate:   "2024-01-15",
+				TransactionAmount: struct {
+					Currency string `json:"currency"`
+					Amount   string `json:"amount"`
+				}{Amount: "100.00"},
+				Creditor: map[string]interface{}{"name": "Acme Store"},
+				Note:     "Existing memo",
+			},
+			wantPayee: "Store",
+			wantMemo:  "Existing memo",
+		},
+		{
+			name: "transaction ID is not copied as payee data",
+			transaction: EBTransaction{
+				TransactionID: "tx-fallback",
+				BookingDate:   "2024-01-15",
+				TransactionAmount: struct {
+					Currency string `json:"currency"`
+					Amount   string `json:"amount"`
+				}{Amount: "100.00"},
+			},
+			wantPayee: "tx-fallback",
+			wantMemo:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := reader.defaultMapper(account, tt.transaction)
+			if err != nil {
+				t.Fatalf("defaultMapper failed: %v", err)
+			}
+			if result.Payee != tt.wantPayee {
+				t.Errorf("expected payee %q, got %q", tt.wantPayee, result.Payee)
+			}
+			if result.Memo != tt.wantMemo {
+				t.Errorf("expected memo %q, got %q", tt.wantMemo, result.Memo)
+			}
+		})
+	}
+}
+
 // TestExtractPayeeRemittance tests payee extraction from remittance
 func TestExtractPayeeRemittance(t *testing.T) {
 	reader := Reader{
