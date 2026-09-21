@@ -107,6 +107,6 @@ func main() {
 
 	// Run Ynabber
 	if err := y.Run(); err != nil {
-		log.Fatal(logger, err.Error())
+		log.Fatal(logger, "pipeline failed", "error", err)
 	}
 }

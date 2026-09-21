@@ -1,7 +1,9 @@
 package log
 
 import (
+	"bytes"
 	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -59,6 +61,55 @@ func TestParseLevel(t *testing.T) {
 				if level != test.expected {
 					t.Errorf("Expected level %v for input %s, got %v", test.expected, test.input, level)
 				}
+			}
+		})
+	}
+}
+
+func TestSecretStringLogValue(t *testing.T) {
+	for _, format := range []string{"text", "json"} {
+		t.Run(format, func(t *testing.T) {
+			var output bytes.Buffer
+			var handler slog.Handler
+			opts := &slog.HandlerOptions{Level: LevelTrace}
+			if format == "json" {
+				handler = slog.NewJSONHandler(&output, opts)
+			} else {
+				handler = slog.NewTextHandler(&output, opts)
+			}
+			logger := slog.New(handler)
+			Trace(logger, "secret", "value", SecretString("private-secret"))
+
+			got := output.String()
+			if strings.Contains(got, "private-secret") {
+				t.Fatalf("log contains private value: %s", got)
+			}
+			if !strings.Contains(got, "REDACTED") {
+				t.Fatalf("log omits redaction marker: %s", got)
+			}
+		})
+	}
+}
+
+func TestMaskedBankIdentifierLogValue(t *testing.T) {
+	for _, format := range []string{"text", "json"} {
+		t.Run(format, func(t *testing.T) {
+			var output bytes.Buffer
+			var handler slog.Handler
+			if format == "json" {
+				handler = slog.NewJSONHandler(&output, nil)
+			} else {
+				handler = slog.NewTextHandler(&output, nil)
+			}
+			logger := slog.New(handler)
+			logger.Info("account", "id", MaskedBankIdentifier("DK5000400440116243"))
+
+			got := output.String()
+			if strings.Contains(got, "DK5000400440116243") {
+				t.Fatalf("log contains complete identifier: %s", got)
+			}
+			if !strings.Contains(got, "DK50...6243") {
+				t.Fatalf("log omits masked identifier: %s", got)
 			}
 		})
 	}

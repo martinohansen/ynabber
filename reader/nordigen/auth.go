@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/frieser/nordigen-go-lib/v2"
+	internallog "github.com/martinohansen/ynabber/internal/log"
 )
 
 const RequisitionRedirect = "https://martinohansen.github.io/ynabber/ok.html"
@@ -82,7 +83,7 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 		InstitutionId: r.Config.BankID,
 	})
 	if err != nil {
-		return nordigen.Requisition{}, fmt.Errorf("CreateRequisition: %w", err)
+		return nordigen.Requisition{}, fmt.Errorf("CreateRequisition: %w", apiResponseError(err))
 	}
 
 	if err := r.requisitionHook(requisition); err != nil {
@@ -94,7 +95,7 @@ func (r Reader) createRequisition() (nordigen.Requisition, error) {
 	for requisition.Status != "LN" {
 		requisition, err = r.Client.GetRequisition(requisition.Id)
 		if err != nil {
-			return nordigen.Requisition{}, fmt.Errorf("GetRequisition: %w", err)
+			return nordigen.Requisition{}, fmt.Errorf("GetRequisition: %w", apiResponseError(err))
 		}
 		time.Sleep(2 * time.Second)
 	}
@@ -114,9 +115,14 @@ func (r Reader) requisitionHook(req nordigen.Requisition) error {
 		cmd := exec.Command(r.Config.RequisitionHook, req.Status, req.Link)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("executing hook: %w, output: %s", err, output)
+			r.logger.Debug("requisition hook failed", "output_bytes", len(output))
+			return fmt.Errorf("executing hook: %w", err)
 		}
-		r.logger.Info("requisition hook output", "output", string(output))
+		r.logger.Info("requisition hook output",
+			"output", "REDACTED",
+			"output_bytes", len(output),
+		)
+		internallog.Trace(r.logger, "requisition hook output data", "output", string(output))
 		return nil
 	}
 	return nil

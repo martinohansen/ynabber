@@ -1,11 +1,13 @@
 package nordigen
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +15,29 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/martinohansen/ynabber"
 )
+
+func TestRunnerPreservesNordigenAPIError(t *testing.T) {
+	var output bytes.Buffer
+	wantErr := &nordigen.APIError{StatusCode: 400, Body: `{"detail":"private-response-data"}`}
+	reader := Reader{
+		Config: Config{Interval: 0},
+		logger: slog.New(slog.NewTextHandler(&output, nil)),
+		bulkFn: func() ([]ynabber.Transaction, error) {
+			return nil, fmt.Errorf("getting transactions: %w", apiResponseError(wantErr))
+		},
+	}
+
+	err := reader.Runner(context.Background(), make(chan []ynabber.Transaction))
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Runner() error = %v, want %v", err, wantErr)
+	}
+	if strings.Contains(output.String(), "private-response-data") || strings.Contains(err.Error(), "private-response-data") {
+		t.Fatalf("runner exposes response data: error=%v logs=%s", err, output.String())
+	}
+	if !strings.Contains(output.String(), "getting transactions: nordigen API returned status 400") {
+		t.Fatalf("runner log omits operation or status: %s", output.String())
+	}
+}
 
 func TestReaderRetryHandler(t *testing.T) {
 	logger := slog.Default()

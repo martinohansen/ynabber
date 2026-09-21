@@ -104,7 +104,7 @@ func TestBulkReturnsAPIError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Bulk() error = nil, want API error")
 	}
-	if got, want := err.Error(), "failed to send request: 429 Too Many Requests"; got != want {
+	if got, want := err.Error(), "YNAB transaction request returned status 429"; got != want {
 		t.Errorf("Bulk() error = %q, want %q", got, want)
 	}
 }

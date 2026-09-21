@@ -15,7 +15,7 @@ import (
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/martinohansen/ynabber"
-	"github.com/martinohansen/ynabber/internal/log"
+	internallog "github.com/martinohansen/ynabber/internal/log"
 )
 
 // ErrRateLimit is returned when the API responds with HTTP 429 Too Many Requests.
@@ -140,17 +140,17 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("%w: %s", ErrRateLimit, string(respBody))
-	}
-	if resp.StatusCode == http.StatusUnauthorized {
-		var apiErr apiErrorResponse
-		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error == expiredSessionErrorCode {
-			return nil, fmt.Errorf("%w: %s", ErrUnauthorized, string(respBody))
-		}
-	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
+		code := safeAPIErrorCode(respBody)
+		err := apiResponseError(resp.StatusCode, respBody)
+		switch {
+		case resp.StatusCode == http.StatusTooManyRequests:
+			return nil, fmt.Errorf("%w: %w", ErrRateLimit, err)
+		case resp.StatusCode == http.StatusUnauthorized && code == expiredSessionErrorCode:
+			return nil, fmt.Errorf("%w: %w", ErrUnauthorized, err)
+		default:
+			return nil, err
+		}
 	}
 
 	var transactions TransactionsResponse
@@ -159,6 +159,72 @@ func (c *Client) GetAccountTransactions(ctx context.Context, jwtToken, accountUI
 	}
 
 	return &transactions, nil
+}
+
+// apiResponseError reports only the HTTP status and a documented provider code.
+func apiResponseError(statusCode int, body []byte) error {
+	if code := safeAPIErrorCode(body); code != "" {
+		return fmt.Errorf("API returned status %d: %s", statusCode, code)
+	}
+	return fmt.Errorf("API returned status %d", statusCode)
+}
+
+// safeAPIErrorCode retains only documented codes, since arbitrary response
+// fields can contain credentials or financial data, even in the error field.
+// https://enablebanking.com/docs/api/reference/#errorcode
+func safeAPIErrorCode(body []byte) string {
+	var response apiErrorResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return ""
+	}
+	switch response.Error {
+	case "ACCESS_DENIED",
+		"ACCOUNT_DOES_NOT_EXIST",
+		"ALREADY_AUTHORIZED",
+		"ASPSP_ACCOUNT_NOT_ACCESSIBLE",
+		"ASPSP_ERROR",
+		"ASPSP_PAYMENT_NOT_ACCESSIBLE",
+		"ASPSP_PSU_ACTION_REQUIRED",
+		"ASPSP_RATE_LIMIT_EXCEEDED",
+		"ASPSP_TIMEOUT",
+		"AUTHORIZATION_NOT_PROVIDED",
+		"CLOSED_SESSION",
+		"DATE_FROM_IN_FUTURE",
+		"DATE_TO_WITHOUT_DATE_FROM",
+		"EXPIRED_AUTHORIZATION_CODE",
+		"EXPIRED_SESSION",
+		"INVALID_ACCOUNT_ID",
+		"INVALID_HOST",
+		"INVALID_PAYMENT",
+		"NO_ACCOUNTS_ADDED",
+		"PAYMENT_LIMIT_EXCEEDED",
+		"PAYMENT_NOT_AUTHORIZED",
+		"PAYMENT_NOT_FINALIZED",
+		"PAYMENT_NOT_FOUND",
+		"PAYMENT_SUBMISSION_NOT_DEFERRED",
+		"PAYMENT_SUBMISSION_NOT_SUPPORTED",
+		"PSU_HEADER_INVALID",
+		"PSU_HEADER_NOT_PROVIDED",
+		"REDIRECT_URI_NOT_ALLOWED",
+		"REVOKED_SESSION",
+		"SESSION_DOES_NOT_EXIST",
+		"TRANSACTION_DOES_NOT_EXIST",
+		"UNAUTHORIZED_ACCESS",
+		"UNAUTHORIZED_IP",
+		"UNTRUSTED_PAYMENT_PARTY",
+		"WEBHOOK_URI_NOT_ALLOWED",
+		"WRONG_ASPSP_PROVIDED",
+		"WRONG_AUTHORIZATION_CODE",
+		"WRONG_CONTINUATION_KEY",
+		"WRONG_CREDENTIALS_PROVIDED",
+		"WRONG_DATE_INTERVAL",
+		"WRONG_REQUEST_PARAMETERS",
+		"WRONG_SESSION_STATUS",
+		"WRONG_TRANSACTIONS_PERIOD":
+		return response.Error
+	default:
+		return ""
+	}
 }
 
 // Reader represents an EnableBanking reader instance
@@ -263,8 +329,7 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 		return nil, fmt.Errorf("no accounts found in session")
 	}
 
-	log.Trace(r.logger, "session", "data", session)
-
+	internallog.Trace(r.logger, "session", "data", session)
 	r.logger.Info("loaded session", "accounts", len(session.Accounts))
 
 	var results []ynabber.Transaction
@@ -276,8 +341,11 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 	toDate := toDateTime.Format(dateFormat)
 
 	for i, account := range session.Accounts {
-		accountLogger := r.logger.With("account", account.UID, "stable_id_hint", maskIdentifier(account.StableID()))
-		log.Trace(accountLogger, "stable id", "stable_id", account.StableID())
+		accountLogger := r.logger.With(
+			"account", accountIdentifierForLog(account),
+			"account_index", i,
+		)
+		internallog.Trace(accountLogger, "stable id", "stable_id", account.StableID())
 
 		// Warn when the session file predates the account_id fix (issue #152).
 		// In that case StableID() falls back to the session-scoped UID, which
@@ -289,11 +357,10 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 
 		txResp, err := r.Client.GetAccountTransactions(ctx, session.AuthToken, account.UID, fromDate, toDate)
 		if err != nil {
-			return nil, fmt.Errorf("fetching transactions for account %q: %w", maskIdentifier(account.StableID()), err)
+			return nil, fmt.Errorf("fetching transactions for account %q: %w", accountIdentifierForLog(account), err)
 		}
 
-		log.Trace(accountLogger, "transactions", "data", txResp)
-
+		internallog.Trace(accountLogger, "transactions", "data", txResp)
 		accountLogger.Info("fetched transactions", "booked", len(txResp.Transactions), "pending", len(txResp.Pending))
 
 		// Process booked transactions
@@ -322,11 +389,19 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 // showing only the first 4 and last 4 characters (e.g. "NO98...8901").
 // This avoids emitting full IBANs or BBANs to log aggregators.
 func maskIdentifier(id string) string {
-	r := []rune(id)
-	if len(r) <= 8 {
-		return "****"
+	return internallog.MaskedBankIdentifier(id).String()
+}
+
+// accountIdentifierForLog masks bank account numbers but leaves the provider's
+// opaque account UID visible when no bank number is available.
+func accountIdentifierForLog(account AccountInfo) string {
+	if account.AccountID.IBAN != "" {
+		return maskIdentifier(account.AccountID.IBAN)
 	}
-	return string(r[:4]) + "..." + string(r[len(r)-4:])
+	if account.AccountID.Other.Identification != "" {
+		return maskIdentifier(account.AccountID.Other.Identification)
+	}
+	return account.UID
 }
 
 // loadEnvConfig loads config from environment variables using kelseyhightower/envconfig

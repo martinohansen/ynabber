@@ -1,6 +1,7 @@
 package enablebanking
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -20,7 +21,31 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	internallog "github.com/martinohansen/ynabber/internal/log"
 )
+
+func TestSessionLogValueRedactsTokenAtTrace(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&output, &slog.HandlerOptions{Level: internallog.LevelTrace}))
+	session := Session{
+		AuthToken: "private-auth-token",
+		Accounts: []AccountInfo{{
+			UID:       "provider-account-id",
+			AccountID: AccountID{IBAN: "NO9812345678901"},
+		}},
+	}
+
+	internallog.Trace(logger, "session", "data", session)
+	got := output.String()
+	if strings.Contains(got, session.AuthToken) {
+		t.Fatalf("trace log contains authentication token: %s", got)
+	}
+	for _, want := range []string{"REDACTED", "provider-account-id", "NO9812345678901"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("trace log omits %q: %s", want, got)
+		}
+	}
+}
 
 // generateTestKeyPair generates a test RSA key pair and returns PEM-encoded key bytes
 func generateTestKeyPair(t *testing.T) []byte {
@@ -314,6 +339,63 @@ func TestExtractCodeFromRedirectURL(t *testing.T) {
 			}
 			if got != tt.wantCode {
 				t.Errorf("code = %q, want %q", got, tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestRedirectErrorsDoNotContainCodeOrState(t *testing.T) {
+	const (
+		code          = "private-code"
+		expectedState = "private-expected-state"
+		actualState   = "private-actual-state"
+	)
+
+	_, err := extractCodeFromRedirectURL(
+		"https://example.com/redirect?code="+code+"&state="+actualState,
+		expectedState,
+	)
+	if err == nil {
+		t.Fatal("expected state mismatch")
+	}
+	for _, secret := range []string{code, expectedState, actualState} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("state mismatch error contains %q: %v", secret, err)
+		}
+	}
+
+	const malformed = "https://example.com/redirect?code=private-code&state=%zz"
+	_, err = extractCodeFromRedirectURL(malformed, expectedState)
+	if err == nil {
+		t.Fatal("expected malformed URL error")
+	}
+	if strings.Contains(err.Error(), malformed) || strings.Contains(err.Error(), code) {
+		t.Fatalf("URL parse error contains authorization material: %v", err)
+	}
+}
+
+func TestAuthenticationErrorsDoNotDumpResponses(t *testing.T) {
+	for _, test := range []struct{ name, body, want string }{
+		{"provider code", `{"error":"WRONG_REQUEST_PARAMETERS","detail":{"iban":"private-iban","token":"private-token"}}`, "API returned status 400: WRONG_REQUEST_PARAMETERS"},
+		{"unknown code", `{"error":"private-token"}`, "API returned status 400"},
+		{"redirect code", `{"error":"REDIRECT_URI_NOT_ALLOWED"}`, "API returned status 400: REDIRECT_URI_NOT_ALLOWED"},
+		{"redirect text is not a code", `{"detail":"REDIRECT_URI_NOT_ALLOWED"}`, "API returned status 400"},
+		{"free text", "private-token private-iban", "API returned status 400"},
+		{"malformed JSON", `{"error":"WRONG_REQUEST_PARAMETERS",`, "API returned status 400"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			t.Cleanup(server.Close)
+			auth := Auth{baseURL: server.URL, httpClient: server.Client()}
+			_, _, authErr := auth.initiateAuthorization(context.Background(), "private-jwt")
+			_, sessionErr := auth.createSessionWithCode(context.Background(), "private-jwt", "private-code")
+			for endpoint, err := range map[string]error{"auth": authErr, "sessions": sessionErr} {
+				if err == nil || err.Error() != test.want {
+					t.Errorf("%s error = %v, want %q", endpoint, err, test.want)
+				}
 			}
 		})
 	}

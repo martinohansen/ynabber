@@ -83,7 +83,8 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 		if errors.Is(err, ErrRateLimit) {
 			r.logger.Warn("rate limited by API, backing off before retry", "delay", delay)
 		} else {
-			r.logger.Warn("transient error, backing off before retry", "error", err, "delay", delay)
+			r.logger.Warn("transient error, backing off before retry",
+				"error", err, "delay", delay)
 		}
 		select {
 		case <-r.after(delay):
@@ -106,7 +107,8 @@ func (r Reader) retryHandler(ctx context.Context, err error) error {
 		}
 	}
 
-	r.logger.Warn("transient error, backing off before retry", "error", err, "delay", retryBaseDelay)
+	r.logger.Warn("transient error, backing off before retry",
+		"error", err, "delay", retryBaseDelay)
 	select {
 	case <-r.after(retryBaseDelay):
 		return nil

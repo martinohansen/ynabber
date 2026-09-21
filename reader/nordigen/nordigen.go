@@ -41,7 +41,10 @@ func NewReader(dataDir string) (Reader, error) {
 
 	client, err := nordigen.NewClient(cfg.SecretID, cfg.SecretKey)
 	if err != nil {
-		return Reader{}, fmt.Errorf("creating nordigen client: %w", err)
+		// The library flattens token initialization errors into strings, so
+		// their HTTP status and cause cannot be recovered reliably.
+		log.Trace(logger, "nordigen client initialization failed", "error", err)
+		return Reader{}, &responseError{message: "initializing nordigen client", cause: err}
 	}
 
 	return Reader{
@@ -53,8 +56,7 @@ func NewReader(dataDir string) (Reader, error) {
 }
 
 func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([]ynabber.Transaction, error) {
-	logger := r.logger.With("account", a.IBAN)
-
+	logger := r.logger.With("account", log.MaskedBankIdentifier(a.IBAN))
 	skipped := 0
 	y := []ynabber.Transaction{}
 	for _, v := range t.Transactions.Booked {
@@ -65,11 +67,13 @@ func (r Reader) toYnabbers(a ynabber.Account, t nordigen.AccountTransactions) ([
 
 		// Append transaction
 		if transaction != nil {
-			logger.Debug("mapped transaction", "from", v, "to", transaction)
+			logger.Debug("mapped transaction", "transaction_id", v.TransactionId, "import_id", transaction.ID)
+			log.Trace(logger, "mapped transaction data", "from", v, "to", transaction)
 			y = append(y, *transaction)
 		} else {
 			skipped++
-			logger.Debug("skipping", "transaction", v)
+			logger.Debug("skipping transaction", "transaction_id", v.TransactionId)
+			log.Trace(logger, "skipped transaction data", "transaction", v)
 		}
 
 	}
@@ -87,10 +91,9 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 	for _, account := range req.Accounts {
 		accountMetadata, err := r.Client.GetAccountMetadata(account)
 		if err != nil {
-			return nil, fmt.Errorf("getting account metadata: %w", err)
+			return nil, fmt.Errorf("getting account metadata: %w", apiResponseError(err))
 		}
-		logger := r.logger.With("iban", accountMetadata.Iban)
-
+		logger := r.logger.With("iban", log.MaskedBankIdentifier(accountMetadata.Iban))
 		// Handle expired, or suspended accounts by recreating the
 		// requisition.
 		switch accountMetadata.Status {
@@ -106,10 +109,15 @@ func (r Reader) Bulk() (t []ynabber.Transaction, err error) {
 		}
 
 		transactions, err := r.Client.GetAccountTransactions(string(account.ID))
-		log.Trace(r.logger, "account transactions", "account", account, "transactions", transactions)
 		if err != nil {
-			return t, fmt.Errorf("getting transactions: %w", err)
+			return t, fmt.Errorf("getting transactions: %w", apiResponseError(err))
 		}
+		log.Trace(logger, "account transactions",
+			"account", account,
+			"transactions", transactions,
+			"booked", len(transactions.Transactions.Booked),
+			"pending", len(transactions.Transactions.Pending),
+		)
 
 		x, err := r.toYnabbers(account, transactions)
 		if err != nil {
