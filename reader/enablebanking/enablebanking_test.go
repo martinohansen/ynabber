@@ -498,7 +498,7 @@ func TestReaderExtractPayee(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			payee := reader.extractPayee(tt.tx)
+			payee, _ := reader.extractPayee(tt.tx)
 			if payee != tt.expected {
 				t.Errorf("expected payee '%s', got '%s'", tt.expected, payee)
 			}

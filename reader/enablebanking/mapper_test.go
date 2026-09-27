@@ -302,7 +302,7 @@ func TestExtractPayeeRemittance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			payee := reader.extractPayee(tt.input)
+			payee, _ := reader.extractPayee(tt.input)
 			if payee != tt.want {
 				t.Errorf("expected '%s', got '%s'", tt.want, payee)
 			}
@@ -323,9 +323,12 @@ func TestExtractPayeeDebtor(t *testing.T) {
 		TransactionID: "tx-123",
 	}
 
-	payee := reader.extractPayee(tx)
+	payee, hasPayee := reader.extractPayee(tx)
 	if payee != "Debtor Name" {
 		t.Errorf("expected 'Debtor Name', got '%s'", payee)
+	}
+	if !hasPayee {
+		t.Error("expected hasPayee to be true")
 	}
 }
 
@@ -342,9 +345,12 @@ func TestExtractPayeeCreditor(t *testing.T) {
 		TransactionID: "tx-123",
 	}
 
-	payee := reader.extractPayee(tx)
+	payee, hasPayee := reader.extractPayee(tx)
 	if payee != "Creditor Name" {
 		t.Errorf("expected 'Creditor Name', got '%s'", payee)
+	}
+	if !hasPayee {
+		t.Error("expected hasPayee to be true")
 	}
 }
 
@@ -358,9 +364,12 @@ func TestExtractPayeeFallback(t *testing.T) {
 		TransactionID: "tx-fallback",
 	}
 
-	payee := reader.extractPayee(tx)
+	payee, hasPayee := reader.extractPayee(tx)
 	if payee != "tx-fallback" {
 		t.Errorf("expected 'tx-fallback', got '%s'", payee)
+	}
+	if hasPayee {
+		t.Error("expected hasPayee to be false for transaction ID fallback")
 	}
 }
 
@@ -425,7 +434,7 @@ func TestExtractMemoSingleRemittance(t *testing.T) {
 		t.Errorf("expected full raw remittance string, got '%s'", memo)
 	}
 	// Sanity-check that Payee does get the stripped version via defaultMapper
-	payee := reader.extractPayee(tx)
+	payee, _ := reader.extractPayee(tx)
 	payee = strip(payee, reader.Config.PayeeStrip)
 	if payee != "Rema 1000 Slemmestad" {
 		t.Errorf("expected stripped payee 'Rema 1000 Slemmestad', got '%s'", payee)
