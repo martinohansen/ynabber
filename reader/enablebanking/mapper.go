@@ -51,8 +51,11 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 	}
 
 	// Extract payee and memo
-	payee := r.extractPayee(tx)
+	payee, hasPayee := r.extractPayee(tx)
 	memo := r.extractMemo(tx)
+	if strings.TrimSpace(memo) == "" && hasPayee {
+		memo = payee
+	}
 
 	// Remove elements in payee that is defined in config
 	if r.Config.PayeeStrip != nil {
@@ -190,9 +193,11 @@ func stringFromInterface(value interface{}) string {
 	}
 }
 
-// extractPayee extracts payee information from a transaction
+// extractPayee extracts payee information from a transaction and reports
+// whether the value came from actual bank-provided data, as opposed to the
+// transaction ID fallback.
 // Priority: remittance info > debtor name > creditor name > transaction ID
-func (r Reader) extractPayee(tx EBTransaction) string {
+func (r Reader) extractPayee(tx EBTransaction) (string, bool) {
 	// Try remittance information first
 	if len(tx.RemittanceInformation) > 0 {
 		var firstInfo string
@@ -211,31 +216,31 @@ func (r Reader) extractPayee(tx EBTransaction) string {
 				if isDigitsOnly(trimmed) {
 					continue
 				}
-				return info
+				return info, true
 			}
-			return firstInfo
+			return firstInfo, true
 		}
 		if firstTrimmed != "" {
-			return firstInfo
+			return firstInfo, true
 		}
 	}
 
 	// Try debtor name
 	if debtor, ok := tx.Debtor.(map[string]interface{}); ok {
 		if name, ok := debtor["name"].(string); ok && name != "" {
-			return name
+			return name, true
 		}
 	}
 
 	// Try creditor name
 	if creditor, ok := tx.Creditor.(map[string]interface{}); ok {
 		if name, ok := creditor["name"].(string); ok && name != "" {
-			return name
+			return name, true
 		}
 	}
 
 	// Fallback to transaction ID
-	return tx.TransactionID
+	return tx.TransactionID, false
 }
 
 func isDigitsOnly(value string) bool {
