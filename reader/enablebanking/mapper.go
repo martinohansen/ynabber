@@ -13,7 +13,12 @@ import (
 // Mapper delegates all transaction mapping to the default mapper,
 // which applies configuration-driven payee stripping and truncation.
 func (r Reader) Mapper(account AccountInfo, tx EBTransaction) (*ynabber.Transaction, error) {
-	return r.defaultMapper(account, tx)
+	switch strings.ToLower(strings.TrimSpace(r.Config.ASPSP)) {
+	case "dnb":
+		return r.dnbMapper(account, tx)
+	default:
+		return r.defaultMapper(account, tx)
+	}
 }
 
 // statusBooked is the only transaction status imported into YNAB.
@@ -90,14 +95,12 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 //     (present for Sparebanken and credit-card ASPSPs).
 //  2. reference_number — bank-assigned, stable across sessions
 //     (null for all currently observed ASPSPs; included for future-proofing).
-//  3. syntheticTransactionID — deterministic SHA-256 hash of the mandatory
-//     transaction fields (fallback for DNB and any ASPSP that sets both
-//     entry_reference and reference_number to null).
+//  3. syntheticTransactionID — deterministic SHA-256 hash of transaction
+//     fields, used when neither bank reference is available.
 //
-// transaction_id is intentionally excluded: for DNB it is a session-scoped
-// token (base64 of a counter-prefixed string) that changes on every
-// re-authorisation, and for other ASPSPs it is merely a re-encoding of
-// entry_reference.
+// This generic resolver does not use transaction_id. The DNB-specific mapper
+// may use its validated transaction_id for booked transactions, based on
+// observed cross-session stability.
 //
 // The function always returns a non-empty string.
 func resolveTransactionID(tx EBTransaction) string {
@@ -110,10 +113,9 @@ func resolveTransactionID(tx EBTransaction) string {
 	return syntheticTransactionID(tx)
 }
 
-// syntheticTransactionID derives a deterministic, session-independent
-// transaction identifier for ASPSPs that provide no stable bank-assigned
-// reference (e.g. DNB, where entry_reference is null and transaction_id is a
-// session-scoped opaque token that changes on re-authorisation).
+// syntheticTransactionID derives a deterministic identifier when no stable
+// bank reference is available. DNB's mapper also uses it as a fallback when a
+// booked transaction_id does not match the validated DNB format.
 //
 // The hash input is the JSON encoding of the always-present EnableBanking
 // fields, which provides unambiguous field boundaries without manual separator
