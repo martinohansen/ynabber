@@ -88,19 +88,14 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 	}, nil
 }
 
-// resolveTransactionID returns a stable identifier for tx, trying candidates
-// in order of reliability:
+// resolveTransactionID returns a transaction identifier, preferring the
+// documented unique references provided by EnableBanking:
 //
-//  1. entry_reference — bank-assigned, stable across sessions
-//     (present for Sparebanken and credit-card ASPSPs).
-//  2. reference_number — bank-assigned, stable across sessions
-//     (null for all currently observed ASPSPs; included for future-proofing).
-//  3. syntheticTransactionID — deterministic SHA-256 hash of transaction
-//     fields, used when neither bank reference is available.
+//  1. entry_reference
+//  2. reference_number
 //
-// This generic resolver does not use transaction_id. The DNB-specific mapper
-// may use its validated transaction_id for booked transactions, based on
-// observed cross-session stability.
+// If neither reference is present, it generates a synthetic identifier from
+// the transaction fields.
 //
 // The function always returns a non-empty string.
 func resolveTransactionID(tx EBTransaction) string {
@@ -113,9 +108,8 @@ func resolveTransactionID(tx EBTransaction) string {
 	return syntheticTransactionID(tx)
 }
 
-// syntheticTransactionID derives a deterministic identifier when no stable
-// bank reference is available. DNB's mapper also uses it as a fallback when a
-// booked transaction_id does not match the validated DNB format.
+// syntheticTransactionID derives a deterministic identifier when neither
+// documented unique reference is present.
 //
 // The hash input is the JSON encoding of the always-present EnableBanking
 // fields, which provides unambiguous field boundaries without manual separator
@@ -126,10 +120,10 @@ func resolveTransactionID(tx EBTransaction) string {
 // The "synth:" prefix distinguishes synthetic IDs from bank-assigned IDs in
 // logs and makes the origin of the value unambiguous.
 //
-// Note: remittance_information is included in the hash. Some ASPSPs (e.g. DNB)
-// enrich this field asynchronously after booking, which changes the hash and
-// causes duplicates in YNAB. Use YNAB_DELAY=12h to avoid importing transactions
-// before their remittance information has stabilised.
+// Note: remittance_information is included in the hash. If a bank changes this
+// field after booking, the synthetic identifier changes too, which may cause a
+// duplicate import. YNAB_DELAY can reduce the chance of importing before the
+// remittance information has stabilized.
 func syntheticTransactionID(tx EBTransaction) string {
 	parts := []string{
 		tx.BookingDate,
