@@ -7,6 +7,10 @@ import (
 	"github.com/martinohansen/ynabber"
 )
 
+// dnbMapper uses EnableBanking's documented reference fields first, then a
+// validated booked transaction_id. The API describes transaction_id as
+// potentially volatile; observed booked DNB IDs remained stable across fetches.
+// See https://enablebanking.com/docs/api/reference/#transaction.
 func (r Reader) dnbMapper(account AccountInfo, tx EBTransaction) (*ynabber.Transaction, error) {
 	transactionID := stringFromInterface(tx.EntryReference)
 	if transactionID == "" {
