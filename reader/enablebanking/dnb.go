@@ -8,12 +8,15 @@ import (
 )
 
 func (r Reader) dnbMapper(account AccountInfo, tx EBTransaction) (*ynabber.Transaction, error) {
-	transactionID := ""
-	if tx.Status == statusBooked {
+	transactionID := stringFromInterface(tx.EntryReference)
+	if transactionID == "" {
+		transactionID = stringFromInterface(tx.ReferenceNumber)
+	}
+	if transactionID == "" && tx.Status == statusBooked {
 		transactionID, _ = dnbTransactionID(tx.TransactionID)
 	}
 	if transactionID == "" {
-		transactionID = resolveTransactionID(tx)
+		transactionID = syntheticTransactionID(tx)
 	}
 
 	// Use ENABLEBANKING_PAYEE_STRIP or ENABLEBANKING_PAYEE_STRIP_REGEX to clean

@@ -35,29 +35,10 @@ func TestDNBMapperUsesBookedTransactionIDAcrossRemittanceChanges(t *testing.T) {
 	}
 }
 
-func TestDNBMapperPrefersValidatedTransactionID(t *testing.T) {
+func TestDNBMapperPrefersReferenceNumberOverTransactionID(t *testing.T) {
 	reader := Reader{Config: Config{ASPSP: "DNB"}}
 	account := AccountInfo{UID: "dnb-account", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
-	transactionID := "MDExNl8wMDI5NzkzOTE5MDk0XzAwMDAwMDE"
-	tx := dnbMapperTestTransaction(transactionID, "Visa, merchant")
-	tx.ReferenceNumber = "  KID-REF-123  "
-
-	mapped, err := reader.Mapper(account, tx)
-	if err != nil {
-		t.Fatalf("Mapper() error = %v", err)
-	}
-	if mapped == nil {
-		t.Fatal("Mapper() returned nil transaction")
-	}
-	if got := string(mapped.ID); got != transactionID {
-		t.Errorf("ID = %q, want DNB transaction_id", got)
-	}
-}
-
-func TestDNBMapperUsesReferencesWhenTransactionIDIsInvalid(t *testing.T) {
-	reader := Reader{Config: Config{ASPSP: "DNB"}}
-	account := AccountInfo{UID: "dnb-account", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
-	tx := dnbMapperTestTransaction("not-a-stable-dnb-id", "Visa, merchant")
+	tx := dnbMapperTestTransaction("MDExNl8wMDI5NzkzOTE5MDk0XzAwMDAwMDE", "Visa, merchant")
 	tx.ReferenceNumber = "  KID-REF-123  "
 
 	mapped, err := reader.Mapper(account, tx)
@@ -68,7 +49,26 @@ func TestDNBMapperUsesReferencesWhenTransactionIDIsInvalid(t *testing.T) {
 		t.Fatal("Mapper() returned nil transaction")
 	}
 	if got := string(mapped.ID); got != "KID-REF-123" {
-		t.Errorf("ID = %q, want reference_number fallback", got)
+		t.Errorf("ID = %q, want reference_number", got)
+	}
+}
+
+func TestDNBMapperPrefersEntryReferenceOverOtherIDs(t *testing.T) {
+	reader := Reader{Config: Config{ASPSP: "DNB"}}
+	account := AccountInfo{UID: "dnb-account", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
+	tx := dnbMapperTestTransaction("MDExNl8wMDI5NzkzOTE5MDk0XzAwMDAwMDE", "Visa, merchant")
+	tx.EntryReference = "  ENTRY-REF-456  "
+	tx.ReferenceNumber = "  KID-REF-123  "
+
+	mapped, err := reader.Mapper(account, tx)
+	if err != nil {
+		t.Fatalf("Mapper() error = %v", err)
+	}
+	if mapped == nil {
+		t.Fatal("Mapper() returned nil transaction")
+	}
+	if got := string(mapped.ID); got != "ENTRY-REF-456" {
+		t.Errorf("ID = %q, want entry_reference", got)
 	}
 }
 
