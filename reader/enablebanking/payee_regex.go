@@ -7,22 +7,17 @@ import (
 )
 
 // PayeeRegex is a list of regular expressions whose matches are removed from
-// payee names. It implements envconfig.Decoder, parsing semicolon-separated
-// patterns so regexes may contain commas. Legacy comma-separated lists remain
-// supported when the value contains no semicolon.
+// payee names. It implements envconfig.Decoder, parsing a comma-separated list
+// of patterns and compiling each one. Patterns themselves cannot contain a
+// literal comma.
 type PayeeRegex []*regexp.Regexp
 
-// Decode parses value as a semicolon-separated list, or as a legacy
-// comma-separated list when no semicolon is present.
+// Decode parses value as a comma-separated list of regex patterns.
 func (pr *PayeeRegex) Decode(value string) error {
 	if value == "" {
 		return nil
 	}
-	separator := ";"
-	if !strings.Contains(value, separator) {
-		separator = ","
-	}
-	for pattern := range strings.SplitSeq(value, separator) {
+	for pattern := range strings.SplitSeq(value, ",") {
 		pattern = strings.TrimSpace(pattern)
 		if pattern == "" {
 			continue
@@ -42,7 +37,7 @@ func (pr PayeeRegex) String() string {
 	for i, re := range pr {
 		parts[i] = re.String()
 	}
-	return strings.Join(parts, ";")
+	return strings.Join(parts, ",")
 }
 
 var multiSpace = regexp.MustCompile(`\s{2,}`)

@@ -111,58 +111,6 @@ func TestDNBMapperUsesConfiguredPayeeStrip(t *testing.T) {
 	}
 }
 
-func TestDNBPayeeCleanupExampleDoesNotChangeSyntheticID(t *testing.T) {
-	const payeeStripRegex = `(?i)^Visa(\s+\d{6})?,?\s*;(?i)[,\s]*(Aut\.\s*\d+|Ark\.Ref\s*\*?\s*\d+|Versjon\s+\d+|Kl\.\s*\d{1,2}[.:]\d{2}|Dato\s*\d{1,2}[.:]\d{2}(\s+kl\.\s*\d{1,2}[.:]\d{2})?)([ ,\s]*(Aut\.\s*\d+|Ark\.Ref\s*\*?\s*\d+|Versjon\s+\d+|Kl\.\s*\d{1,2}[.:]\d{2}|Dato\s*\d{1,2}[.:]\d{2}(\s+kl\.\s*\d{1,2}[.:]\d{2})?))*[,\s]*;^[,\s]+|[,\s]+$`
-	var regexes PayeeRegex
-	if err := regexes.Decode(payeeStripRegex); err != nil {
-		t.Fatalf("decode suggested PayeeStripRegex: %v", err)
-	}
-
-	reader := Reader{Config: Config{
-		ASPSP:           "DNB",
-		PayeeStrip:      []string{"Varekjøp"},
-		PayeeStripRegex: regexes,
-	}}
-	account := AccountInfo{UID: "dnb-account", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
-	tests := []struct {
-		name   string
-		first  string
-		second string
-		want   string
-	}{
-		{
-			name:   "visa sequence",
-			first:  "Visa  100021, Eat-Now.No",
-			second: "Visa, Eat-Now.No",
-			want:   "Eat-Now.No",
-		},
-		{
-			name:   "varekjop booking metadata",
-			first:  "Varekjøp, Rusta Asker, Dato 10.10 kl. 13.59",
-			second: "Varekjøp, Kl. 13.59 Versjon 3 Aut. 405762, Rusta Asker",
-			want:   "Rusta Asker",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			first, err := reader.Mapper(account, dnbMapperTestTransaction("invalid-id", tt.first))
-			if err != nil {
-				t.Fatalf("Mapper(first) error = %v", err)
-			}
-			second, err := reader.Mapper(account, dnbMapperTestTransaction("invalid-id", tt.second))
-			if err != nil {
-				t.Fatalf("Mapper(second) error = %v", err)
-			}
-			if first.Payee != tt.want || second.Payee != tt.want {
-				t.Errorf("payees = %q and %q, want %q", first.Payee, second.Payee, tt.want)
-			}
-			if first.ID == second.ID {
-				t.Errorf("payee cleanup must not normalize synthetic IDs: %q", first.ID)
-			}
-		})
-	}
-}
-
 func TestDNBMapperDoesNotUseTransactionIDForOtherASPSPs(t *testing.T) {
 	reader := Reader{Config: Config{ASPSP: "Sparebanken Vest"}}
 	account := AccountInfo{UID: "other-account", AccountID: AccountID{IBAN: randomTestIBAN(t)}}

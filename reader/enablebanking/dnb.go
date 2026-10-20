@@ -11,11 +11,6 @@ import (
 // validated booked transaction_id. The API describes transaction_id as
 // potentially volatile; observed booked DNB IDs remained stable across fetches.
 // See https://enablebanking.com/docs/api/reference/#transaction.
-// dnbMapper chooses the DNB transaction identifier and delegates shared
-// transaction mapping, including configured payee cleanup, to defaultMapper.
-// For cleaner displayed payees, consider ENABLEBANKING_PAYEE_STRIP=Varekjøp
-// with semicolon-delimited ENABLEBANKING_PAYEE_STRIP_REGEX rules for Visa and
-// changing authorization/date annotations. Payee cleanup does not affect IDs.
 func (r Reader) dnbMapper(account AccountInfo, tx EBTransaction) (*ynabber.Transaction, error) {
 	transactionID := stringFromInterface(tx.EntryReference)
 	if transactionID == "" {
@@ -28,6 +23,9 @@ func (r Reader) dnbMapper(account AccountInfo, tx EBTransaction) (*ynabber.Trans
 		transactionID = syntheticTransactionID(tx)
 	}
 
+	// Use ENABLEBANKING_PAYEE_STRIP or ENABLEBANKING_PAYEE_STRIP_REGEX to clean
+	// changing DNB card metadata from displayed payees; these settings do not
+	// affect transaction IDs.
 	return r.defaultMapper(account, tx, transactionID)
 }
 
