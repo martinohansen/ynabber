@@ -16,6 +16,7 @@ func TestPayeeRegexDecode(t *testing.T) {
 		{name: "single", value: `^Dk-Nota\S+\s+`, want: []string{`^Dk-Nota\S+\s+`}},
 		{name: "multiple", value: `^foo,^bar`, want: []string{`^foo`, `^bar`}},
 		{name: "trim+blank-segments", value: ` ^foo , , ^bar `, want: []string{`^foo`, `^bar`}},
+		{name: "semicolon list permits commas in patterns", value: `^Visa\s+\d{6},\s*;^Merchant,\s+`, want: []string{`^Visa\s+\d{6},\s*`, `^Merchant,\s+`}},
 		{name: "invalid", value: `(unclosed`, wantErr: true},
 	}
 	for _, tt := range tests {
@@ -37,6 +38,16 @@ func TestPayeeRegexDecode(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPayeeRegexStringUsesSemicolonDelimiter(t *testing.T) {
+	var regexes PayeeRegex
+	if err := regexes.Decode(`^Visa\s+\d{6},\s*;^Merchant,\s+`); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := regexes.String(), `^Visa\s+\d{6},\s*;^Merchant,\s+`; got != want {
+		t.Errorf("PayeeRegex.String() = %q, want %q", got, want)
 	}
 }
 
