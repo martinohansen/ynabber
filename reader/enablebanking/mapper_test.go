@@ -102,7 +102,7 @@ func TestDefaultMapperCredit(t *testing.T) {
 		RemittanceInformation: []string{"Salary"},
 	}
 
-	result, err := reader.defaultMapper(account, tx)
+	result, err := reader.defaultMapper(account, tx, resolveTransactionID(tx))
 	if err != nil {
 		t.Fatalf("defaultMapper failed: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestDefaultMapperDebit(t *testing.T) {
 		},
 	}
 
-	result, err := reader.defaultMapper(account, tx)
+	result, err := reader.defaultMapper(account, tx, resolveTransactionID(tx))
 	if err != nil {
 		t.Fatalf("defaultMapper failed: %v", err)
 	}
@@ -689,7 +689,7 @@ func TestDefaultMapperStatusFilter(t *testing.T) {
 				Status: tt.status,
 			}
 
-			result, err := reader.defaultMapper(account, tx)
+			result, err := reader.defaultMapper(account, tx, resolveTransactionID(tx))
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("defaultMapper() error = %v, wantErr %v", err, tt.wantErr)

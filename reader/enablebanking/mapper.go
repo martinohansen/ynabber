@@ -17,7 +17,7 @@ func (r Reader) Mapper(account AccountInfo, tx EBTransaction) (*ynabber.Transact
 	case "dnb":
 		return r.dnbMapper(account, tx)
 	default:
-		return r.defaultMapper(account, tx)
+		return r.defaultMapper(account, tx, resolveTransactionID(tx))
 	}
 }
 
@@ -26,14 +26,12 @@ func (r Reader) Mapper(account AccountInfo, tx EBTransaction) (*ynabber.Transact
 // because their IDs are unstable and their payee fields are often absent.
 const statusBooked = "BOOK"
 
-// defaultMapper is the generic mapper for EnableBanking transactions
-func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.Transaction, error) {
+// defaultMapper maps shared transaction fields using the identifier selected by
+// the generic resolver or an ASPSP-specific mapper.
+func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction, transactionID string) (*ynabber.Transaction, error) {
 	if tx.Status != "" && tx.Status != statusBooked {
 		return nil, nil
 	}
-
-	// Resolve a stable transaction ID.
-	transactionID := resolveTransactionID(tx)
 
 	bookingDateStr, err := resolveBookingDate(tx)
 	if err != nil {

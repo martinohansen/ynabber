@@ -35,10 +35,29 @@ func TestDNBMapperUsesBookedTransactionIDAcrossRemittanceChanges(t *testing.T) {
 	}
 }
 
-func TestDNBMapperPrefersReferenceFields(t *testing.T) {
+func TestDNBMapperPrefersValidatedTransactionID(t *testing.T) {
 	reader := Reader{Config: Config{ASPSP: "DNB"}}
 	account := AccountInfo{UID: "dnb-account", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
-	tx := dnbMapperTestTransaction("MDExNl8wMDI5NzkzOTE5MDk0XzAwMDAwMDE", "Visa, merchant")
+	transactionID := "MDExNl8wMDI5NzkzOTE5MDk0XzAwMDAwMDE"
+	tx := dnbMapperTestTransaction(transactionID, "Visa, merchant")
+	tx.ReferenceNumber = "  KID-REF-123  "
+
+	mapped, err := reader.Mapper(account, tx)
+	if err != nil {
+		t.Fatalf("Mapper() error = %v", err)
+	}
+	if mapped == nil {
+		t.Fatal("Mapper() returned nil transaction")
+	}
+	if got := string(mapped.ID); got != transactionID {
+		t.Errorf("ID = %q, want DNB transaction_id", got)
+	}
+}
+
+func TestDNBMapperUsesReferencesWhenTransactionIDIsInvalid(t *testing.T) {
+	reader := Reader{Config: Config{ASPSP: "DNB"}}
+	account := AccountInfo{UID: "dnb-account", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
+	tx := dnbMapperTestTransaction("not-a-stable-dnb-id", "Visa, merchant")
 	tx.ReferenceNumber = "  KID-REF-123  "
 
 	mapped, err := reader.Mapper(account, tx)
@@ -49,52 +68,46 @@ func TestDNBMapperPrefersReferenceFields(t *testing.T) {
 		t.Fatal("Mapper() returned nil transaction")
 	}
 	if got := string(mapped.ID); got != "KID-REF-123" {
-		t.Errorf("ID = %q, want reference_number", got)
+		t.Errorf("ID = %q, want reference_number fallback", got)
 	}
 }
 
-func TestDNBMapperNormalizesRemittanceForSyntheticFallback(t *testing.T) {
+func TestDNBMapperLeavesSyntheticFallbackRemittanceUntouched(t *testing.T) {
 	reader := Reader{Config: Config{ASPSP: "DNB"}}
 	account := AccountInfo{UID: "dnb-account", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
+	first := dnbMapperTestTransaction("invalid-id", "Visa  100021, Eat-Now.No")
+	second := dnbMapperTestTransaction("invalid-id", "Visa, Eat-Now.No")
 
-	tests := []struct {
-		name   string
-		first  string
-		second string
-	}{
-		{
-			name:   "visa sequence token removed",
-			first:  "Visa  100021, Eat-Now.No",
-			second: "Visa, Eat-Now.No",
-		},
-		{
-			name:   "authorization and booking date annotations removed",
-			first:  "Varekjøp, Rusta Asker, Dato 10.10 kl. 13.59",
-			second: "Varekjøp, Kl. 13.59 Versjon 3 Aut. 405762, Rusta Asker",
-		},
+	firstMapped, err := reader.Mapper(account, first)
+	if err != nil {
+		t.Fatalf("Mapper(first) error = %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			first := dnbMapperTestTransaction("not-a-stable-dnb-id", tt.first)
-			second := dnbMapperTestTransaction("not-a-stable-dnb-id", tt.second)
-			firstMapped, err := reader.Mapper(account, first)
-			if err != nil {
-				t.Fatalf("Mapper(first) error = %v", err)
-			}
-			secondMapped, err := reader.Mapper(account, second)
-			if err != nil {
-				t.Fatalf("Mapper(second) error = %v", err)
-			}
-			if firstMapped == nil || secondMapped == nil {
-				t.Fatal("Mapper() returned nil transaction")
-			}
-			if got := string(firstMapped.ID); !strings.HasPrefix(got, "synth:") {
-				t.Errorf("fallback ID = %q, want synth: prefix", got)
-			}
-			if got, want := firstMapped.ID, secondMapped.ID; got != want {
-				t.Errorf("fallback IDs differ after volatile remittance change: %q != %q", got, want)
-			}
-		})
+	secondMapped, err := reader.Mapper(account, second)
+	if err != nil {
+		t.Fatalf("Mapper(second) error = %v", err)
+	}
+	if firstMapped == nil || secondMapped == nil {
+		t.Fatal("Mapper() returned nil transaction")
+	}
+	if firstMapped.ID == secondMapped.ID {
+		t.Errorf("synthetic fallback IDs should reflect raw remittance changes: %q", firstMapped.ID)
+	}
+}
+
+func TestDNBMapperUsesConfiguredPayeeStrip(t *testing.T) {
+	reader := Reader{Config: Config{ASPSP: "DNB", PayeeStrip: []string{"100021"}}}
+	account := AccountInfo{UID: "dnb-account", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
+	tx := dnbMapperTestTransaction("MDExNl8wMDI5NzkzOTE5MDk0XzAwMDAwMDE", "Visa  100021, Eat-Now.No")
+
+	mapped, err := reader.Mapper(account, tx)
+	if err != nil {
+		t.Fatalf("Mapper() error = %v", err)
+	}
+	if mapped == nil {
+		t.Fatal("Mapper() returned nil transaction")
+	}
+	if strings.Contains(mapped.Payee, "100021") {
+		t.Errorf("Payee = %q, want configured PayeeStrip applied", mapped.Payee)
 	}
 }
 
