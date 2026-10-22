@@ -150,8 +150,7 @@ func syntheticTransactionIDWithRegex(tx EBTransaction, synIDRegex SynIDRegex) st
 }
 
 var (
-	syntheticIDCommaWhitespace = regexp.MustCompile(`\s*,\s*`)
-	syntheticIDRepeatedCommas  = regexp.MustCompile(`(?:,\s*){2,}`)
+	syntheticIDRepeatedCommas = regexp.MustCompile(`(?:,\s*){2,}`)
 )
 
 func normalizeSyntheticIDRemittance(values []string, synIDRegex SynIDRegex) []string {
@@ -163,9 +162,8 @@ func normalizeSyntheticIDRemittance(values []string, synIDRegex SynIDRegex) []st
 			changed = changed || stripped != value
 			value = stripped
 		}
-		value = syntheticIDCommaWhitespace.ReplaceAllString(value, ", ")
 		value = syntheticIDRepeatedCommas.ReplaceAllString(value, ", ")
-		value = strings.Trim(strings.Join(strings.Fields(value), " "), ", ")
+		value = strings.Trim(value, ", ")
 		if value != "" {
 			normalized = append(normalized, value)
 		}
@@ -176,7 +174,7 @@ func normalizeSyntheticIDRemittance(values []string, synIDRegex SynIDRegex) []st
 	if len(normalized) == 0 {
 		return nil
 	}
-	return []string{strings.Join(normalized, " ")}
+	return normalized
 }
 
 func resolveBookingDate(tx EBTransaction) (string, error) {

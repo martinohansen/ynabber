@@ -219,6 +219,41 @@ func TestMapperSynIDRegexDoesNotChangePayeeOrMemo(t *testing.T) {
 	if firstUnmatched.ID == secondUnmatched.ID {
 		t.Error("unmatched remittance must retain the legacy hash input")
 	}
+
+	for _, tt := range []struct {
+		name   string
+		before []string
+		after  []string
+	}{
+		{
+			name:   "multiple entries",
+			before: []string{"Merchant", "Oslo"},
+			after:  []string{"Merchant", "Oslo Aut. 123"},
+		},
+		{
+			name:   "repeated whitespace",
+			before: []string{"Merchant  Oslo"},
+			after:  []string{"Merchant  Oslo Aut. 123"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			before := transactions[0]
+			before.RemittanceInformation = tt.before
+			after := transactions[0]
+			after.RemittanceInformation = tt.after
+			beforeResult, err := reader.Mapper(account, before)
+			if err != nil {
+				t.Fatal(err)
+			}
+			afterResult, err := reader.Mapper(account, after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if beforeResult.ID != afterResult.ID {
+				t.Errorf("synthetic IDs differ across annotation transition: %q != %q", beforeResult.ID, afterResult.ID)
+			}
+		})
+	}
 }
 
 // TestExtractPayeeRemittance tests payee extraction from remittance
