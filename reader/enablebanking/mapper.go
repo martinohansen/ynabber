@@ -162,6 +162,7 @@ func normalizeSyntheticIDRemittance(values []string, synIDRegex SynIDRegex) []st
 			changed = changed || stripped != value
 			value = stripped
 		}
+		value = strings.Join(strings.Fields(value), " ")
 		value = syntheticIDRepeatedCommas.ReplaceAllString(value, ", ")
 		value = strings.Trim(value, ", ")
 		if value != "" {

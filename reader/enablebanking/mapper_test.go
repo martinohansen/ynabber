@@ -232,8 +232,8 @@ func TestMapperSynIDRegexDoesNotChangePayeeOrMemo(t *testing.T) {
 		},
 		{
 			name:   "repeated whitespace",
-			before: []string{"Merchant  Oslo"},
-			after:  []string{"Merchant  Oslo Aut. 123"},
+			before: []string{"Merchant  Oslo Aut. 123"},
+			after:  []string{"Merchant Oslo Aut. 456"},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
