@@ -169,6 +169,7 @@ func TestConfigWithEnvironmentVariables(t *testing.T) {
 		"ENABLEBANKING_FROM_DATE":    "2024-02-01",
 		"ENABLEBANKING_TO_DATE":      "2024-12-31",
 		"ENABLEBANKING_INTERVAL":     "24h",
+		"ENABLEBANKING_SYN_ID_REGEX": `^Visa;Aut\.\s*\d+`,
 	} {
 		t.Setenv(key, value)
 	}
@@ -179,7 +180,7 @@ func TestConfigWithEnvironmentVariables(t *testing.T) {
 	if cfg.AppID != "test-app-123" || cfg.Country != "SE" || cfg.ASPSP != "Nordea" ||
 		cfg.PEMFile != "./test.pem" || cfg.SessionFile != "custom_session.json" ||
 		cfg.FromDate != mustDate(t, "2024-02-01") || cfg.ToDate != mustDate(t, "2024-12-31") ||
-		cfg.Interval != 24*time.Hour {
+		cfg.Interval != 24*time.Hour || cfg.SynIDRegex.String() != `^Visa;Aut\.\s*\d+` {
 		t.Fatalf("unexpected parsed configuration: %+v", cfg)
 	}
 }

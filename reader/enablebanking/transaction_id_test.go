@@ -154,7 +154,7 @@ func TestResolveTransactionID_Priority(t *testing.T) {
 			// NOTE: resolveTransactionID is called with the NEW signature
 			// (returns string, not (string, error)). This will not compile
 			// against the current implementation — that is intentional (Red).
-			got := resolveTransactionID(tt.tx)
+			got := resolveTransactionID(tt.tx, nil)
 
 			if got == "" {
 				t.Fatalf("resolveTransactionID() returned empty string")

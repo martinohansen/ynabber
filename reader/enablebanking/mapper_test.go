@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/martinohansen/ynabber"
 )
 
 // TestMapper tests that the Mapper method produces a valid transaction
@@ -152,6 +154,105 @@ func TestDefaultMapperDebit(t *testing.T) {
 	// Amount should be negative for debit
 	if int64(result.Amount) != -500000 {
 		t.Errorf("expected -500000 milliunits, got %d", int64(result.Amount))
+	}
+}
+
+func TestMapperSynIDRegexDoesNotChangePayeeOrMemo(t *testing.T) {
+	var patterns SynIDRegex
+	patternList := `(?i)^Visa(\s+\d{6})?,?\s*;(?i)\b(?:Aut\.\s*\d+|Ark\.Ref\s*\*?\s*\d+|Versjon\s+\d+|Kl\.\s*\d{1,2}[.:]\d{2}|Dato\s*\d{1,2}[.:]\d{2}(?:\s+kl\.\s*\d{1,2}[.:]\d{2})?)`
+	if err := patterns.Decode(patternList); err != nil {
+		t.Fatal(err)
+	}
+	reader := Reader{Config: Config{SynIDRegex: patterns}}
+	account := AccountInfo{UID: "acc-syn-id", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
+	transactions := []EBTransaction{
+		{
+			BookingDate: "2026-10-10", CreditDebitIndicator: "DBIT",
+			TransactionAmount: struct {
+				Currency string `json:"currency"`
+				Amount   string `json:"amount"`
+			}{Currency: "NOK", Amount: "100.00"},
+			RemittanceInformation: []string{"Varekjøp, Rusta Asker, Dato 10.10 kl. 13.59"},
+		},
+		{
+			BookingDate: "2026-10-10", CreditDebitIndicator: "DBIT",
+			TransactionAmount: struct {
+				Currency string `json:"currency"`
+				Amount   string `json:"amount"`
+			}{Currency: "NOK", Amount: "100.00"},
+			RemittanceInformation: []string{"Varekjøp, Kl. 13.59 Versjon 3 Aut. 405762, Rusta Asker"},
+		},
+	}
+	first, err := reader.Mapper(account, transactions[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := reader.Mapper(account, transactions[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID != second.ID {
+		t.Errorf("normalized synthetic IDs differ: %q != %q", first.ID, second.ID)
+	}
+	for i, result := range []*ynabber.Transaction{first, second} {
+		want := transactions[i].RemittanceInformation[0]
+		if result.Payee != want {
+			t.Errorf("transaction %d Payee = %q, want original %q", i, result.Payee, want)
+		}
+		if result.Memo != want {
+			t.Errorf("transaction %d Memo = %q, want original %q", i, result.Memo, want)
+		}
+	}
+
+	unmatchedFirst := transactions[0]
+	unmatchedFirst.RemittanceInformation = []string{"Ordinary,  merchant"}
+	unmatchedSecond := unmatchedFirst
+	unmatchedSecond.RemittanceInformation = []string{"Ordinary, merchant"}
+	firstUnmatched, err := reader.Mapper(account, unmatchedFirst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondUnmatched, err := reader.Mapper(account, unmatchedSecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstUnmatched.ID == secondUnmatched.ID {
+		t.Error("unmatched remittance must retain the legacy hash input")
+	}
+
+	for _, tt := range []struct {
+		name   string
+		before []string
+		after  []string
+	}{
+		{
+			name:   "multiple entries",
+			before: []string{"Merchant", "Oslo"},
+			after:  []string{"Merchant", "Oslo Aut. 123"},
+		},
+		{
+			name:   "repeated whitespace",
+			before: []string{"Merchant  Oslo Aut. 123"},
+			after:  []string{"Merchant Oslo Aut. 456"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			before := transactions[0]
+			before.RemittanceInformation = tt.before
+			after := transactions[0]
+			after.RemittanceInformation = tt.after
+			beforeResult, err := reader.Mapper(account, before)
+			if err != nil {
+				t.Fatal(err)
+			}
+			afterResult, err := reader.Mapper(account, after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if beforeResult.ID != afterResult.ID {
+				t.Errorf("synthetic IDs differ across annotation transition: %q != %q", beforeResult.ID, afterResult.ID)
+			}
+		})
 	}
 }
 
