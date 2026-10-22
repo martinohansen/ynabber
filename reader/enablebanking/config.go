@@ -92,6 +92,13 @@ type Config struct {
 	// "Remouladen".
 	PayeeStripRegex PayeeRegex `envconfig:"ENABLEBANKING_PAYEE_STRIP_REGEX"`
 
+	// SynIDRegex is a semicolon-separated list of regexes removed only from
+	// remittance text used for synthetic transaction IDs; Payee and Memo are
+	// unchanged.
+	// Example: `ENABLEBANKING_SYN_ID_REGEX=Aut\.\s*\d+` strips a
+	// changing authorization code such as `Aut. 405762` from the ID input.
+	SynIDRegex SynIDRegex `envconfig:"ENABLEBANKING_SYN_ID_REGEX"`
+
 	// PSUHeaders controls whether PSU headers are sent to EnableBanking.
 	// Leave it unset to enable them only for banks that require them, such as
 	// Bulder and Sparebanken Vest. Set it to true to always enable the headers,
