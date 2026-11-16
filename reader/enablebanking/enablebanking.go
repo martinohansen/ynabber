@@ -372,6 +372,11 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 			}
 
 			if tx != nil {
+				accountLogger.Debug("mapped transaction",
+					"id", tx.ID,
+					"id_source", transactionIDSource(ebTx),
+					"shape", remittanceShape(ebTx),
+				)
 				results = append(results, *tx)
 			}
 		}

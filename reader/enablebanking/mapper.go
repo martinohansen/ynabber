@@ -111,6 +111,32 @@ func resolveTransactionID(tx EBTransaction, synIDRegex SynIDRegex) string {
 	return syntheticTransactionIDWithRegex(tx, synIDRegex)
 }
 
+// transactionIDSource names the candidate resolveTransactionID uses for tx.
+// It is for diagnostics: a change between imports of the same transaction
+// (e.g. synthetic to reference_number) produces a new YNAB import ID.
+func transactionIDSource(tx EBTransaction) string {
+	if stringFromInterface(tx.EntryReference) != "" {
+		return "entry_reference"
+	}
+	if stringFromInterface(tx.ReferenceNumber) != "" {
+		return "reference_number"
+	}
+	return "synthetic"
+}
+
+// remittanceShape describes the remittance layout without exposing its text,
+// e.g. "digits-first/2" for a reference element followed by the payee text.
+func remittanceShape(tx EBTransaction) string {
+	n := len(tx.RemittanceInformation)
+	if n == 0 {
+		return "empty/0"
+	}
+	if isDigitsOnly(strings.TrimSpace(tx.RemittanceInformation[0])) {
+		return fmt.Sprintf("digits-first/%d", n)
+	}
+	return fmt.Sprintf("text-first/%d", n)
+}
+
 // syntheticTransactionID derives a deterministic, session-independent
 // transaction identifier for ASPSPs that provide no stable bank-assigned
 // reference (e.g. DNB, where entry_reference is null and transaction_id is a
