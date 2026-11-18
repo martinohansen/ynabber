@@ -92,6 +92,15 @@ type Config struct {
 	// "Remouladen".
 	PayeeStripRegex PayeeRegex `envconfig:"ENABLEBANKING_PAYEE_STRIP_REGEX"`
 
+	// DNBSynIDRegex is a semicolon-separated list of regexes removed only from
+	// remittance text used for DNB synthetic transaction IDs; Payee and Memo are
+	// unchanged. Only read when ASPSP is DNB. DNB mutates the remittance text
+	// for the same transaction after booking (e.g. "Giro 5924, ..." becomes
+	// "Giro, ..."), which otherwise causes duplicates in Ynab.
+	// Example: `(?i)\bGiro\b(?:\s+\d+)?` turns "Giro 5924, Bruse As" and
+	// "Giro, Bruse As" into the same ID input.
+	DNBSynIDRegex SynIDRegex `envconfig:"ENABLEBANKING_DNB_SYN_ID_REGEX"`
+
 	// PSUHeaders controls whether PSU headers are sent to EnableBanking.
 	// Leave it unset to enable them only for banks that require them, such as
 	// Bulder and Sparebanken Vest. Set it to true to always enable the headers,

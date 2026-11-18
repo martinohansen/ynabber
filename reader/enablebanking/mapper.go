@@ -4,16 +4,21 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/martinohansen/ynabber"
 )
 
-// Mapper delegates all transaction mapping to the default mapper,
-// which applies configuration-driven payee stripping and truncation.
+// Mapper uses the most specific mapper for the ASPSP in question.
 func (r Reader) Mapper(account AccountInfo, tx EBTransaction) (*ynabber.Transaction, error) {
-	return r.defaultMapper(account, tx)
+	switch {
+	case isDNB(r.Config.ASPSP):
+		return r.dnbMapper(account, tx)
+	default:
+		return r.defaultMapper(account, tx)
+	}
 }
 
 // statusBooked is the only transaction status imported into YNAB.
@@ -28,7 +33,7 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 	}
 
 	// Resolve a stable transaction ID.
-	transactionID := resolveTransactionID(tx)
+	transactionID := resolveTransactionID(tx, nil)
 
 	bookingDateStr, err := resolveBookingDate(tx)
 	if err != nil {
@@ -91,8 +96,9 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 //  2. reference_number — bank-assigned, stable across sessions
 //     (null for all currently observed ASPSPs; included for future-proofing).
 //  3. syntheticTransactionID — deterministic SHA-256 hash of the mandatory
-//     transaction fields (fallback for DNB and any ASPSP that sets both
-//     entry_reference and reference_number to null).
+//     transaction fields (fallback for any ASPSP that sets both
+//     entry_reference and reference_number to null). DNB always uses this
+//     candidate; see dnbMapper.
 //
 // transaction_id is intentionally excluded: for DNB it is a session-scoped
 // token (base64 of a counter-prefixed string) that changes on every
@@ -100,14 +106,40 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 // entry_reference.
 //
 // The function always returns a non-empty string.
-func resolveTransactionID(tx EBTransaction) string {
+func resolveTransactionID(tx EBTransaction, synIDRegex SynIDRegex) string {
 	if value := stringFromInterface(tx.EntryReference); value != "" {
 		return value
 	}
 	if value := stringFromInterface(tx.ReferenceNumber); value != "" {
 		return value
 	}
-	return syntheticTransactionID(tx)
+	return syntheticTransactionIDWithRegex(tx, synIDRegex)
+}
+
+// transactionIDSource names the candidate resolveTransactionID uses for tx.
+// It is for diagnostics: a change between imports of the same transaction
+// (e.g. synthetic to reference_number) produces a new YNAB import ID.
+func transactionIDSource(tx EBTransaction) string {
+	if stringFromInterface(tx.EntryReference) != "" {
+		return "entry_reference"
+	}
+	if stringFromInterface(tx.ReferenceNumber) != "" {
+		return "reference_number"
+	}
+	return "synthetic"
+}
+
+// remittanceShape describes the remittance layout without exposing its text,
+// e.g. "digits-first/2" for a reference element followed by the payee text.
+func remittanceShape(tx EBTransaction) string {
+	n := len(tx.RemittanceInformation)
+	if n == 0 {
+		return "empty/0"
+	}
+	if isDigitsOnly(strings.TrimSpace(tx.RemittanceInformation[0])) {
+		return fmt.Sprintf("digits-first/%d", n)
+	}
+	return fmt.Sprintf("text-first/%d", n)
 }
 
 // syntheticTransactionID derives a deterministic, session-independent
@@ -124,21 +156,57 @@ func resolveTransactionID(tx EBTransaction) string {
 // The "synth:" prefix distinguishes synthetic IDs from bank-assigned IDs in
 // logs and makes the origin of the value unambiguous.
 //
-// Note: remittance_information is included in the hash. Some ASPSPs (e.g. DNB)
-// enrich this field asynchronously after booking, which changes the hash and
-// causes duplicates in YNAB. Use YNAB_DELAY=12h to avoid importing transactions
-// before their remittance information has stabilised.
+// Remittance information is unchanged unless SynIDRegex is configured. When
+// configured, matched text is removed and the remaining entries are
+// canonicalized only for this hash.
 func syntheticTransactionID(tx EBTransaction) string {
+	return syntheticTransactionIDWithRegex(tx, nil)
+}
+
+func syntheticTransactionIDWithRegex(tx EBTransaction, synIDRegex SynIDRegex) string {
 	parts := []string{
 		tx.BookingDate,
 		tx.TransactionAmount.Amount,
 		tx.TransactionAmount.Currency,
 		tx.CreditDebitIndicator,
 	}
-	parts = append(parts, tx.RemittanceInformation...)
+	remittance := tx.RemittanceInformation
+	if len(synIDRegex) > 0 {
+		remittance = normalizeSyntheticIDRemittance(remittance, synIDRegex)
+	}
+	parts = append(parts, remittance...)
 	b, _ := json.Marshal(parts)
 	h := sha256.Sum256(b)
 	return fmt.Sprintf("synth:%x", h)
+}
+
+var (
+	syntheticIDRepeatedCommas = regexp.MustCompile(`(?:,\s*){2,}`)
+)
+
+func normalizeSyntheticIDRemittance(values []string, synIDRegex SynIDRegex) []string {
+	normalized := make([]string, 0, len(values))
+	changed := false
+	for _, value := range values {
+		for _, pattern := range synIDRegex {
+			stripped := pattern.ReplaceAllString(value, "")
+			changed = changed || stripped != value
+			value = stripped
+		}
+		value = strings.Join(strings.Fields(value), " ")
+		value = syntheticIDRepeatedCommas.ReplaceAllString(value, ", ")
+		value = strings.Trim(value, ", ")
+		if value != "" {
+			normalized = append(normalized, value)
+		}
+	}
+	if !changed {
+		return values
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }
 
 func resolveBookingDate(tx EBTransaction) (string, error) {

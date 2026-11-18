@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -372,6 +373,15 @@ func (r Reader) fetchSessionTransactions(ctx context.Context, session Session) (
 			}
 
 			if tx != nil {
+				idSource := transactionIDSource(ebTx)
+				if isDNB(r.Config.ASPSP) {
+					idSource = "synthetic"
+				}
+				accountLogger.Debug("mapped transaction",
+					"id", tx.ID,
+					"id_source", idSource,
+					"shape", remittanceShape(ebTx),
+				)
 				results = append(results, *tx)
 			}
 		}
@@ -408,6 +418,12 @@ func accountIdentifierForLog(account AccountInfo) string {
 func loadEnvConfig(cfg *Config) error {
 	if err := envconfig.Process("", cfg); err != nil {
 		return fmt.Errorf("processing config: %w", err)
+	}
+	// Fail rather than ignore: the old variable applied to every ASPSP, and
+	// silently dropping it would change synthetic IDs and re-import
+	// transactions.
+	if os.Getenv("ENABLEBANKING_SYN_ID_REGEX") != "" {
+		return fmt.Errorf("ENABLEBANKING_SYN_ID_REGEX is no longer supported; rename it to ENABLEBANKING_DNB_SYN_ID_REGEX (it now applies only to DNB)")
 	}
 	return nil
 }

@@ -161,14 +161,15 @@ func TestConfigGetToDate(t *testing.T) {
 func TestConfigWithEnvironmentVariables(t *testing.T) {
 	setConfigEnv(t)
 	for key, value := range map[string]string{
-		"ENABLEBANKING_APP_ID":       "test-app-123",
-		"ENABLEBANKING_COUNTRY":      "SE",
-		"ENABLEBANKING_ASPSP":        "Nordea",
-		"ENABLEBANKING_PEM_FILE":     "./test.pem",
-		"ENABLEBANKING_SESSION_FILE": "custom_session.json",
-		"ENABLEBANKING_FROM_DATE":    "2024-02-01",
-		"ENABLEBANKING_TO_DATE":      "2024-12-31",
-		"ENABLEBANKING_INTERVAL":     "24h",
+		"ENABLEBANKING_APP_ID":           "test-app-123",
+		"ENABLEBANKING_COUNTRY":          "SE",
+		"ENABLEBANKING_ASPSP":            "Nordea",
+		"ENABLEBANKING_PEM_FILE":         "./test.pem",
+		"ENABLEBANKING_SESSION_FILE":     "custom_session.json",
+		"ENABLEBANKING_FROM_DATE":        "2024-02-01",
+		"ENABLEBANKING_TO_DATE":          "2024-12-31",
+		"ENABLEBANKING_INTERVAL":         "24h",
+		"ENABLEBANKING_DNB_SYN_ID_REGEX": `^Visa;Aut\.\s*\d+`,
 	} {
 		t.Setenv(key, value)
 	}
@@ -179,7 +180,7 @@ func TestConfigWithEnvironmentVariables(t *testing.T) {
 	if cfg.AppID != "test-app-123" || cfg.Country != "SE" || cfg.ASPSP != "Nordea" ||
 		cfg.PEMFile != "./test.pem" || cfg.SessionFile != "custom_session.json" ||
 		cfg.FromDate != mustDate(t, "2024-02-01") || cfg.ToDate != mustDate(t, "2024-12-31") ||
-		cfg.Interval != 24*time.Hour {
+		cfg.Interval != 24*time.Hour || cfg.DNBSynIDRegex.String() != `^Visa;Aut\.\s*\d+` {
 		t.Fatalf("unexpected parsed configuration: %+v", cfg)
 	}
 }
@@ -441,5 +442,32 @@ func TestNewReaderRejectsInvalidPSUTypeBeforeDiscovery(t *testing.T) {
 	}
 	if !strings.HasPrefix(err.Error(), "loading config:") {
 		t.Fatalf("unexpected error context: %v", err)
+	}
+}
+
+func TestLoadEnvConfigRejectsOldSynIDRegex(t *testing.T) {
+	setConfigEnv(t)
+	t.Setenv("ENABLEBANKING_SYN_ID_REGEX", `Aut\.\s*\d+`)
+
+	var cfg Config
+	err := loadEnvConfig(&cfg)
+	if err == nil {
+		t.Fatal("expected ENABLEBANKING_SYN_ID_REGEX to be rejected")
+	}
+	if !strings.Contains(err.Error(), "ENABLEBANKING_DNB_SYN_ID_REGEX") {
+		t.Errorf("error %q should name the replacement variable", err)
+	}
+}
+
+func TestLoadEnvConfigAcceptsDNBSynIDRegex(t *testing.T) {
+	setConfigEnv(t)
+	t.Setenv("ENABLEBANKING_DNB_SYN_ID_REGEX", `\bGiro\b`)
+
+	var cfg Config
+	if err := loadEnvConfig(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DNBSynIDRegex.String() != `\bGiro\b` {
+		t.Errorf("DNBSynIDRegex = %q", cfg.DNBSynIDRegex.String())
 	}
 }
