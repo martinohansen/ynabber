@@ -11,10 +11,14 @@ import (
 	"github.com/martinohansen/ynabber"
 )
 
-// Mapper delegates all transaction mapping to the default mapper,
-// which applies configuration-driven payee stripping and truncation.
+// Mapper uses the most specific mapper for the ASPSP in question.
 func (r Reader) Mapper(account AccountInfo, tx EBTransaction) (*ynabber.Transaction, error) {
-	return r.defaultMapper(account, tx)
+	switch {
+	case isDNB(r.Config.ASPSP):
+		return r.dnbMapper(account, tx)
+	default:
+		return r.defaultMapper(account, tx)
+	}
 }
 
 // statusBooked is the only transaction status imported into YNAB.
@@ -29,7 +33,7 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 	}
 
 	// Resolve a stable transaction ID.
-	transactionID := resolveTransactionID(tx, r.Config.SynIDRegex)
+	transactionID := resolveTransactionID(tx, nil)
 
 	bookingDateStr, err := resolveBookingDate(tx)
 	if err != nil {
@@ -92,8 +96,9 @@ func (r Reader) defaultMapper(account AccountInfo, tx EBTransaction) (*ynabber.T
 //  2. reference_number — bank-assigned, stable across sessions
 //     (null for all currently observed ASPSPs; included for future-proofing).
 //  3. syntheticTransactionID — deterministic SHA-256 hash of the mandatory
-//     transaction fields (fallback for DNB and any ASPSP that sets both
-//     entry_reference and reference_number to null).
+//     transaction fields (fallback for any ASPSP that sets both
+//     entry_reference and reference_number to null). DNB always uses this
+//     candidate; see dnbMapper.
 //
 // transaction_id is intentionally excluded: for DNB it is a session-scoped
 // token (base64 of a counter-prefixed string) that changes on every

@@ -157,13 +157,13 @@ func TestDefaultMapperDebit(t *testing.T) {
 	}
 }
 
-func TestMapperSynIDRegexDoesNotChangePayeeOrMemo(t *testing.T) {
+func TestMapperDNBSynIDRegexDoesNotChangePayeeOrMemo(t *testing.T) {
 	var patterns SynIDRegex
 	patternList := `(?i)^Visa(\s+\d{6})?,?\s*;(?i)\b(?:Aut\.\s*\d+|Ark\.Ref\s*\*?\s*\d+|Versjon\s+\d+|Kl\.\s*\d{1,2}[.:]\d{2}|Dato\s*\d{1,2}[.:]\d{2}(?:\s+kl\.\s*\d{1,2}[.:]\d{2})?)`
 	if err := patterns.Decode(patternList); err != nil {
 		t.Fatal(err)
 	}
-	reader := Reader{Config: Config{SynIDRegex: patterns}}
+	reader := Reader{Config: Config{ASPSP: "DNB", DNBSynIDRegex: patterns}}
 	account := AccountInfo{UID: "acc-syn-id", AccountID: AccountID{IBAN: randomTestIBAN(t)}}
 	transactions := []EBTransaction{
 		{
